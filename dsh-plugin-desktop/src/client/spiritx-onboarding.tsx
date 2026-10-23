@@ -1,4 +1,4 @@
-/** Product-owned replacement for the upstream DeepSeek credential step. */
+/** Product-owned onboarding without the upstream preview notice. */
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -24,6 +24,12 @@ interface CredentialInjected {
 }
 type CredentialProps = PropsRuntime<'settings.onboarding'> & InjectFace<CredentialInjected>
 const ignoreImplicitDismiss = (): void => {}
+
+/** Advance the onboarding coordinator without displaying or acknowledging the upstream notice. */
+function SkipPreviewNotice({ complete }: PropsRuntime<'settings.onboarding'>): ReactNode {
+  useEffect(() => { complete() }, [complete])
+  return null
+}
 
 function ProductOnboardingModal({ title, focusTitle = false, children }: {
   title: string; focusTitle?: boolean; children: ReactNode
@@ -102,7 +108,7 @@ const STYLES = `
 @media (max-width: 560px) { .spiritxOnboardingContent { padding: 24px; } .spiritxOnboardingActions > button:only-child { width: 100%; } }
 `
 
-/** Replace the upstream DeepSeek credential step without adding another welcome step. */
+/** Skip the upstream preview notice and retain product credential onboarding. */
 export function applySpiritXOnboarding(ctx: ClientContext): void {
   if (typeof document === 'undefined') return
   ctx.effect(() => ctx.locale.register(LOCALE_NS, SPIRITX_ONBOARDING_COPY), 'dsh-plugin-desktop: SpiritX onboarding copy')
@@ -120,6 +126,9 @@ export function applySpiritXOnboarding(ctx: ClientContext): void {
   const storeCredential = async (value: string): Promise<string | undefined> => {
     return provisionSpiritX(ctx, value)
   }
+  ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+    name: 'settings.onboarding', ...SPIRITX_ONBOARDING_SHADOW.welcome,
+  }, SkipPreviewNotice))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding', ...SPIRITX_ONBOARDING_SHADOW.credential,
     inject: () => ({ loadCredential, storeCredential, t }),

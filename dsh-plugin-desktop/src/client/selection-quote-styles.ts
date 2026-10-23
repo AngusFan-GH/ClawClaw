@@ -87,7 +87,8 @@ export function installSelectionQuoteStyles(): void {
 .clawSelectionQuoteHistoryLink:hover { background: var(--dsw-alias-interactive-bg-hover-solid, #f0f0f0); }
 .clawSelectionQuoteHistoryLink:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary, #2563eb)); outline-offset: 2px; }
 .clawSelectionQuoteLocateIcon { align-self: center; color: var(--dsw-alias-label-tertiary, #777) !important; }
-.clawSelectionQuoteHistoryBubble { box-sizing: border-box; max-width: 100%; padding: 10px 14px; border-radius: 8px; color: var(--dsw-alias-label-primary, #171717); background: var(--dsw-alias-bg-layer-2, #f2f3f5); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Follow upstream user-bubble typography, including Appearance font-size changes. */
+.clawSelectionQuoteHistoryBubble { box-sizing: border-box; max-width: 100%; padding: 10px 14px; border-radius: 8px; font-size: var(--dsh-content-font-size, 14px); line-height: calc(22px + var(--dsh-content-font-delta, 0px)); color: var(--dsw-alias-label-primary, #171717); background: var(--dsw-alias-bg-layer-2, #f2f3f5); white-space: pre-wrap; overflow-wrap: anywhere; }
 .clawSelectionQuoteHistoryAttachments { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .clawSelectionQuoteFile { display: flex; align-items: center; gap: 7px; max-width: 260px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.09)); border-radius: 6px; font-size: 12px; }
 .clawSelectionQuoteFile svg { width: 18px; height: 18px; flex: none; }

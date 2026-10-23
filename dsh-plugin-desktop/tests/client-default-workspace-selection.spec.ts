@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { installDefaultWorkspaceMenu } from '../src/client/default-workspace-menu.ts'
 import { installDefaultWorkspaceLocale } from '../src/client/default-workspace-locale.ts'
 import type { WorkspaceId, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { DesktopUiWorkspace } from '../src/client/workspace-client-contract.ts'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
+  applyDefaultWorkspaceSelection,
   installDesktopWorkspaceSelection,
   resolveDesktopWorkspaceSelection,
 } from '../src/client/default-workspace-selection.ts'
@@ -134,63 +138,200 @@ function settingsSnapshot(activeWorkspaceId = ''): ConfigFormSnapshot<DesktopWor
 }
 
 describe('Desktop default Workspace selection', () => {
-  it('prefers an explicit selection, then a valid persisted selection, then the default', () => {
+  it('prefers the current Workspace, then a valid saved picker location, then the default', () => {
     const workspaces = workspaceSnapshot()
     expect(resolveDesktopWorkspaceSelection(workspaces, settingsSnapshot(), projectId)).toBe(projectId)
     expect(resolveDesktopWorkspaceSelection(workspaces, settingsSnapshot(projectId))).toBe(projectId)
     expect(resolveDesktopWorkspaceSelection(workspaces, settingsSnapshot('missing'))).toBe(defaultId)
   })
 
-  it('leaves initial Session restoration to upstream and keeps using the Workspace selected by the user', async () => {
-    let workspace = workspaceSnapshot()
-    let settingsState = settingsSnapshot()
-    const workspaceListeners = new Set<() => void>()
-    const settingsListeners = new Set<() => void>()
-    const opened: WorkspaceId[] = []
-    const persisted: unknown[] = []
-    const uiWorkspace = {
-      openWorkspace: vi.fn(async (workspaceId: WorkspaceId) => { opened.push(workspaceId) }),
-      startSession: vi.fn(),
-    }
-    const settings = {
-      getSnapshot: () => settingsState,
-      subscribe: (listener: () => void) => {
-        settingsListeners.add(listener)
-        return () => { settingsListeners.delete(listener) }
-      },
-      set: vi.fn(async (_field: string, value: unknown) => {
-        persisted.push(value)
-        settingsState = settingsSnapshot(String(value))
-        for (const listener of settingsListeners) listener()
-      }),
-    }
-    const workspaces = {
-      list: {
-        getSnapshot: () => workspace,
-        subscribe: (listener: () => void) => {
-          workspaceListeners.add(listener)
-          return () => { workspaceListeners.delete(listener) }
-        },
-      },
-    }
-    const dispose = installDesktopWorkspaceSelection({
-      uiWorkspace: uiWorkspace as never,
-      workspaces: workspaces as never,
-      settings: settings as never,
+})
+
+function source<T>(initial: T) {
+  let value = initial
+  const listeners = new Set<() => void>()
+  return {
+    getSnapshot: () => value,
+    subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
+    set(next: T) { value = next; for (const listener of listeners) listener() },
+    listeners,
+  }
+}
+
+const defaultSession = SessionId('default-session')
+const projectSession = SessionId('project-session')
+
+function sessionSnapshot(current?: SessionId, phase: SessionListState['phase'] = 'ready'): SessionListState {
+  return {
+    ids: [defaultSession, projectSession],
+    byId: Object.fromEntries([defaultSession, projectSession].map(id => [id, {
+      id, displayTitle: id, blank: false, running: false, updatedAt: 1,
+      retainedBy: id === current ? { mainView: 1 } : {},
+    }])),
+    phase,
+    projectionsBySession: {},
+  }
+}
+
+const disposers: (() => void)[] = []
+afterEach(() => { for (const dispose of disposers.splice(0).reverse()) dispose() })
+
+function selectionHarness(current?: SessionId, active: string = defaultId) {
+  const sessionList = source(sessionSnapshot(current))
+  const base = workspaceSnapshot()
+  const workspace = { ...base, items: base.items.map(item => ({
+    ...item, sessionIds: [item.workspaceId === defaultId ? defaultSession : projectSession],
+  })) }
+  const workspaceList = source<WorkspaceSnapshot>(workspace)
+  const settingsState = source(settingsSnapshot(active))
+  const settings = {
+    getSnapshot: settingsState.getSnapshot,
+    subscribe: settingsState.subscribe,
+    set: vi.fn(async (_key: 'activeWorkspaceId', value: string) => {
+      settingsState.set(settingsSnapshot(value))
+      return true
+    }),
+  }
+  const options = { sessions: { list: sessionList }, workspaces: { list: workspaceList }, settings }
+  return { ...options, sessionList, workspaceList, settingsState,
+    install() { const dispose = installDesktopWorkspaceSelection(options); disposers.push(dispose); return dispose },
+  }
+}
+
+describe('Desktop Workspace navigation synchronization', () => {
+  it('uses a restored Session rather than the stale saved Workspace', async () => {
+    const h = selectionHarness(projectSession)
+    h.install()
+    await vi.waitFor(() => expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(projectId))
+  })
+
+  it('follows historical Session navigation and preserves the location when the view clears', async () => {
+    const h = selectionHarness(defaultSession)
+    h.install()
+    h.sessionList.set(sessionSnapshot(projectSession))
+    await vi.waitFor(() => expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(projectId))
+    h.sessionList.set(sessionSnapshot())
+    expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(projectId)
+    h.sessionList.set(sessionSnapshot(defaultSession))
+    await vi.waitFor(() => expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(defaultId))
+  })
+
+  it('waits for Session and Workspace baselines and reacts to changed membership', async () => {
+    const h = selectionHarness(projectSession)
+    h.sessionList.set(sessionSnapshot(projectSession, 'pending'))
+    h.install()
+    expect(h.settings.set).not.toHaveBeenCalled()
+    h.workspaceList.set({ ...h.workspaceList.getSnapshot(), phase: 'pending' })
+    h.sessionList.set(sessionSnapshot(projectSession))
+    expect(h.settings.set).not.toHaveBeenCalled()
+    h.workspaceList.set({ ...h.workspaceList.getSnapshot(), phase: 'ready' })
+    await vi.waitFor(() => expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(projectId))
+    h.workspaceList.set(workspaceSnapshot([defaultId]))
+    await vi.waitFor(() => expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(defaultId))
+  })
+
+  it('waits until a main-view reference replacement has settled', async () => {
+    const h = selectionHarness(defaultSession)
+    h.install()
+    const overlapping = sessionSnapshot(projectSession)
+    overlapping.byId[defaultSession] = { ...overlapping.byId[defaultSession]!, retainedBy: { mainView: 1 } }
+    h.sessionList.set(overlapping)
+    expect(h.settings.set).not.toHaveBeenCalled()
+    h.sessionList.set(sessionSnapshot(projectSession))
+    await vi.waitFor(() => expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(projectId))
+  })
+
+  it('serializes rapid navigation writes and stops observing on disposal', async () => {
+    const h = selectionHarness(defaultSession)
+    let finish: (() => void) | undefined
+    h.settings.set.mockImplementationOnce(async (_key, value) => {
+      await new Promise<void>(resolve => { finish = resolve })
+      h.settingsState.set(settingsSnapshot(value))
+      return true
     })
-    await Promise.resolve()
-    expect(opened).toEqual([])
-
-    await uiWorkspace.openWorkspace(projectId)
-    expect(persisted).toEqual([projectId])
-    uiWorkspace.startSession()
-    await Promise.resolve()
-    expect(opened).toEqual([projectId, projectId])
-
-    workspace = workspaceSnapshot([defaultId])
-    for (const listener of workspaceListeners) listener()
-    await Promise.resolve()
-    expect(persisted.at(-1)).toBe(defaultId)
+    const dispose = h.install()
+    h.sessionList.set(sessionSnapshot(projectSession))
+    h.sessionList.set(sessionSnapshot(defaultSession))
+    expect(h.settings.set).toHaveBeenCalledTimes(1)
+    finish!()
+    await vi.waitFor(() => expect(h.settings.set).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(defaultId))
+    expect(h.settings.set.mock.calls.map(([, value]) => value)).toEqual([projectId, defaultId])
     dispose()
+    h.sessionList.set(sessionSnapshot(projectSession))
+    expect(h.settings.set).toHaveBeenCalledTimes(2)
+    expect(h.sessionList.listeners.size).toBe(0)
+    expect(h.workspaceList.listeners.size).toBe(0)
+    expect(h.settingsState.listeners.size).toBe(0)
+  })
+
+  it('waits for settings and ignores background or ungrouped Sessions', async () => {
+    const h = selectionHarness(projectSession)
+    const readySettings = h.settingsState.getSnapshot()
+    h.settingsState.set({ ...readySettings, status: 'loading', value: undefined })
+    h.install()
+    expect(h.settings.set).not.toHaveBeenCalled()
+    h.settingsState.set(readySettings)
+    await vi.waitFor(() => expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(projectId))
+    const background = sessionSnapshot()
+    background.byId[defaultSession] = { ...background.byId[defaultSession]!, retainedBy: { controllerOperation: 1 } }
+    h.sessionList.set(background)
+    const ungrouped = sessionSnapshot(defaultSession)
+    h.workspaceList.set({ ...h.workspaceList.getSnapshot(), items: h.workspaceList.getSnapshot().items.map(item => ({
+      ...item, sessionIds: item.sessionIds.filter(id => id !== defaultSession),
+    })) })
+    h.sessionList.set(ungrouped)
+    expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(projectId)
+    expect(h.settings.set).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a failed settings write and can synchronize later navigation', async () => {
+    const h = selectionHarness(defaultSession)
+    const warn = vi.fn()
+    const reason = new Error('settings unavailable')
+    h.settings.set.mockRejectedValueOnce(reason)
+    disposers.push(installDesktopWorkspaceSelection({ ...h, warn }))
+    h.sessionList.set(sessionSnapshot(projectSession))
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith('failed to persist the active Workspace:', reason))
+    h.sessionList.set(sessionSnapshot(defaultSession))
+    h.sessionList.set(sessionSnapshot(projectSession))
+    await vi.waitFor(() => expect(h.settingsState.getSnapshot().value?.activeWorkspaceId).toBe(projectId))
+  })
+
+  it('keeps upstream navigation methods and their preset, callback, and draft arguments intact', async () => {
+    const h = selectionHarness(defaultSession)
+    const startSession = vi.fn<DesktopUiWorkspace['startSession']>()
+    const openWorkspace = vi.fn<DesktopUiWorkspace['openWorkspace']>(async () => {})
+    const openSession = vi.fn<DesktopUiWorkspace['openSession']>()
+    const uiWorkspace = { startSession, openWorkspace, openSession }
+    const locale = {
+      register: () => () => {}, subscribe: () => () => {},
+      bind: () => (key: string) => key,
+    }
+    const scope = {
+      ...h, uiWorkspace, locale, configForms: { get: () => h.settings }, get: () => h.sessions,
+      effect: (factory: () => () => void) => { disposers.push(factory()) },
+    }
+    const inject = vi.fn((_keys: string[], callback: (value: typeof scope) => void) => { callback(scope) })
+    applyDefaultWorkspaceSelection({ inject } as never)
+    expect(uiWorkspace.startSession).toBe(startSession)
+    expect(uiWorkspace.openWorkspace).toBe(openWorkspace)
+    expect(uiWorkspace.openSession).toBe(openSession)
+    expect(startSession).not.toHaveBeenCalled()
+    expect(openWorkspace).not.toHaveBeenCalled()
+    expect(openSession).not.toHaveBeenCalled()
+    const draft = { prompt: 'Continue this task', clearPreviousDraft: true, agentPreset: 'cordis' }
+    uiWorkspace.startSession(projectId, draft)
+    expect(startSession).toHaveBeenLastCalledWith(projectId, draft)
+    uiWorkspace.startSession(undefined, { agentPreset: 'cordis', clearPreviousDraft: false })
+    expect(startSession).toHaveBeenLastCalledWith(undefined, { agentPreset: 'cordis', clearPreviousDraft: false })
+    uiWorkspace.startSession()
+    expect(startSession).toHaveBeenLastCalledWith()
+    const beforeOpen = vi.fn()
+    const preset = { agentPreset: 'cordis' }
+    await uiWorkspace.openWorkspace(projectId, beforeOpen, preset)
+    expect(openWorkspace).toHaveBeenLastCalledWith(projectId, beforeOpen, preset)
+    uiWorkspace.openSession(projectSession)
+    expect(openSession).toHaveBeenLastCalledWith(projectSession)
   })
 })

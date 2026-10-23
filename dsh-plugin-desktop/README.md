@@ -12,9 +12,15 @@ Electron main starts the Host through `startIsolatedDesktopHost()` by default. `
 
 The launcher prepares `~/.clawclaw/data` and `~/.clawclaw/workspaces/default` unless saved data-directory configuration, `CLAWCLAW_HOME`, or safe mode selects another path. It never reads, moves, or modifies another application's `~/.dsh` data.
 
+ClawClaw keeps a product default Workspace registered across launches and protects it from deletion; existing user titles are preserved. Session creation, Agent presets, draft initialization, and current/recent Workspace selection use the upstream navigation service unchanged. The Desktop directory picker follows the Workspace of the main-view Session, including restored and historical Sessions, and falls back to its saved location or the product default when no grouped Session is selected. Expert and team creation prepare an editable request without submitting it; superseded navigation keeps Settings open and stops watching that creation attempt.
+
 ClawClaw discovers user Skills from `<CLAWCLAW_HOME>/skills` (by default `~/.clawclaw/data/skills`) and project Skills from the selected Workspace's `.clawclaw/skills`. It does not scan `.dsh/skills`, `.agents/skills`, `.codex/skills`, or other applications' Skill directories by default. Users may explicitly add read-only scan directories from the Skills page; those paths remain ClawClaw-owned configuration and never alter the external files.
 
 Compatibility and extended modes isolate desktop chrome from content in separate WebContentsViews on macOS/Windows. Advanced mode uses an integrated presentation. Window/profile changes restart the generation. The public plugin contracts are `./profile-service`, `./pnpm`, and `./client`; see [plugin services](docs/plugin-services.md).
+
+ClawClaw skips the upstream preview notice during first-run onboarding. SpiritX API-key setup and the Models settings page remain available.
+
+Sandboxed Electron preloads are built as independent bundles without local chunk imports. The runtime-closure gate executes both preload artifacts with sandbox-compatible module loading.
 
 ## Commands
 

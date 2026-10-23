@@ -77,21 +77,25 @@ describe('ClawClaw default Workspace', () => {
     expect(lstatSync(path).isDirectory()).toBe(true)
   })
 
-  it('reuses and migrates the Workspace already registered for the default path to the locale-neutral title', async () => {
-    const path = temporaryPath()
-    const workspace = { id: 'default-id', title: '默认', setTitle: vi.fn(async () => {}) }
-    const registry = {
-      resolveByPath: vi.fn(async () => workspace),
-      create: vi.fn(),
-    }
-    await expect(provisionDefaultWorkspace(registry as never, path)).resolves.toEqual({
-      workspace,
-      created: false,
-    })
-    expect(workspace.setTitle).toHaveBeenCalledWith(DEFAULT_WORKSPACE_TITLE)
-    expect(registry.create).not.toHaveBeenCalled()
-    expect(existsSync(path)).toBe(true)
-  })
+  it.each(['My workspace', '默认', 'Default', 'default-workspace'])(
+    'preserves the existing title %s across repeated provisioning', async title => {
+      const path = temporaryPath()
+      const workspace = { id: 'default-id', title, setTitle: vi.fn(async () => {}) }
+      const registry = {
+        resolveByPath: vi.fn(async () => workspace),
+        create: vi.fn(),
+      }
+      await expect(provisionDefaultWorkspace(registry as never, path)).resolves.toEqual({
+        workspace,
+        created: false,
+      })
+      await provisionDefaultWorkspace(registry as never, path)
+      expect(workspace.title).toBe(title)
+      expect(workspace.setTitle).not.toHaveBeenCalled()
+      expect(registry.create).not.toHaveBeenCalled()
+      expect(existsSync(path)).toBe(true)
+    },
+  )
 
   it('rejects a relative default path', async () => {
     const registry = { resolveByPath: vi.fn(), create: vi.fn() }

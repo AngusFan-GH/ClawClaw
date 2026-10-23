@@ -80,7 +80,6 @@ export async function provisionDefaultWorkspace(
   if (process.platform !== 'win32') chmodSync(target, DIRECTORY_MODE)
   const existing = await registry.resolveByPath(target)
   if (existing !== undefined) {
-    if (existing.title !== DEFAULT_WORKSPACE_TITLE) await existing.setTitle(DEFAULT_WORKSPACE_TITLE)
     return Object.freeze({ workspace: existing, created: false })
   }
   const workspace = await registry.create(target, DEFAULT_WORKSPACE_TITLE)

@@ -4,8 +4,9 @@ export type SpiritXCredentialState =
   | { kind: "configured" }
   | { kind: "unavailable" };
 
-/** Replace only the upstream DeepSeek credential step. */
+/** Skip the upstream preview notice and replace its credential step. */
 export const SPIRITX_ONBOARDING_SHADOW = {
+  welcome: { id: "welcome-notice", order: -100, priority: -10 },
   credential: { id: "deepseek-official", order: 0, priority: -10 },
 } as const;
 

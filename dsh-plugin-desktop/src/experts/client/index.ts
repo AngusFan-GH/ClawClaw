@@ -1961,7 +1961,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
         const workspaceId = workspaces?.list === undefined
           ? undefined
           : expertCreationWorkspaceId(workspaces.list.getSnapshot(), resolveTargetSessionId(ctx.sessions as unknown as ReferenceSessionAccess))
-        await openExpertCreationConversation({
+        const opened = await openExpertCreationConversation({
           locale: getActive(), kind, workspaceId,
           sessions: ctx.sessions as unknown as ReferenceSessionAccess,
           conversationFor: actx => (actx.get('conversation') as ReferenceConversationAccess | undefined)?.input.for(actx) as unknown as { actions?: { setDraft(text: string): void } } | undefined,
@@ -1978,6 +1978,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           closeSettings: props.close,
           focusComposer: () => document.querySelector<HTMLElement>('[data-composer-card] [contenteditable="true"]')?.focus(),
         }).catch(cause => { if (pendingCreation === pending) stopCreationWatch(); throw cause })
+        if (!opened && pendingCreation === pending) stopCreationWatch()
       }
       const settingsInsertion = bindExpertInsertion(initialSessionId as SessionId | undefined)
       const capabilitySidebarAvailable = ctx.get('sidebarRight') !== undefined

@@ -86,19 +86,23 @@ export async function openCapabilityConversation(
   return prepared === undefined ? false : await prepared
 }
 
-/** Open a normal conversation with an editable expert-manager request; never submits it. */
+/** Prepare an editable request without submitting; return false when navigation is superseded. */
 export async function openExpertCreationConversation(
   dependencies: ExpertCreationConversationDependencies,
-): Promise<void> {
+): Promise<boolean> {
   const workspaceId = dependencies.workspaceId
   if (workspaceId === undefined) throw new ExpertCreationConversationError('workspaceUnavailable')
 
+  let prepared = false
   await dependencies.openWorkspace(workspaceId, sessionId => {
     const actx = dependencies.sessions.scope?.(sessionId) ?? dependencies.sessions.binding?.(sessionId)?.ctx
     const input = actx === undefined ? undefined : dependencies.conversationFor(actx)
     if (input?.actions?.setDraft === undefined) throw new ExpertCreationConversationError('composerUnavailable')
     input.actions.setDraft(expertCreationDraft(dependencies.locale, dependencies.kind))
+    prepared = true
   })
+  if (!prepared) return false
   dependencies.closeSettings()
   requestAnimationFrame(() => { dependencies.focusComposer?.() })
+  return true
 }

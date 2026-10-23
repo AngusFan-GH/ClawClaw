@@ -145,12 +145,13 @@ export default defineConfig([
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },
   },
-  {
-    name: `${PACKAGE_NAME}/preload`,
-    entry: { preload: 'src/preload.ts', 'compatibility-preload': 'src/compatibility-preload.ts' },
+  // Sandboxed preloads cannot require local chunks; build each entry independently.
+  ...(['preload', 'compatibility-preload'] as const).map(entry => ({
+    name: `${PACKAGE_NAME}/${entry}`,
+    entry: { [entry]: `src/${entry}.ts` },
     outDir: 'lib',
-    format: 'cjs',
-    platform: 'node',
+    format: 'cjs' as const,
+    platform: 'node' as const,
     target: 'es2022',
     fixedExtension: false,
     dts: false,
@@ -160,5 +161,5 @@ export default defineConfig([
     outputOptions: {
       entryFileNames: '[name].cjs',
     },
-  },
+  })),
 ])

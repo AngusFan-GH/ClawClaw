@@ -12,9 +12,15 @@ Electron main 默认通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKT
 
 Launcher 默认准备 `~/.clawclaw/data` 与 `~/.clawclaw/workspaces/default`；已保存的数据目录、`CLAWCLAW_HOME` 或安全模式可以覆盖。它不会读取、移动或修改其他应用的 `~/.dsh` 数据。
 
+ClawClaw 在每次启动时确保产品默认工作区已登记，并保护其不被删除；已有的用户名称会保留。会话创建、Agent 预设、草稿初始化以及当前或最近工作区选择均使用未经包装的上游导航服务。Desktop 目录选择器跟随主视图会话所属工作区，包括恢复的会话和历史会话；未选中归属于工作区的会话时，回退到已保存的位置或产品默认工作区。专家和专家团创建只准备可编辑请求，不自动提交；后续导航取消创建时，设置页保持打开，并停止监听该次创建结果。
+
 ClawClaw 从 `<CLAWCLAW_HOME>/skills`（默认 `~/.clawclaw/data/skills`）发现用户 Skill，从当前所选 Workspace 的 `.clawclaw/skills` 发现项目 Skill。默认不会扫描 `.dsh/skills`、`.agents/skills`、`.codex/skills` 或其他应用的 Skill 目录。用户可以在技能页面显式添加只读扫描目录；这些路径只保存在 ClawClaw 自有配置中，ClawClaw 不会修改外部文件。
 
 macOS/Windows 的兼容、扩展模式用独立 WebContentsView 隔离桌面标题栏和内容；增强模式使用集成呈现。窗口/profile 改变会重启 generation。公开插件 contract 是 `./profile-service`、`./pnpm`、`./client`，详见[插件 service](docs/plugin-services.zh.md)。
+
+ClawClaw 首次引导跳过上游的预览版说明；SpiritX API Key 配置引导和模型设置页仍然保留。
+
+Electron 沙箱预加载脚本分别打包，不引用本地共享分块；运行时依赖检查会以沙箱兼容的模块加载方式执行两个预加载产物。
 
 ## 命令
 
