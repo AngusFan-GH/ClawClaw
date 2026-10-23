@@ -1,6 +1,7 @@
 /** Minimal context-isolated bridge for resolving operating-system drag payloads. */
 
-import { contextBridge, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { DESKTOP_LOCALE_READ_CHANNEL } from './compatibility-chrome-contract.ts'
 import { DESKTOP_FILE_PATH_BRIDGE } from './file-path-bridge-contract.ts'
 
 // Upstream client plugins use this inert marker to distinguish the native
@@ -12,4 +13,11 @@ contextBridge.exposeInMainWorld(DESKTOP_FILE_PATH_BRIDGE, {
   getPathForFile(file: File): string {
     return webUtils.getPathForFile(file)
   },
+})
+
+// Use DSH's supported bootstrap hook so Windows Chromium's locale does not
+// override the OS language order. Durable changes remain owned by Host settings.
+if (process.platform === 'win32' || process.platform === 'darwin') contextBridge.exposeInMainWorld('__DSH_LOCALE__', {
+  read: () => ipcRenderer.invoke(DESKTOP_LOCALE_READ_CHANNEL),
+  onChange: (_locale: string) => {},
 })

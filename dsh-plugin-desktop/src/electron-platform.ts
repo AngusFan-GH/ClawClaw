@@ -1,7 +1,7 @@
 import { app, Menu } from 'electron'
 import type { BrowserWindow, MenuItemConstructorOptions, NativeImage } from 'electron'
 import { macApplicationMenuTemplate, nativeMenuLocale } from './native-menu.ts'
-import type { DesktopPlatform } from './runtime.ts'
+import type { DesktopLocale, DesktopPlatform } from './runtime.ts'
 import type { DesktopWindowMaterial } from './window-material.ts'
 import type { DesktopDownloadPlatform } from './update-download.ts'
 
@@ -14,8 +14,9 @@ export interface ElectronPlatformStrategy {
     icon: NativeImage,
     productName: string,
     applicationMenuItems?: readonly MenuItemConstructorOptions[],
+    locale?: DesktopLocale,
   ): void
-  refreshApplicationMenu(applicationMenuItems: readonly MenuItemConstructorOptions[]): void
+  refreshApplicationMenu(applicationMenuItems: readonly MenuItemConstructorOptions[], locale?: DesktopLocale): void
   configureWindow(window: BrowserWindow): void
   refreshThemeMaterial(window: BrowserWindow, material: DesktopWindowMaterial): void
 }
@@ -53,19 +54,22 @@ class MacPlatformStrategy implements ElectronPlatformStrategy {
     icon: NativeImage,
     productName: string,
     applicationMenuItems: readonly MenuItemConstructorOptions[] = [],
+    locale?: DesktopLocale,
   ): void {
     app.dock?.setIcon(icon)
     this.applicationName = productName
-    this.refreshApplicationMenu(applicationMenuItems)
+    this.refreshApplicationMenu(applicationMenuItems, locale)
   }
 
-  refreshApplicationMenu(applicationMenuItems: readonly MenuItemConstructorOptions[]): void {
+  refreshApplicationMenu(applicationMenuItems: readonly MenuItemConstructorOptions[], locale?: DesktopLocale): void {
     const applicationName = this.applicationName
     if (applicationName === undefined) return
-    const locale = nativeMenuLocale(app.getPreferredSystemLanguages())
+    const menuLocale = locale === undefined
+      ? nativeMenuLocale(app.getPreferredSystemLanguages())
+      : locale === 'zh' ? 'zh-CN' : 'en'
     Menu.setApplicationMenu(Menu.buildFromTemplate(macApplicationMenuTemplate(
       applicationName,
-      locale,
+      menuLocale,
       applicationMenuItems,
     )))
   }

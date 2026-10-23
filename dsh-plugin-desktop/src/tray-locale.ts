@@ -141,6 +141,15 @@ export function desktopLocaleFromLanguageTag(languageTag: string): DesktopLocale
   return /^zh(?:[-_]|$)/i.test(languageTag) ? 'zh' : 'en'
 }
 
+/** Match the ordered system languages using the same primary-language fallback as DSH. */
+export function desktopLocaleFromLanguages(languages: readonly string[], fallback = 'en'): DesktopLocale {
+  for (const language of languages) {
+    if (/^zh(?:[-_]|$)/i.test(language)) return 'zh'
+    if (/^en(?:[-_]|$)/i.test(language)) return 'en'
+  }
+  return desktopLocaleFromLanguageTag(fallback)
+}
+
 /** Resolve one native tray label in the active desktop locale. */
 export function desktopTrayLabel(
   locale: DesktopLocale,

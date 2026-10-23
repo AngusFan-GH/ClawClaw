@@ -164,7 +164,7 @@ import {
   type WindowsVolumeConcern,
 } from './windows-volume-diagnostics.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
-import { desktopLocaleFromLanguageTag, desktopTrayLabel } from './tray-locale.ts'
+import { desktopLocaleFromLanguages, desktopTrayLabel } from './tray-locale.ts'
 import { desktopNativeCopy } from './native-dialog-copy.ts'
 import {
   DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
@@ -290,8 +290,8 @@ function notifySessionProjectionCacheRecovery(
 ): void {
   try {
     runtime.updates.notify({
-      title: 'Recovered Session Cache',
-      body: 'An oversized session projection cache was moved aside and will be rebuilt from session history.',
+      title: desktopNativeCopy(runtime.locale).recoveredSessionCacheTitle,
+      body: desktopNativeCopy(runtime.locale).recoveredSessionCacheBody,
     })
   } catch (cause) {
     logger.error(`${BIN_NAME}: failed to show session projection cache recovery notification: ${cause instanceof Error ? cause.message : String(cause)}`)
@@ -582,7 +582,7 @@ async function start(): Promise<void> {
         ...(startupRecoveryConfigurationPaths === undefined
           ? {}
           : { configurationPaths: startupRecoveryConfigurationPaths }),
-        locale: desktopLocaleFromLanguageTag(app.getLocale()),
+        locale: desktopLocaleFromLanguages(app.getPreferredSystemLanguages(), app.getLocale()),
         failureStage: startupStage,
         failureDetail: maskSecrets(failureDetail),
         ...(requested ? { requested: true } : {}),
@@ -746,7 +746,7 @@ async function start(): Promise<void> {
     startupStage = 'profile-selection'
     lifecycleRecorder.transitionStartupStage(startupStage)
     // Keep Profile recovery usable when the persisted selection no longer exists.
-    const locale = desktopLocaleFromLanguageTag(app.getLocale())
+    const locale = desktopLocaleFromLanguages(app.getPreferredSystemLanguages(), app.getLocale())
     const recoveryProfileToken = randomUUID()
     let activeProfileName = readDesktopProfileState(selectionStatePath).active
     let expectedRecoveryProfileName = activeProfileName
@@ -1182,7 +1182,7 @@ async function start(): Promise<void> {
     if (safeModePaths === undefined && desktopSetupWizardRequired(setupWizardState, setupWizardVersions)) {
       const setupSettings = readDesktopSetupWizardSettings(prepared.settingsDocument)
       setupWizardWindow = new DesktopSetupWizardWindow({
-        locale: desktopLocaleFromLanguageTag(app.getLocale()),
+        locale: desktopLocaleFromLanguages(app.getPreferredSystemLanguages(), app.getLocale()),
         input: {
           appVersion,
           profileName: activeProfileName,
@@ -1710,7 +1710,7 @@ async function handleFatalLauncherFailure(cause: unknown): Promise<void> {
   }
   try {
     const recoveryWindow = new DesktopStartupRecoveryWindow({
-      locale: desktopLocaleFromLanguageTag(app.getLocale()),
+      locale: desktopLocaleFromLanguages(app.getPreferredSystemLanguages(), app.getLocale()),
       failureStage: 'electron-ready',
       failureDetail: detail,
       exportDiagnostics: async signal => await exportDesktopDiagnostics(app.getPath('userData'), {

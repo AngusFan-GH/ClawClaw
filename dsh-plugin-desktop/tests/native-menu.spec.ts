@@ -11,7 +11,7 @@ describe('native macOS application menu', () => {
   it('uses the first supported macOS preferred language', () => {
     expect(nativeMenuLocale(['zh-Hans-CN', 'en-CN'])).toBe('zh-CN')
     expect(nativeMenuLocale(['zh_CN', 'en-CN'])).toBe('zh-CN')
-    expect(nativeMenuLocale(['zh-Hant-TW', 'en-US'])).toBe('en')
+    expect(nativeMenuLocale(['zh-Hant-TW', 'en-US'])).toBe('zh-CN')
     expect(nativeMenuLocale(['fr-FR', 'en-US', 'zh-Hans'])).toBe('en')
     expect(nativeMenuLocale(['fr-FR'])).toBe('en')
   })

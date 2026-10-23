@@ -26,6 +26,7 @@ it('preserves the Web URL and authentication while projecting shell and tray cal
       request: vi.fn(async () => new Response('{"version":"2.0.8-beta.1"}', { headers: { 'x-test': 'yes' } })),
     },
     notifyAttention,
+    setLocalePreference: vi.fn(),
     resetBackgroundCloseNotice,
     schedule: (value: DesktopShellSpec) => { shell = value; return disposeShell },
     registerTrayItem: (value: DesktopTrayItem) => { tray = value; return { refresh() {}, dispose: disposeTray } },
@@ -50,6 +51,12 @@ it('preserves the Web URL and authentication while projecting shell and tray cal
     expect(shell.authenticationUrl).toBe(spec.authenticationUrl)
     expect(shell.rendererAccessHeader).toEqual(spec.rendererAccessHeader)
     expect(shell.readLocalePreference()).toBe('zh')
+    expect(runtime.locale).toBe('zh')
+    runtime.setLocalePreference('en')
+    await vi.waitFor(() => expect(shell.readLocalePreference()).toBe('en'))
+    expect(native.setLocalePreference).toHaveBeenCalledWith('en')
+    runtime.setLocalePreference(undefined)
+    await vi.waitFor(() => expect(shell.readLocalePreference()).toBeUndefined())
     expect(tray.label()).toBe('Plugin action')
     await tray.submenu?.()[0]?.invoke()
     expect(invoke).toHaveBeenCalledOnce()

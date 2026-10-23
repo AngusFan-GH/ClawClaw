@@ -79,6 +79,8 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
       setup.length = 0
       booting = false
       for (const [id, spec] of shellSpecs) {
+        locale = spec.readLocalePreference() ?? snapshot.locale
+        trayPublishers.forEach(publish => publish())
         await send('shell:preferences', [id, spec.readLocalePreference(), spec.readThemeSource()])
       }
     },
@@ -137,10 +139,14 @@ export function bindNativeRuntime(rpc: HostRpc, runtime: DesktopRuntime): () => 
   const callback = (method: string, args: unknown[] = []) => rpc.call(method, args)
   const report = (promise: Promise<unknown>) => { void promise.catch(error => process.stderr.write(`${String(error)}\n`)) }
   for (const method of ['show', 'notifyAttention', 'openTerminal', 'reloadRenderer', 'toggleDeveloperTools',
-    'exportDiagnostics', 'pickDirectory', 'validateDirectory', 'reportRendererBoot', 'setLocalePreference',
+    'exportDiagnostics', 'pickDirectory', 'validateDirectory', 'reportRendererBoot',
     'setThemeSource', 'prepareToQuit', 'resetBackgroundCloseNotice'] as const) {
     handle(`native:${method}`, args => (runtime[method] as (...args: any[]) => unknown).apply(runtime, args))
   }
+  handle('native:setLocalePreference', ([locale]) => {
+    for (const state of preferences.values()) state.locale = locale
+    runtime.setLocalePreference(locale)
+  })
   // Acknowledge restart before teardown can close the channel used by this call.
   for (const method of ['requestRestart', 'requestRecoveryRestart'] as const) {
     handle(`native:${method}`, () => { setImmediate(() => report(runtime[method]())) })

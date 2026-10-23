@@ -1,6 +1,6 @@
-import { WebContentsView, type BrowserWindow, type WebContents } from 'electron'
+import { app, WebContentsView, type BrowserWindow, type WebContents } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { COMPATIBILITY_CHROME_CHANNEL, COMPATIBILITY_CHROME_STATE, type CompatibilityChromeState } from './compatibility-chrome-contract.ts'
+import { COMPATIBILITY_CHROME_CHANNEL, COMPATIBILITY_CHROME_STATE, DESKTOP_LOCALE_READ_CHANNEL, type CompatibilityChromeState } from './compatibility-chrome-contract.ts'
 import type { DesktopLocale, DesktopPlatform, DesktopShellSpec, DesktopUpdatePresentation } from './runtime.ts'
 import { DESKTOP_FRAME_HEIGHT } from './window-chrome.ts'
 import { DESKTOP_RENDERER_SESSION_PARTITION } from './window-options.ts'
@@ -71,6 +71,17 @@ export class CompatibilityShell {
         throw new Error('dsh-plugin-desktop: untrusted chrome sender')
       }
       return this.command(command)
+    })
+    this.webContents.ipc.handle(DESKTOP_LOCALE_READ_CHANNEL, (event) => {
+      if (this.disposed || event.sender !== this.webContents
+        || event.senderFrame !== this.webContents.mainFrame
+        || new URL(event.senderFrame.url).origin !== new URL(this.spec.url).origin) {
+        throw new Error('dsh-plugin-desktop: untrusted locale sender')
+      }
+      return {
+        languages: [...app.getPreferredSystemLanguages(), app.getLocale()].map(tag => tag.replaceAll('_', '-')),
+        preference: this.spec.readLocalePreference() ?? null,
+      }
     })
     this.chrome.on('render-process-gone', this.collapse)
     this.chrome.on('did-start-loading', this.collapse)
@@ -174,7 +185,10 @@ export class CompatibilityShell {
       this.window.contentView.removeChildView(this.chromeView)
     }
     if (!this.chrome.isDestroyed()) this.chrome.close({ waitForBeforeUnload: false })
-    if (!this.webContents.isDestroyed()) this.webContents.close({ waitForBeforeUnload: false })
+    if (!this.webContents.isDestroyed()) {
+      this.webContents.ipc.removeHandler(DESKTOP_LOCALE_READ_CHANNEL)
+      this.webContents.close({ waitForBeforeUnload: false })
+    }
   }
 }
 

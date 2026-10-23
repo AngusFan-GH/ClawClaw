@@ -3,6 +3,8 @@
 import type { DesktopLocale } from './runtime.ts'
 
 export interface DesktopNativeCopy {
+  readonly recoveredSessionCacheTitle: string
+  readonly recoveredSessionCacheBody: string
   readonly ok: string
   readonly quitTitle: string
   readonly quitMessage: string
@@ -58,6 +60,8 @@ export interface DesktopNativeCopy {
 
 const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
   en: {
+    recoveredSessionCacheTitle: 'Recovered Session Cache',
+    recoveredSessionCacheBody: 'An oversized session projection cache was moved aside and will be rebuilt from session history.',
     ok: 'OK',
     quitTitle: 'Quit ClawClaw?',
     quitMessage: 'ClawClaw still has work that may be interrupted.',
@@ -113,6 +117,8 @@ const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
     unsupportedStorageBody: label => `${label} is on a volume that may prevent sandboxed commands or plugin installation from working.`,
   },
   zh: {
+    recoveredSessionCacheTitle: '会话缓存已恢复',
+    recoveredSessionCacheBody: '过大的会话投影缓存已移出，将从会话历史记录重新构建。',
     ok: '确定',
     quitTitle: '退出 ClawClaw？',
     quitMessage: 'ClawClaw 仍有可能被中断的任务。',

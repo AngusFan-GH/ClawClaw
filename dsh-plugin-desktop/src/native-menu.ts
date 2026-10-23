@@ -106,13 +106,7 @@ const LABELS: Readonly<Record<NativeMenuLocale, NativeMenuLabels>> = {
 export function nativeMenuLocale(preferredLanguages: readonly string[]): NativeMenuLocale {
   for (const language of preferredLanguages) {
     const normalized = language.toLowerCase().replaceAll('_', '-')
-    if (normalized === 'zh'
-      || normalized === 'zh-cn'
-      || normalized === 'zh-sg'
-      || normalized === 'zh-hans'
-      || normalized.startsWith('zh-hans-')) {
-      return 'zh-CN'
-    }
+    if (normalized === 'zh' || normalized.startsWith('zh-')) return 'zh-CN'
     if (normalized === 'en' || normalized.startsWith('en-')) return 'en'
   }
   return 'en'

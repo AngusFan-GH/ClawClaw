@@ -222,7 +222,8 @@ export class ElectronShellGeneration {
   constructor(private readonly options: ElectronShellGenerationOptions) {
     this.backgroundCloseNotice = new DesktopBackgroundCloseNotice({
       markerPath: options.backgroundCloseNoticePath,
-      locale: () => options.spec.readLocalePreference() ?? 'en',
+      platform: options.platform.platform,
+      locale: () => options.chromeActions.locale(),
       show: async dialogOptions => {
         const window = this.window
         return window === undefined || window.isDestroyed()
@@ -275,7 +276,7 @@ export class ElectronShellGeneration {
     if (icon.isEmpty()) {
       throw new Error(`dsh-plugin-desktop: failed to load application icon ${spec.iconPath}`)
     }
-    platform.configureApplication(icon, spec.productName, this.options.buildApplicationMenuItems())
+    platform.configureApplication(icon, spec.productName, this.options.buildApplicationMenuItems(), this.options.chromeActions.locale())
     const origin = new URL(spec.url).origin
     if (platform.platform !== 'linux') nativeTheme.themeSource = spec.readThemeSource()
     let persistedBounds: MainWindowBounds | undefined

@@ -45,9 +45,9 @@ import type { DesktopLogger } from './desktop-logger.ts'
 import { exportDesktopDiagnostics } from './diagnostic-export.ts'
 import {
   desktopDiagnosticsPrivacyCopy,
-  desktopLocaleFromLanguageTag,
   desktopRestartConfirmationCopy,
   desktopTrayLabel,
+  desktopLocaleFromLanguages,
   rendererRecoveryCopy,
 } from './tray-locale.ts'
 import {
@@ -130,6 +130,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     private readonly mainWindowState: MainWindowStateStore = new FileMainWindowStateStore(app.getPath('userData')),
     installationId?: DesktopInstallationId,
   ) {
+    this.currentLocale = desktopLocaleFromLanguages(app.getPreferredSystemLanguages())
     this.platformStrategy = electronPlatformStrategy()
     this.platform = this.platformStrategy.platform
     this.windowsBuild = this.platform === 'win32' ? windowsBuildNumber() : undefined
@@ -482,9 +483,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /** @inheritdoc */
   setLocalePreference(preference: DesktopLocale | undefined): void {
-    const locale = preference ?? desktopLocaleFromLanguageTag(app.getLocale())
+    const locale = preference ?? desktopLocaleFromLanguages(app.getPreferredSystemLanguages(), app.getLocale())
     if (locale === this.currentLocale) return
     this.currentLocale = locale
+    this.generation?.refreshChrome()
     this.rebuildTrayMenu()
     this.rebuildApplicationMenu()
   }
@@ -882,7 +884,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /** Rebuild the macOS application menu from the same native, Host-owned commands as the tray. */
   private rebuildApplicationMenu(): void {
-    this.platformStrategy.refreshApplicationMenu(this.buildApplicationMenuItems())
+    this.platformStrategy.refreshApplicationMenu(this.buildApplicationMenuItems(), this.locale)
   }
 
   /** Keep the app menu renderer-free by reusing trusted native tray contributions. */

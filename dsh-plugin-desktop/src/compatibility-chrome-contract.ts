@@ -1,5 +1,7 @@
 import type { DesktopLocale, DesktopPlatform, DesktopUpdatePresentation } from './runtime.ts'
 
+export const DESKTOP_LOCALE_READ_CHANNEL = 'dsh-desktop:locale-read'
+
 export const COMPATIBILITY_CHROME_CHANNEL = 'dsh-desktop:compatibility-chrome'
 export const COMPATIBILITY_CHROME_STATE = 'dsh-desktop:compatibility-chrome-state'
 

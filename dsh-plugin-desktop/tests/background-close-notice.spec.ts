@@ -51,6 +51,18 @@ describe('background close notice', () => {
     expect(fixture.hide).toHaveBeenCalledTimes(2)
   })
 
+  it.each([
+    ['win32', 'zh', '系统托盘'], ['darwin', 'zh', '菜单栏'],
+    ['win32', 'en', 'system tray'], ['darwin', 'en', 'menu bar'],
+  ] as const)('explains %s background behavior in %s', (platform, locale, location) => {
+    const fixture = setup()
+    const notice = new DesktopBackgroundCloseNotice({ ...fixture.options, platform, locale: () => locale })
+    notice.close(fixture.hide)
+    expect(fixture.show).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining(location) }))
+    notice.dispose()
+    fixture.response.resolve({ response: -1, checkboxChecked: false })
+  })
+
   it('isolates marker paths by Profile and supports an explicit reset', async () => {
     const fixture = setup()
     expect(desktopBackgroundCloseNoticePath(fixture.root, 'desktop'))

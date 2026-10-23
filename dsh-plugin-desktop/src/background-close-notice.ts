@@ -4,9 +4,10 @@ import { createHash, randomUUID } from 'node:crypto'
 import { lstatSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { MessageBoxOptions, MessageBoxReturnValue } from 'electron'
-import type { DesktopLocale } from './runtime.ts'
+import type { DesktopLocale, DesktopPlatform } from './runtime.ts'
 
 export interface DesktopBackgroundCloseNoticeOptions {
+  readonly platform?: DesktopPlatform
   readonly markerPath: string
   readonly locale: () => DesktopLocale
   readonly show: (options: MessageBoxOptions) => Promise<MessageBoxReturnValue>
@@ -19,10 +20,13 @@ export function desktopBackgroundCloseNoticePath(userDataDir: string, profileNam
   return join(userDataDir, 'notices', 'profiles', profileKey, 'background-close-v1')
 }
 
-function noticeCopy(locale: DesktopLocale): Pick<MessageBoxOptions, 'title' | 'message' | 'buttons'> {
+function noticeCopy(locale: DesktopLocale, platform: DesktopPlatform = 'win32'): Pick<MessageBoxOptions, 'title' | 'message' | 'buttons'> {
+  const location = platform === 'darwin'
+    ? locale === 'zh' ? '菜单栏' : 'menu bar'
+    : locale === 'zh' ? '系统托盘' : 'system tray'
   return locale === 'zh'
-    ? { title: 'ClawClaw 正在后台运行', message: '关闭窗口不会中断正在运行的任务。可从系统托盘重新打开。', buttons: ['知道了'] }
-    : { title: 'ClawClaw is running in the background', message: 'Closing the window does not interrupt active work. Reopen it from the system tray.', buttons: ['Got it'] }
+    ? { title: 'ClawClaw 正在后台运行', message: `关闭窗口不会中断正在运行的任务。可从${location}重新打开，或在其中选择“退出”以停止应用。`, buttons: ['知道了'] }
+    : { title: 'ClawClaw is running in the background', message: `Closing the window does not interrupt active work. Reopen it from the ${location}, or choose Quit there to stop the app.`, buttons: ['Got it'] }
 }
 
 function writeMarker(path: string): void {
@@ -98,7 +102,7 @@ export class DesktopBackgroundCloseNotice {
 
   private async confirm(hide: () => void): Promise<void> {
     try {
-      const copy = noticeCopy(this.options.locale())
+      const copy = noticeCopy(this.options.locale(), this.options.platform)
       const result = await this.options.show({
         type: 'info',
         ...copy,

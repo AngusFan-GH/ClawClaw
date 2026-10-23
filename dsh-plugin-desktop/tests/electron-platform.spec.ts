@@ -81,6 +81,18 @@ describe('electronPlatformStrategy', () => {
     expect(window.setBackgroundMaterial).not.toHaveBeenCalled()
   })
 
+  it('uses the application preference for all macOS menu roles and updates it live', () => {
+    const strategy = electronPlatformStrategy('darwin')
+    strategy.configureApplication({} as never, 'ClawClaw', [], 'zh')
+    expect(electron.Menu.buildFromTemplate.mock.calls.at(-1)?.[0]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '编辑' }),
+    ]))
+    strategy.refreshApplicationMenu([], 'en')
+    expect(electron.Menu.buildFromTemplate.mock.calls.at(-1)?.[0]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Edit' }),
+    ]))
+  })
+
   it('selects the Linux adapter without desktop chrome tweaks', () => {
     const strategy = electronPlatformStrategy('linux')
     const window = createWindow()

@@ -53,6 +53,17 @@ describe('Desktop quit confirmation', () => {
     }))
   })
 
+  it('uses the current Chinese preference for interrupted work', async () => {
+    const show = vi.fn(async () => ({ response: 1, checkboxChecked: false }))
+    const confirmation = new DesktopQuitConfirmation({
+      locale: () => 'zh', inspect: async () => ({ ...idle, activeAgents: 1 }), show, focus: vi.fn(),
+    })
+    await expect(confirmation.confirm()).resolves.toBe(false)
+    expect(show).toHaveBeenCalledWith(expect.objectContaining({
+      title: '退出 ClawClaw？', buttons: ['退出', '取消'],
+    }))
+  })
+
   it('coalesces an open decision and focuses it on repeated requests', async () => {
     let resolveInspection!: (snapshot: DesktopInterruptionSnapshot) => void
     const inspection = new Promise<DesktopInterruptionSnapshot>(resolve => { resolveInspection = resolve })

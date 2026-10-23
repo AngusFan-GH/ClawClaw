@@ -117,6 +117,7 @@ const electron = vi.hoisted(() => {
   }
   const webContents = {
     id: 73,
+    mainFrame: { url: 'http://127.0.0.1:43120/' },
     session: { fetch: sessionFetch, webRequest },
     closeDevTools: vi.fn(() => { devToolsOpened = false }),
     executeJavaScript: vi.fn(async (_code: string, _userGesture?: boolean) => null as unknown),
@@ -127,6 +128,7 @@ const electron = vi.hoisted(() => {
     openDevTools: vi.fn(() => { devToolsOpened = true }),
     reloadIgnoringCache: vi.fn(),
     forcefullyCrashRenderer: vi.fn(),
+    ipc: { handle: vi.fn(), removeHandler: vi.fn() },
     isLoadingMainFrame: vi.fn(() => false),
     setZoomLevel: vi.fn((level: number) => { zoomLevel = level }),
     setWindowOpenHandler: vi.fn(),
@@ -1289,13 +1291,14 @@ describe('Electron desktop runtime', () => {
 
     runtime.setLocalePreference('en')
     expect(runtime.locale).toBe('en')
+    expect(electron.chromeWebContents.send).toHaveBeenCalledWith('dsh-desktop:compatibility-chrome-state', expect.objectContaining({ locale: 'en' }))
     expect((electron.menuTemplates.at(-1) as Array<{ label?: string }>).map(item => item.label))
       .toEqual(expect.arrayContaining([
         'Open ClawClaw',
         'Quit',
       ]))
 
-    electron.app.getLocale.mockReturnValueOnce('zh-CN')
+    electron.app.getPreferredSystemLanguages.mockReturnValueOnce(['zh-CN'])
     runtime.setLocalePreference(undefined)
     expect(runtime.locale).toBe('zh')
     expect((electron.menuTemplates.at(-1) as Array<{ label?: string }>).map(item => item.label))
@@ -1305,6 +1308,31 @@ describe('Electron desktop runtime', () => {
       ]))
 
     await release()
+  })
+
+  it.each(['win32', 'darwin'] as const)('bootstraps %s from system languages and protects the locale IPC', async (platform) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+    electron.app.getPreferredSystemLanguages.mockReturnValue(['zh-Hans-CN', 'en-US'])
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    expect(runtime.locale).toBe('zh')
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+    const call = electron.webContents.ipc.handle.mock.calls.findLast(([channel]) => channel === 'dsh-desktop:locale-read')
+    const read = call?.[1] as unknown as (event: unknown) => unknown
+    expect(read).toBeTypeOf('function')
+    const event = { sender: electron.webContents, senderFrame: electron.webContents.mainFrame }
+    expect(read(event)).toEqual({ languages: ['zh-Hans-CN', 'en-US', 'en-US'], preference: null })
+    expect(() => read({ ...event, sender: electron.chromeWebContents })).toThrow('untrusted locale sender')
+    expect(() => read({ ...event, senderFrame: { url: spec.url } })).toThrow('untrusted locale sender')
+    runtime.resetBackgroundCloseNotice()
+    const close = electron.browserWindowOn.mock.calls.find(([name]) => name === 'close')?.[1] as (event: unknown) => void
+    close({ preventDefault: vi.fn() })
+    await vi.waitFor(() => expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({ title: 'ClawClaw 正在后台运行', buttons: ['知道了'] }),
+    ))
+    await release()
+    expect(() => read(event)).toThrow('untrusted locale sender')
   })
 
   it('handles desktop zoom shortcuts without relying on the native menu', async () => {
