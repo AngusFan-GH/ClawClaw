@@ -100,13 +100,13 @@ GitHub 正式存档使用 `github-release` Environment 和工作流自身的 `GI
 ```text
 UPDATE_HOST             公司更新服务器的 SSH 域名或 IP
 UPDATE_USER             专用非 root 发布账号
-UPDATE_PORT             SSH 端口，默认 22，不是下载端口 8443
+UPDATE_PORT             SSH 端口，默认 22，不是下载端口 9528
 UPDATE_REMOTE_ROOT      /data/clawclaw/public
 UPDATE_SSH_KEY_FILE     发布专用私钥的本地路径
 UPDATE_SSH_KNOWN_HOSTS_FILE  经核验的 known_hosts 文件路径
 ```
 
-下载服务使用 HTTPS 8443，版本目录和清单分别位于 `/data/clawclaw/public/releases/dsh/<版本>/` 和 `/data/clawclaw/public/updates/dsh/stable/release.json`。必须保留 SSH 服务器指纹校验；密钥、密码和证书私钥不进入 Git。
+下载服务使用 HTTPS 9528，版本目录和清单分别位于 `/data/clawclaw/public/releases/dsh/<版本>/` 和 `/data/clawclaw/public/updates/dsh/stable/release.json`。必须保留 SSH 服务器指纹校验；密钥、密码和证书私钥不进入 Git。
 
 ### 5. 执行不发布的预构建
 
@@ -141,7 +141,7 @@ GitHub 构建成功且安装包另行部署服务器后，对外宣布前检查 
 ```sh
 gh run list --repo AngusFan-GH/ClawClaw --workflow release.yml --limit 3
 curl --fail --show-error --silent \
-  https://clawclaw.xzinfra.com:8443/updates/dsh/stable/release.json
+  https://clawclaw.xzinfra.com:9528/updates/dsh/stable/release.json
 ```
 
 确认 manifest 是目标版本和 `stable` channel，两个安装包 URL 都返回 HTTP 200，`Content-Length` 一致，并且服务器文件符合 manifest 中的 SHA-512。`release.json` 是唯一更新指针，不要添加 `latest.yml` 兼容文件。
@@ -158,9 +158,9 @@ corepack pnpm run upload:update -- --directory /path/to/desktop-release --channe
 
 ## 更新与发布
 
-DSH Desktop 使用 `https://clawclaw.xzinfra.com:8443/updates/dsh/stable/`，并只消费这一目录中的 `release.json`。清单同时声明 Windows NSIS 与 macOS Universal DMG 的 HTTPS 地址、大小和 SHA-512；DSH Desktop 不使用 `latest.yml`、`latest-mac.yml` 或旧 OpenClaw 的 `/updates/stable/` 更新源。
+DSH Desktop 使用 `https://clawclaw.xzinfra.com:9528/updates/dsh/stable/`，并只消费这一目录中的 `release.json`。清单同时声明 Windows NSIS 与 macOS Universal DMG 的 HTTPS 地址、大小和 SHA-512；DSH Desktop 不使用 `latest.yml`、`latest-mac.yml` 或旧 OpenClaw 的 `/updates/stable/` 更新源。
 
-此入口迁移要求 0.2.8–0.2.10 用户先手动安装使用 8443 的新版，之后自动更新。此前 0.2.11 的试打包仍使用旧 443 地址，不用于本次迁移；需重新构建。更早版本不在兼容验证范围内。
+此入口迁移要求 0.2.8–0.2.10 用户先手动安装使用 9528 的新版，之后自动更新。此前 0.2.11 的试打包仍使用旧 443 地址，不用于本次迁移；需重新构建。更早版本不在兼容验证范围内。
 
 打包后的应用在启动 60 秒后检查更新，此后每六小时检查一次。后台对每个可用版本通知一次，不自动下载。设置和托盘共用同一套手动检查及下载流程。确认后，应用会再次读取 `release.json`，把安装包下载到私有更新目录，校验声明大小、SHA-512 和 DMG/PE 容器并显示进度。Windows 只有在用户再次确认且 Host 正常关闭后才启动 NSIS；macOS 会打开 DMG，由用户退出当前应用并拖入“应用程序”完成替换。
 

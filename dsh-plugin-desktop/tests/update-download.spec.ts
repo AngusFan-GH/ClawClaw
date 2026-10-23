@@ -18,8 +18,8 @@ function sha(value: Uint8Array) { return createHash('sha512').update(value).dige
 function requestFor(version: string, artifacts: Record<DesktopDownloadPlatform, Uint8Array>): UpdateArtifactRequest {
   return async url => url.endsWith('release.json')
     ? Response.json({ version, channel: 'stable', artifacts: {
-      darwin: { url: 'https://clawclaw.xzinfra.com:8443/releases/ClawClaw.dmg', sha512: sha(artifacts.darwin), size: artifacts.darwin.byteLength },
-      win32: { url: 'https://clawclaw.xzinfra.com:8443/releases/ClawClaw.exe', sha512: sha(artifacts.win32), size: artifacts.win32.byteLength },
+      darwin: { url: 'https://clawclaw.xzinfra.com:9528/releases/ClawClaw.dmg', sha512: sha(artifacts.darwin), size: artifacts.darwin.byteLength },
+      win32: { url: 'https://clawclaw.xzinfra.com:9528/releases/ClawClaw.exe', sha512: sha(artifacts.win32), size: artifacts.win32.byteLength },
     } })
     : new Response(Buffer.from(artifacts[url.endsWith('.dmg') ? 'darwin' : 'win32']))
 }
@@ -127,8 +127,8 @@ describe('ClawClaw installer download', () => {
     const directory = await temp(); const good = dmg(); const bad = Buffer.from(good); bad[0] = 1
     const request = async (url: string): Promise<Response> => url.endsWith('release.json')
       ? Response.json({ version: '2.2.0', channel: 'stable', artifacts: {
-        darwin: { url: 'https://clawclaw.xzinfra.com:8443/releases/ClawClaw.dmg', sha512: sha(good), size: good.byteLength },
-        win32: { url: 'https://clawclaw.xzinfra.com:8443/releases/ClawClaw.exe', sha512: sha(exe()), size: 512 },
+        darwin: { url: 'https://clawclaw.xzinfra.com:9528/releases/ClawClaw.dmg', sha512: sha(good), size: good.byteLength },
+        win32: { url: 'https://clawclaw.xzinfra.com:9528/releases/ClawClaw.exe', sha512: sha(exe()), size: 512 },
       } }) : new Response(bad)
     await expect(downloadDesktopUpdate({ platform: 'darwin', version: '2.2.0', destinationPath: join(directory, 'update.dmg'), request })).rejects.toMatchObject({ code: 'invalid-artifact' } satisfies Partial<UpdateDownloadError>)
   })

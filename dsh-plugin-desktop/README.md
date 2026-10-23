@@ -100,13 +100,13 @@ Use a dedicated non-root SSH account for server publication. Store the following
 ```text
 UPDATE_HOST             SSH hostname or IP of the company update server
 UPDATE_USER             dedicated non-root release account
-UPDATE_PORT             SSH port, default 22, not download port 8443
+UPDATE_PORT             SSH port, default 22, not download port 9528
 UPDATE_REMOTE_ROOT      /data/clawclaw/public
 UPDATE_SSH_KEY_FILE     local path to the dedicated private key
 UPDATE_SSH_KNOWN_HOSTS_FILE  path to independently verified known_hosts
 ```
 
-Downloads use HTTPS 8443. Version directories and the feed reside at `/data/clawclaw/public/releases/dsh/<version>/` and `/data/clawclaw/public/updates/dsh/stable/release.json`. Keep SSH host-key verification enabled; keys, passwords, and certificate private keys do not belong in Git.
+Downloads use HTTPS 9528. Version directories and the feed reside at `/data/clawclaw/public/releases/dsh/<version>/` and `/data/clawclaw/public/updates/dsh/stable/release.json`. Keep SSH host-key verification enabled; keys, passwords, and certificate private keys do not belong in Git.
 
 ### 5. Run a non-publishing prebuild
 
@@ -141,7 +141,7 @@ After successful GitHub builds and separate server deployment, check the workflo
 ```sh
 gh run list --repo AngusFan-GH/ClawClaw --workflow release.yml --limit 3
 curl --fail --show-error --silent \
-  https://clawclaw.xzinfra.com:8443/updates/dsh/stable/release.json
+  https://clawclaw.xzinfra.com:9528/updates/dsh/stable/release.json
 ```
 
 Confirm that the manifest reports the intended version and `stable` channel, both installer URLs return HTTP 200, their `Content-Length` values match, and the server files match the manifest SHA-512 values. `release.json` is the only update pointer; do not add `latest.yml` compatibility files.
@@ -158,9 +158,9 @@ The uploader validates the installers, manifest, and optional provenance, refuse
 
 ## Updates and releases
 
-DSH Desktop uses `https://clawclaw.xzinfra.com:8443/updates/dsh/stable/` and consumes only `release.json` from that directory. The manifest declares HTTPS URLs, sizes, and SHA-512 digests for the Windows NSIS installer and macOS Universal DMG. DSH Desktop does not consume `latest.yml`, `latest-mac.yml`, or the earlier OpenClaw `/updates/stable/` feed.
+DSH Desktop uses `https://clawclaw.xzinfra.com:9528/updates/dsh/stable/` and consumes only `release.json` from that directory. The manifest declares HTTPS URLs, sizes, and SHA-512 digests for the Windows NSIS installer and macOS Universal DMG. DSH Desktop does not consume `latest.yml`, `latest-mac.yml`, or the earlier OpenClaw `/updates/stable/` feed.
 
-This endpoint migration requires 0.2.8–0.2.10 users to manually install the new client using 8443 once, then receive automatic updates. Earlier 0.2.11 trial installers still use port 443 and must be rebuilt for this migration. Older versions are outside compatibility validation.
+This endpoint migration requires 0.2.8–0.2.10 users to manually install the new client using 9528 once, then receive automatic updates. Earlier 0.2.11 trial installers still use port 443 and must be rebuilt for this migration. Older versions are outside compatibility validation.
 
 Packaged applications check after 60 seconds and then every six hours. Background checks notify once per available version; they never download automatically. Settings and tray actions share one interactive check and download flow. After confirmation, the application re-reads `release.json`, downloads into its private update directory, and verifies declared size, SHA-512, and the DMG/PE container while showing progress. Windows starts NSIS only after a second confirmation and successful Host shutdown. macOS opens the DMG so the user can quit the running application and replace it in Applications.
 

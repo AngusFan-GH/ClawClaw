@@ -1,7 +1,7 @@
 /** Headless checks against the HTTPS ClawClaw release manifest. */
 
 /** Public static release-manifest origin. */
-export const CLAWCLAW_UPDATE_BASE_URL = 'https://clawclaw.xzinfra.com:8443/updates/dsh'
+export const CLAWCLAW_UPDATE_BASE_URL = 'https://clawclaw.xzinfra.com:9528/updates/dsh'
 
 /** The single release stream supported by the desktop product. */
 export type DesktopReleaseChannel = 'stable'
