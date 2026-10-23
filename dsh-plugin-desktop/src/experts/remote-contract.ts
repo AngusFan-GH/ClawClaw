@@ -1,7 +1,7 @@
 import { teamInputSchema, teamSnapshotSchema } from './team-contract.js'
 import type { InvocationDescriptor, InvocationParameterDescriptor, TypertCodec } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
-import { CUSTOM_EXPERT_SLUG, catalogSnapshotSchema, customExpertInputSchema, expertEditSchema } from './expert-contract.js'
+import { CUSTOM_EXPERT_SLUG, EXPERT_PLUGIN_NAME, catalogSnapshotSchema, customExpertInputSchema, expertEditSchema } from './expert-contract.js'
 import { createdCapabilitySchema } from './created-capability-contract.js'
 
 const enabledArraySchema = z.array(z.string())
@@ -38,6 +38,9 @@ function catalogMethod(method: string, parameters: InvocationDescriptor['paramet
 }
 const revisionParameter = jsonParameter('expectedRevision', 'number', z.number().int().min(0))
 const customSlugParameter = jsonParameter('slug', 'string', z.string().regex(CUSTOM_EXPERT_SLUG))
+// Legacy custom UUIDs and personal plugin names share this safe slug format.
+// The Host still checks ownership; editing remains restricted to UUID records.
+const deletableSlugParameter = jsonParameter('slug', 'string', z.string().regex(EXPERT_PLUGIN_NAME))
 
 /** Host 与 Client 共用的专家启用状态 Remote 严格契约。 */
 export const AGENCY_AGENTS_DESCRIPTORS = [
@@ -80,7 +83,7 @@ export const AGENCY_AGENTS_DESCRIPTORS = [
     jsonParameter('enabled', 'boolean', z.boolean()),
     revisionParameter,
   ]),
-  catalogMethod('deleteCustomExpert', [customSlugParameter, revisionParameter]),
+  catalogMethod('deleteCustomExpert', [deletableSlugParameter, revisionParameter]),
   {
     id: 'dsh-plugin-desktop/experts#agencyAgents/getCustomExpert',
     service: 'agencyAgents', namespace: 'agencyAgents', method: 'getCustomExpert',

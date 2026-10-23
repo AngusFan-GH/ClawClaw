@@ -4,6 +4,7 @@ import { z } from 'zod'
 export const DEFAULT_EXPERT_EMOJI = '🧩'
 export const CUSTOM_EXPERT_LIMIT = 200
 export const CUSTOM_EXPERT_SLUG = /^custom-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+export const EXPERT_PLUGIN_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
 /** 允许一个完整 Emoji（含肤色、旗帜和 ZWJ 组合），拒绝普通文本和多图标。 */

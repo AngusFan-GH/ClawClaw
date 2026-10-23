@@ -2,6 +2,8 @@
 node_modules/
 *.tsbuildinfo
 .build/
+__pycache__/
+*.py[cod]
 
 dsh-plugin-desktop/dist/
 dsh-plugin-desktop/lib/

@@ -1,19 +1,26 @@
 import { Session, SessionId, pluginRecordOf } from '@deepseek-ai/dsh-session'
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
+import { Peer } from '@deepseek-ai/dsh-client-connection'
+import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
+import TypertGateway from '@deepseek-ai/dsh-api-gateway'
+import RemoteAccessService from '@deepseek-ai/dsh-api-remote-access'
+import AgencyAgentsRemote from '../src/experts/remote.ts'
 import { AGENCY_PLUGIN_PACKAGE_SERVICE, apply, type AgencyPluginPackageService } from '../src/experts/index.ts'
 import { AGENCY_TEAM_SERVICE, type AgencyTeamLibrary } from '../src/experts/team-library.ts'
 import { DESKTOP_MCP_LIFECYCLE_SERVICE, type DesktopMcpView } from '../src/mcp-contract.ts'
 import { AGENCY_LIBRARY_SERVICE, type AgencyExpertLibrary } from '../src/experts/expert-library.ts'
 
 const roots: string[] = []
+const contexts: Context[] = []
 const originalDshHome = process.env.DSH_HOME
 
 afterEach(async () => {
+  await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
   if (originalDshHome === undefined) delete process.env.DSH_HOME
   else process.env.DSH_HOME = originalDshHome
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
@@ -134,8 +141,95 @@ async function hostFixture() {
     if (!tool) throw new Error(`Tool was not registered: ${name}`)
     return tool.execute(args, { agent, signal: new AbortController().signal })
   }
-  return { home, services, tools, starts, execute, setConnectorState: (value: 'running' | 'error') => { connectorState = value } }
+  return { home, ctx, services, tools, starts, execute, setConnectorState: (value: 'running' | 'error') => { connectorState = value } }
 }
+
+async function writeAgentPackage(home: string, personal = true): Promise<string> {
+  const root = join(home, 'plugins/marketplaces', personal ? 'my-experts/plugins/react-architect' : 'react-architect/1.0.0')
+  await mkdir(join(root, '.clawclaw-plugin'), { recursive: true })
+  await mkdir(join(root, 'agents'), { recursive: true })
+  await writeFile(join(root, '.clawclaw-plugin/plugin.json'), JSON.stringify({
+    name: 'react-architect', version: '1.0.0', description: 'React architecture', author: 'Test',
+    agents: ['./agents/react-architect.md'], expertType: 'agent', agentName: 'react-architect',
+    profession: localized('React 架构师', 'React Architect'), avatar: 0, categoryId: '02-SoftwareDevelopment',
+    defaultInitPrompt: localized('设计 React 应用', 'Design a React application'),
+  }))
+  await writeFile(join(root, 'agents/react-architect.md'), '---\nname: React Architect\ndescription: React architecture\n---\nReact persona.\n')
+  return root
+}
+
+async function expertGateway(fixture: Awaited<ReturnType<typeof hostFixture>>) {
+  const ctx = new Context()
+  contexts.push(ctx)
+  ctx.provide('settings', fixture.ctx.settings)
+  for (const [name, value] of fixture.services) ctx.reflect.provide(name, value)
+  await ctx.plugin(TypertRegistry)
+  await ctx.plugin(RemoteAccessService)
+  await ctx.plugin(TypertGateway)
+  new AgencyAgentsRemote(ctx)
+  const peer = new Peer(ctx, { principal: { kind: 'owner' } })
+  return (method: string, args: Record<string, unknown>) => ctx.typertGateway.invoke({ namespace: 'agencyAgents', method, args, peer })
+}
+
+const legacyExpertInput = {
+  name: 'Legacy custom expert', description: 'A custom expert stored in settings', division: 'research', prompt: 'Legacy persona.',
+}
+
+describe('Expert deletion through the strict Remote gateway', () => {
+  it('deletes a personal Agent package by its package slug while retaining other experts and history', async () => {
+    const fixture = await hostFixture()
+    const root = await writeAgentPackage(fixture.home)
+    const library = fixture.services.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary
+    const saved = await library.saveCustom(legacyExpertInput, true, 7)
+    const legacySlug = saved.enabled[0]!
+    const enabled = await library.setEnabled([legacySlug, 'react-architect'], saved.revision)
+    expect(saved.experts.find(expert => expert.slug === 'react-architect')).toMatchObject({ conversationCreated: true, packageType: 'agent' })
+    const history = join(fixture.home, 'history.jsonl')
+    await writeFile(history, 'retained conversation\n')
+    const invoke = await expertGateway(fixture)
+
+    await expect(invoke('deleteCustomExpert', { slug: 'react-architect', expectedRevision: enabled.revision })).resolves.toMatchObject({
+      enabled: [legacySlug], experts: expect.arrayContaining([expect.objectContaining({ slug: legacySlug }), expect.objectContaining({ slug: 'base' })]),
+    })
+    expect((await library.catalog()).experts.some(expert => expert.slug === 'react-architect')).toBe(false)
+    await expect(stat(root)).rejects.toThrow()
+    expect(await readFile(history, 'utf8')).toBe('retained conversation\n')
+  })
+
+  it('continues to delete legacy custom UUID experts', async () => {
+    const fixture = await hostFixture()
+    const library = fixture.services.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary
+    const saved = await library.saveCustom(legacyExpertInput, true, 7)
+    const invoke = await expertGateway(fixture)
+    await expect(invoke('deleteCustomExpert', { slug: saved.enabled[0], expectedRevision: saved.revision })).resolves.toMatchObject({ enabled: [] })
+    expect((await library.catalog()).experts.some(expert => expert.custom)).toBe(false)
+  })
+
+  it('refuses built-in and externally installed experts and keeps package editing restricted', async () => {
+    const fixture = await hostFixture()
+    const root = await writeAgentPackage(fixture.home, false)
+    const invoke = await expertGateway(fixture)
+    for (const slug of ['base', 'react-architect']) {
+      await expect(invoke('deleteCustomExpert', { slug, expectedRevision: 7 })).rejects.toThrow('read-only')
+    }
+    await expect(invoke('getCustomExpert', { slug: 'react-architect' })).rejects.toMatchObject({ code: 'gateway/input-invalid' })
+    await expect(stat(root)).resolves.toBeDefined()
+  })
+
+  it('refuses stale revisions before removing a personal package', async () => {
+    const fixture = await hostFixture()
+    const root = await writeAgentPackage(fixture.home)
+    const invoke = await expertGateway(fixture)
+    await expect(invoke('deleteCustomExpert', { slug: 'react-architect', expectedRevision: 6 })).rejects.toThrow()
+    await expect(stat(root)).resolves.toBeDefined()
+  })
+
+  it.each(['../react-architect', '/react-architect', 'react/architect', ' react-architect', 'react-architect--lead', ''])('rejects unsafe or member slugs at the boundary: %j', async slug => {
+    const fixture = await hostFixture()
+    const invoke = await expertGateway(fixture)
+    await expect(invoke('deleteCustomExpert', { slug, expectedRevision: 7 })).rejects.toMatchObject({ code: 'gateway/input-invalid' })
+  })
+})
 
 describe('Plugin Team Host tools', () => {
   it('replaces legacy placeholder MCP names with configured capability aliases', async () => {

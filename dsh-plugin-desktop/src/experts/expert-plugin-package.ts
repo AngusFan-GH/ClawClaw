@@ -2,13 +2,14 @@ import { lstat, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { z } from 'zod'
 import type { ExpertCapabilityBinding, ExpertSummary } from './expert-contract.js'
+import { EXPERT_PLUGIN_NAME } from './expert-contract.js'
 import { ZH_DIVISION } from './names.js'
 
 const PACKAGE_MANIFEST = join('.clawclaw-plugin', 'plugin.json')
 const MAX_MANIFEST_BYTES = 1024 * 1024
 const MAX_DISCOVERED_PACKAGES = 500
 const MAX_DISCOVERY_DEPTH = 5
-const packageNameSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)
+const packageNameSchema = z.string().regex(EXPERT_PLUGIN_NAME)
 const packagePathSchema = z.string().min(3).max(512)
 const presetAvatarSchema = z.number().int().min(0).max(35)
 const personalMarketplaceSchema = z.object({
