@@ -67,6 +67,22 @@ The command downloads only that run's `desktop-release` artifact, verifies the s
 
 Formal tags still archive GitHub Releases automatically; deployment is a separate explicit local command. Increase the product version before each new formal release (next: 0.2.12 or later). Do not recreate or move published tags. No GitHub Actions deployment secrets are needed.
 
+## Retained run and verification (2026-10-23)
+
+Only one downloadable 0.2.11 packaging run is retained: [39938627282](https://github.com/AngusFan-GH/ClawClaw/actions/runs/39938627282), from commit `3d73a81fabf617ba6a8152324078004f0a0885ab`. It includes the macOS Universal DMG, Windows x64 EXE and assembled `desktop-release`. Identify a selection by run ID and commit rather than its row number, which changes as new builds appear.
+
+The following command was verified against real artifacts. Download, provenance, canonical URLs, sizes and SHA-512 checks passed:
+
+```sh
+corepack pnpm deploy:run 39938627282 --dry-run
+```
+
+No upload or feed switch occurred. SHA-256 snapshots of all 11 production files matched before and after the check, and temporary local downloads were removed. Live run listing and interactive cancellation were also verified; these checks do not constitute a new upload test. This 0.2.11 is already deployed: do not remove `--dry-run` to attempt another replacement. The next formal deployment must use newly built artifacts with an increased product version.
+
+Runs without downloadable artifacts (`39957286420`, `39956621700`, `39954244468`, `39942732104`) and older 0.2.11 runs (`39889708751`, `39607997215`) were deleted, including attached artifacts. Other versions were retained. Production installers and the feed were unchanged.
+
+This was manual cleanup, not an automated retention policy. For future cleanup, inspect versions and artifacts before deleting a run; deleting a run also removes its logs and attached artifacts. The selector hides absent or expired artifacts but does not automatically deduplicate or delete same-version runs. Workflow artifacts still expire after 14 days and are not permanent download URLs; clients use the formal company-server directory.
+
 ## Two remotes
 
 `origin` points to GitHub and `gitlab` to the company GitLab. Both remotes retain `main` and `dsh-desktop`: use `dsh-desktop` for daily development and `main` as the integration baseline. After validation, merge development changes into `main` and synchronize each branch to both remotes. Official publication is still triggered by a version tag, not by branch synchronization.
