@@ -1,0 +1,69 @@
+diff --git a/lib/client.js b/lib/client.js
+index ee92836b175715a13f025445db8fb841cfd7ca75..90adf24dea2e917d02fb774b02020952b6f14917 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -6,6 +6,7 @@ window.__ModuleLoader__.load({
+ 
+     let react = require("react");
+     let react_jsx_runtime = require("react/jsx-runtime");
++    const { IconSearchOutlineRegular } = require("@deepseek-ai/dsh-client-ui-primitives");
+ 
+     //#region css
+     const css = [
+@@ -1828,7 +1829,7 @@ react_jsx_runtime.jsx("div", {
+       });
+     }
+ 
+-    const inject = ["slots", "commandUi"];
++    const inject = ["slots", "commandUi", "locale"];
+ 
+     function apply(ctx) {
+       // 挂插件页 slot：侧栏 插件 → 已安装 → free-search → 行配置页。
+@@ -1847,17 +1848,21 @@ react_jsx_runtime.jsx("div", {
+               : react_jsx_runtime.jsx(FreeSearchCard, { page: true })
+         )
+       );
+-      // /free-search-engine 弹出式命令：输入 "/" 选中后弹出引擎列表，点选即切换。
++      // /search-engine 弹出式命令：输入 "/" 选中后弹出引擎列表，点选即切换。
+       // 等效于设置页切换引擎+保存；命令只改 provider 配置，搜索仍走回退链。
+       // description 必须传函数：ui-commands 读回的是 contribution.description()，
+       // 传字符串会抛 TypeError: contribution.description is not a function；该异常
+       // 会让整份 "/" 候选列表一起失败，菜单空白、其他命令也一起点不到。
+-      ctx.inject(["commandUi"], (sctx) => {
++      ctx.inject(["commandUi", "locale"], (sctx) => {
+         const command = sctx.get("commandUi");
++        const locale = sctx.get("locale");
++        const isEnglish = () => locale.getSnapshot().active === "en";
+         sctx.effect(() => {
+           const dispose = command.register({
+-            name: "free-search-engine",
+-            description: () => "切换搜索引擎 / Switch web search engine",
++            name: "search-engine",
++            label: () => isEnglish() ? "Search engine" : "搜索引擎",
++            description: () => isEnglish() ? "Switch web search engine" : "切换搜索引擎",
++            icon: IconSearchOutlineRegular,
+             available: () => true,
+             ui: {
+               kind: "popupSelect",
+@@ -1881,7 +1886,7 @@ react_jsx_runtime.jsx("div", {
+             },
+           });
+           return dispose;
+-        }, "free-search: /free-search-engine command");
++        }, "free-search: /search-engine command");
+       });
+     }
+ 
+diff --git a/package.json b/package.json
+index cf781ab13c18cd7f1157d1fbb380822ba8ad7be6..9cf2ab1a6fe76d4ae97e07ff9a54f88418e3f913 100644
+--- a/package.json
++++ b/package.json
+@@ -114,6 +114,8 @@
+     },
+     "client": {
+       "inject": [
++        "@deepseek-ai/dsh-client-locale",
++        "@deepseek-ai/dsh-client-ui-primitives",
+         "@deepseek-ai/dsh-client-ui-commands",
+         "@deepseek-ai/dsh-client-ui-plugin-manager",
+         "@deepseek-ai/dsh-client-ui-renderer"
