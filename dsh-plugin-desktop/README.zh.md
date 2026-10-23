@@ -142,7 +142,7 @@ git push origin "clawclaw-v$version"
 
 tag 必须与 Desktop package 版本完全一致。匹配的 tag 会从同一 commit 重新构建 macOS 和 Windows，汇总 `desktop-release` 并存档到 GitHub Releases。不要复用或移动已经发布的版本 tag。当前 0.2.11 已上线，下次正式发版先升到 0.2.12 或更高版本。
 
-等待该 tag 的工作流成功，在能访问公司内网的本机、仓库根目录执行。每次命令都会列出仍有完整产物的成功运行，输入序号选择（回车或 `q` 取消）：
+等待该 tag 的工作流成功，在能访问公司内网的本机、仓库根目录执行。每次命令都会列出仍有完整产物的成功运行，输入序号选择（回车选择最新记录，`q` 取消）：
 
 ```sh
 corepack pnpm deploy:run --dry-run

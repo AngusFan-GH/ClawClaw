@@ -53,6 +53,8 @@ export async function verifyDeployment(manifest, provenance, options = {}) {
   assert.ok(isDeepStrictEqual(await liveInfo.json(), provenance), 'Deployed build provenance differs from this workflow')
   for (const [platform, entry] of Object.entries(manifest.artifacts)) {
     assert.ok(Number.isSafeInteger(entry.size) && entry.size > 0 && entry.size <= 1024 ** 3)
+    console.log(`${platform}: 正在下载并校验公网安装包（${(entry.size / 1024 ** 2).toFixed(1)} MB）`)
+    let lastProgress = Date.now()
     const response = await get(entry.url, { signal: AbortSignal.timeout(10 * 60 * 1000) })
     assert.equal(response.status, 200)
     const hash = createHash('sha512')
@@ -61,6 +63,10 @@ export async function verifyDeployment(manifest, provenance, options = {}) {
       size += chunk.byteLength
       assert.ok(size <= entry.size, 'Download exceeds the declared installer size')
       hash.update(chunk)
+      if (Date.now() - lastProgress >= 5000) {
+        console.log(`${platform}: ${(size / entry.size * 100).toFixed(1)}% · ${(size / 1024 ** 2).toFixed(1)} / ${(entry.size / 1024 ** 2).toFixed(1)} MB`)
+        lastProgress = Date.now()
+      }
     }
     assert.equal(size, entry.size)
     assert.equal(hash.digest('base64'), entry.sha512, `${platform} installer SHA-512 mismatch`)

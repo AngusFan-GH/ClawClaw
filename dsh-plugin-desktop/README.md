@@ -142,7 +142,7 @@ git push origin "clawclaw-v$version"
 
 The tag must exactly match the desktop package version. A matching tag rebuilds macOS and Windows from the same commit, assembles `desktop-release`, and publishes to GitHub Releases; a separate local deployment command uploads both installers and atomically switches the feed before public verification. Never reuse or move a published version tag. The current 0.2.11 is already live; bump to 0.2.12 or later before a new formal release.
 
-Once that tag's workflow succeeds, run the following from the repository root on a workstation connected to the company network. Each command lists available successful runs so you can choose one by number (Enter or `q` cancels):
+Once that tag's workflow succeeds, run the following from the repository root on a workstation connected to the company network. Each command lists available successful runs so you can choose one by number (Enter selects the latest run; `q` cancels):
 
 ```sh
 corepack pnpm deploy:run --dry-run
