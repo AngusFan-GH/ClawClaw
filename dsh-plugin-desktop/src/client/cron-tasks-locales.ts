@@ -14,9 +14,11 @@ export const zh = {
   search: '搜索任务', searchPlaceholder: '搜索任务名称或指令', taskCount: '共 {total} 个任务，{enabled} 个已启用', noSearchResults: '没有找到匹配的任务。',
   scheduleHelp: '使用标准五段 Cron 表达式（分 时 日 月 周），例如工作日早上 9 点：0 9 * * 1-5。',
   hostRequired: '仅在 ClawClaw 运行时执行。离线错过或退出时中断的任务不会自动补跑，以避免重复操作。',
-  taskSession: '任务会话', sessionConversation: '定时任务对话', sessionPending: '首次运行时创建', sessionContinuous: '持续复用当前会话', sessionArchivedNextRun: '已归档，下次运行将创建新会话',
+  taskSession: '任务会话', sessionConversation: '定时任务对话', sessionPending: '首次运行时创建', sessionContinuous: '持续复用当前会话', sessionArchivedNextRun: '会话已归档，请先取消归档再启用任务',
   executionPolicy: '执行策略', policySummary: '持续会话 · 最长 {minutes} 分钟 · 中断后不自动重试',
   durationSeconds: '{seconds} 秒', durationMinutes: '{minutes} 分 {seconds} 秒',
+  manualTrigger: '手动执行', scheduledTrigger: '定时执行',
+  overview: '任务概览', recordCount: '{count} 条记录', notExecuted: '未执行', offlineSkipped: '应用未运行，已跳过本次计划，不会自动补跑。',
   operationFailed: '操作失败，请重试。',
 } as const
 export type CronTasksLocaleKey = keyof typeof zh
@@ -36,8 +38,10 @@ export const en: Record<CronTasksLocaleKey, string> = {
   search: 'Search tasks', searchPlaceholder: 'Search names or instructions', taskCount: '{total} tasks, {enabled} active', noSearchResults: 'No matching tasks.',
   scheduleHelp: 'Use a standard five-field Cron expression (minute hour day month weekday), for example weekdays at 9 AM: 0 9 * * 1-5.',
   hostRequired: 'Tasks run only while ClawClaw is open. Missed or interrupted runs are not replayed automatically, which avoids duplicate side effects.',
-  taskSession: 'Task session', sessionConversation: 'Scheduled task conversation', sessionPending: 'Created on the first run', sessionContinuous: 'Reuses the current conversation', sessionArchivedNextRun: 'Archived; the next run will create a new conversation',
+  taskSession: 'Task session', sessionConversation: 'Scheduled task conversation', sessionPending: 'Created on the first run', sessionContinuous: 'Reuses the current conversation', sessionArchivedNextRun: 'Session archived; unarchive it before enabling this task',
   executionPolicy: 'Execution policy', policySummary: 'Continuous session · {minutes} minute limit · no automatic retry after interruption',
   durationSeconds: '{seconds}s', durationMinutes: '{minutes}m {seconds}s',
+  manualTrigger: 'Manual run', scheduledTrigger: 'Scheduled run',
+  overview: 'Overview', recordCount: '{count} records', notExecuted: 'Not executed', offlineSkipped: 'The app was offline. This occurrence was skipped and will not be replayed.',
   operationFailed: 'The operation failed. Try again.',
 }

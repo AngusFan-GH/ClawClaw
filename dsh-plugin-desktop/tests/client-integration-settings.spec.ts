@@ -77,3 +77,44 @@ describe('Desktop automation panel registration', () => {
     expect(close).not.toHaveBeenCalled()
   })
 })
+
+
+describe('scheduled Session navigation with rc.2 reference ownership', () => {
+  it.each([true, false])('retains an unopened Session for rename (success=%s)', async (ok) => {
+    const sessionId = 'cron-existing-unopened'
+    const rename = vi.fn(async () => ok ? { ok: true } : { ok: false, error: { message: 'Rename rejected' } })
+    const binding = vi.fn(() => undefined)
+    const using = vi.fn(async (_id, _options, operation) => operation({ binding: { session: { rename } } }))
+    const refresh = vi.fn(async () => {})
+    const openSession = vi.fn()
+    let injectPanel: (() => { openSession(taskId: string, sessionId: string): Promise<void> }) | undefined
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      attached: true, sessionId, workspaceId: 'workspace-1', title: 'Existing task',
+    }), { status: 200 })))
+    const ctx = {
+      effect: vi.fn(),
+      inject: (_services: string[], install: (scope: ClientContext) => void) => { install(ctx) },
+      get: () => ({ using, binding, refresh }),
+      workspaces: { insertSessionBefore: vi.fn(async () => {}) },
+      uiWorkspace: { openSession },
+      locale: { bind: () => (key: string) => key, getSnapshot: () => ({ active: 'en' }) },
+      slots: {
+        inject: (_name: string, install: () => void) => { install() },
+        register: (definition: { name: string, inject?: typeof injectPanel }) => {
+          if (definition.name === 'main') injectPanel = definition.inject
+        },
+      },
+    } as unknown as ClientContext
+    try {
+      applyCronTasksSettings(ctx)
+      const opening = injectPanel!().openSession('existing-task', sessionId)
+      if (ok) await expect(opening).resolves.toBeUndefined()
+      else await expect(opening).rejects.toThrow('Rename rejected')
+      expect(using).toHaveBeenCalledWith(sessionId, { source: 'controllerOperation' }, expect.any(Function))
+      expect(binding).not.toHaveBeenCalled()
+      expect(rename).toHaveBeenCalledWith('[Cron] Existing task')
+      if (ok) expect(openSession).toHaveBeenCalledWith(sessionId)
+      else expect(openSession).not.toHaveBeenCalled()
+    } finally { vi.unstubAllGlobals() }
+  })
+})

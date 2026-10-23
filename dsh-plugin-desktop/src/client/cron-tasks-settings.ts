@@ -1,5 +1,5 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ISessions, SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
@@ -16,7 +16,7 @@ import { installIntegrationsStyles } from './integrations-styles.ts'
 
 export const DESKTOP_CRON_TASKS_LOCALE_NAMESPACE = 'desktop.cron-tasks'
 export const DESKTOP_AUTOMATION_PANEL_ID = 'desktop-automations' as MainPanelId
-interface ClientSessionsNavigation {
+interface ClientSessionsNavigation extends Pick<ISessions, 'using'> {
   refresh(): Promise<void>
   binding(sessionId: SessionId): { session: { rename(title: string): Promise<{
     ok: boolean
@@ -80,9 +80,13 @@ export function applyCronTasksSettings(ctx: ClientContext): void {
             refreshSessions: () => (scope.get('sessions') as unknown as ClientSessionsNavigation).refresh(),
             renameSession: async (attachedSessionId, title) => {
               const sessions = scope.get('sessions') as unknown as ClientSessionsNavigation
-              const session = sessions.binding(attachedSessionId as SessionId)?.session
-              if (session === undefined) throw new Error(`Unknown scheduled Session: ${attachedSessionId}`)
-              const result = await session.rename(title)
+              // Catalog membership does not retain a Client generation in rc.2.
+              // Own a temporary reference for the rename, including unopened Sessions.
+              const result = await sessions.using(
+                attachedSessionId as SessionId,
+                { source: 'controllerOperation' },
+                reference => reference.binding.session.rename(title),
+              )
               if (!result.ok) throw new Error(result.error?.message ?? 'Failed to name scheduled Session')
             },
             openSession: attachedSessionId => { scope.uiWorkspace.openSession(attachedSessionId as SessionId) },

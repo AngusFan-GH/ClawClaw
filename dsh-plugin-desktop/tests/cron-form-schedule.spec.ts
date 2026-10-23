@@ -19,3 +19,22 @@ describe('friendly Cron schedule form', () => {
     expect(parseFriendlyCronSchedule('0 */2 * * *')).toMatchObject({ mode: 'interval', interval: 2, intervalUnit: 'hours' })
   })
 })
+
+// One-time inputs must use the selected IANA zone, independent of the machine zone.
+describe('one-time wall-clock scheduling', () => {
+  it('converts explicit zones and round-trips the displayed input', async () => {
+    const { zonedDateTimeInstant, localDateTimeInput } = await import('../src/client/cron-form-schedule.ts')
+    expect(zonedDateTimeInstant('2027-01-10T09:30', 'Asia/Shanghai')).toBe('2027-01-10T01:30:00.000Z')
+    expect(zonedDateTimeInstant('2027-01-10T09:30', 'America/New_York')).toBe('2027-01-10T14:30:00.000Z')
+    expect(zonedDateTimeInstant('2027-01-10T09:30', 'Asia/Kathmandu')).toBe('2027-01-10T03:45:00.000Z')
+    expect(localDateTimeInput(new Date('2027-01-10T01:30:59Z'), 'Asia/Shanghai')).toBe('2027-01-10T09:30')
+  })
+  it('rejects invalid dates, zones, and nonexistent or ambiguous DST times', async () => {
+    const { zonedDateTimeInstant } = await import('../src/client/cron-form-schedule.ts')
+    expect(() => zonedDateTimeInstant('2027-02-30T09:30', 'UTC')).toThrow()
+    expect(() => zonedDateTimeInstant('', 'UTC')).toThrow()
+    expect(() => zonedDateTimeInstant('2027-01-10T09:30', 'Invalid/Zone')).toThrow()
+    expect(() => zonedDateTimeInstant('2027-03-14T02:30', 'America/New_York')).toThrow(/missing or ambiguous/)
+    expect(() => zonedDateTimeInstant('2027-11-07T01:30', 'America/New_York')).toThrow(/missing or ambiguous/)
+  })
+})

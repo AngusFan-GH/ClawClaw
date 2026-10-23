@@ -40,9 +40,9 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-async function mount(): Promise<{ api: CronTasksApi; action: ReturnType<typeof vi.fn> }> {
+async function mount(data: CronTasksView = view): Promise<{ api: CronTasksApi; action: ReturnType<typeof vi.fn> }> {
   const action = vi.fn(async () => ({}))
-  const api: CronTasksApi = { read: vi.fn(async () => view), action }
+  const api: CronTasksApi = { read: vi.fn(async () => data), action }
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
@@ -90,4 +90,21 @@ it('selects hour and minute through the shared menu control', async () => {
   await act(async () => { hour.click() })
   expect(onChange).toHaveBeenCalledWith('13:30')
   expect(document.querySelector('[role="menu"]')).toBeNull()
+})
+
+
+it('shows missed runs as unexecuted while preserving completed durations and session links', async () => {
+  const { action } = await mount({ ...view, jobs: [{ ...view.jobs[0]!, history: [
+    { status: 'skipped', scheduledFor: '2026-09-20T09:00:00.000Z', startedAt: '2026-09-20T09:00:00.000Z', finishedAt: '2026-09-21T09:00:00.000Z', error: 'Offline occurrence skipped' },
+    { status: 'completed', startedAt: '2026-09-19T09:00:00.000Z', finishedAt: '2026-09-19T09:00:30.000Z', sessionId: 'old-session' },
+  ] }] })
+  await act(async () => { host!.querySelector<HTMLButtonElement>('.dshCronMain')!.click() })
+  const rows = host!.querySelectorAll('.dshCronHistoryPanel li')
+  expect(rows[0]!.textContent).toContain('notExecuted')
+  expect(rows[0]!.textContent).not.toContain('durationMinutes')
+  expect(rows[0]!.querySelector('time')!.dateTime).toBe('2026-09-20T09:00:00.000Z')
+  expect(rows[0]!.querySelector('.dshCronHistoryError')).toBeNull()
+  expect(rows[1]!.textContent).toContain('durationSeconds')
+  expect(rows[1]!.querySelector('button')!.textContent).toBe('openSession')
+  expect(action).not.toHaveBeenCalled()
 })

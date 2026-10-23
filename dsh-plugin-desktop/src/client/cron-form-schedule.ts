@@ -78,7 +78,35 @@ export function friendlyCronExpression(input: FriendlyCronInput): string {
   return `${minute} ${hour} * * ${weekdays.join(',')}`
 }
 
-export function localDateTimeInput(date = new Date(Date.now() + 60 * 60 * 1000)): string {
+export function localDateTimeInput(date = new Date(Date.now() + 60 * 60 * 1000), timeZone?: string): string {
+  if (timeZone !== undefined) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date).map(part => [part.type, part.value]))
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+  }
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
   return local.toISOString().slice(0, 16)
+}
+
+/** Convert a wall-clock input in an explicit zone without silently shifting DST gaps. */
+export function zonedDateTimeInstant(value: string, timeZone: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value)
+  if (match === null) throw new TypeError('Select a valid date and time')
+  const [, year, month, day, hour, minute] = match
+  const naive = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute))
+  if (new Date(naive).toISOString().slice(0, 16) !== value) throw new TypeError('Select a valid date and time')
+  const format = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  const wall = (instant: number): string => {
+    const parts = Object.fromEntries(format.formatToParts(instant).map(part => [part.type, part.value]))
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+  }
+  const candidates = new Set<number>()
+  // Sample both sides of a transition, including zones with half-hour DST shifts.
+  for (let hours = -36; hours <= 36; hours += 6) {
+    const sample = naive + hours * 3_600_000
+    const offset = Date.parse(`${wall(sample)}:00Z`) - sample
+    const instant = naive - offset
+    if (wall(instant) === value) candidates.add(instant)
+  }
+  if (candidates.size !== 1) throw new TypeError('This local time is missing or ambiguous because of a time-zone transition; choose another time')
+  return new Date([...candidates][0]!).toISOString()
 }

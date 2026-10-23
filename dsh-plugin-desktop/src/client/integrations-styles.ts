@@ -1,3 +1,4 @@
+import { AUTOMATION_CSS } from './automation-styles.ts'
 import { MCP_CARD_CSS } from './mcp-card-styles.ts'
 import { SKILLS_CSS } from './skills-styles.ts'
 
@@ -50,7 +51,7 @@ export function installIntegrationsStyles(document: Document = globalThis.docume
   if (existing !== null) return () => {}
   const style = document.createElement('style')
   style.id = STYLE_ID
-  style.textContent = CSS + SKILLS_CSS + REMINDERS_CSS + MCP_CARD_CSS
+  style.textContent = CSS + SKILLS_CSS + REMINDERS_CSS + MCP_CARD_CSS + AUTOMATION_CSS
   document.head.append(style)
   return () => { style.remove() }
 }
