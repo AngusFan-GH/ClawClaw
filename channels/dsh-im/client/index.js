@@ -3,19 +3,7 @@ import { h, isEnglish, localizeText } from '../node_modules/@xmanrui/dsh-im/plug
 import { channelTranslator, en, zh } from './locales.js'
 import { channelDirectoryPicker } from './directory-picker.js'
 import { apply as applyDshImClient, IMSettingsTab } from '../node_modules/@xmanrui/dsh-im/plugin-src/client/index.js'
-import {
-  DingtalkLogoGlyph,
-  DiscordLogoGlyph,
-  FeishuLogoGlyph,
-  IMessageLogoGlyph,
-  OfficeLogoGlyph,
-  QqLogoGlyph,
-  SlackLogoGlyph,
-  TelegramLogoGlyph,
-  WecomLogoGlyph,
-  WeixinLogoGlyph,
-  WhatsappLogoGlyph,
-} from '../node_modules/@xmanrui/dsh-im/plugin-src/client/channel-logos.js'
+import { CHANNEL_LOGOS as LOGOS } from './channel-icons.js'
 import {
   CLAWCLAW_CHANNELS,
   channelOverviewState,
@@ -29,20 +17,6 @@ import {
 } from './session-presentation.js'
 
 export const inject = ['slots', 'connection', 'locale', 'workspaces', 'sessions']
-
-const LOGOS = Object.freeze({
-  dingtalk: DingtalkLogoGlyph,
-  discord: DiscordLogoGlyph,
-  feishu: FeishuLogoGlyph,
-  imessage: IMessageLogoGlyph,
-  office: OfficeLogoGlyph,
-  qq: QqLogoGlyph,
-  slack: SlackLogoGlyph,
-  telegram: TelegramLogoGlyph,
-  wecom: WecomLogoGlyph,
-  weixin: WeixinLogoGlyph,
-  whatsapp: WhatsappLogoGlyph,
-})
 
 function ChannelCard({ channel, status, onOpen }) {
   const Logo = LOGOS[channel.id]

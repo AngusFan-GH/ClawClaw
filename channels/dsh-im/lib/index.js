@@ -40170,13 +40170,41 @@ function createConnectionSupervisor(options) {
   return new ConnectionSupervisor(options);
 }
 
+// src/harness-peer.mjs
+var gateways = /* @__PURE__ */ new WeakMap();
+function channelGateway(ctx) {
+  const gateway = ctx?.typertGateway;
+  if (!gateway) return void 0;
+  const owner = ctx.root ?? ctx;
+  const cached = gateways.get(owner);
+  if (cached) return cached.gateway;
+  if (typeof ctx.connection?.createPeer !== "function" || typeof owner.effect !== "function") {
+    throw new TypeError("ClawClaw channels require a Host connection Peer and lifecycle owner");
+  }
+  const peer = ctx.connection.createPeer({ principal: { kind: "owner" }, interactions: "none" });
+  const facade = new Proxy(gateway, {
+    get(target, key) {
+      if (key === "invoke" || key === "stream") return (request) => target[key]({ ...request, peer });
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    }
+  });
+  const entry = { gateway: facade, peer };
+  gateways.set(owner, entry);
+  owner.effect(() => async () => {
+    if (gateways.get(owner) === entry) gateways.delete(owner);
+    await peer.dispose();
+  }, "ClawClaw IM: trusted in-process Gateway Peer");
+  return facade;
+}
+
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/plugin-src/host/harness-command-executor.mjs
 function createHarnessCommandExecutor(ctx, provided) {
   if (provided !== void 0) {
     if (typeof provided !== "function") throw new TypeError("commandExecutor must be a function");
     return provided;
   }
-  const gateway = ctx?.typertGateway;
+  const gateway = channelGateway(ctx);
   if (!gateway) return void 0;
   if (typeof gateway.invoke !== "function") {
     throw new TypeError("dsh-im requires a callable ctx.typertGateway");
@@ -40803,7 +40831,7 @@ function modernHarnessApi(ctx) {
   }
   const cached = modernApis.get(scope);
   if (cached) return cached;
-  const gateway = ctx?.typertGateway;
+  const gateway = channelGateway(ctx);
   if (!gateway || typeof gateway.invoke !== "function" || typeof gateway.stream !== "function") {
     throw new TypeError("dsh-im requires the modern Host Typert gateway");
   }
@@ -185440,7 +185468,9 @@ function createImHostPlugin(internals = {}) {
     if (typeof ctx?.inject === "function") ctx.inject(["sessions"], startTitlePrefix);
     else if (ctx?.sessions && typeof ctx.on === "function") startTitlePrefix(ctx);
     if (typeof ctx?.inject === "function") {
-      ctx.inject(["tools", "systemPrompt"], (artifactCtx) => installOutboundArtifactTool(artifactCtx));
+      ctx.inject(["tools", "systemPrompt"], (artifactCtx) => {
+        installOutboundArtifactTool(artifactCtx);
+      });
     } else installOutboundArtifactTool(ctx);
     const logger = typeof ctx?.logger === "function" ? ctx.logger(name) : ctx?.logger ?? console;
     if (ctx?.connection?.fetch) {

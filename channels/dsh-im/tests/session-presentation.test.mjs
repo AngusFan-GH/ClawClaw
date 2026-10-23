@@ -1,7 +1,10 @@
+import { createHash } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { channelForSession, channelFromSessionId, svgAttributeName } from '../client/session-presentation.js'
+import { CHANNEL_LOGOS, COMPACT_CHANNEL_ICON_CSS } from '../client/channel-icons.js'
+import { CLAWCLAW_CHANNELS } from '../client/overview-state.js'
 import { SESSION_CHANNEL_LABELS } from '../node_modules/@xmanrui/dsh-im/src/channels/shared/session-channel-labels.mjs'
 
 test('maps channel Session ids to their canonical source logos', () => {
@@ -37,7 +40,24 @@ test('replaces the legacy pseudo-title effect with the rc.2 leading slot', () =>
   assert.match(entry, /sidebar\.session\.row\.leading/u)
   assert.doesNotMatch(presentation, /text-overflow\s*:\s*ellipsis/u)
   assert.match(presentation, /replaceChildren/u)
-  assert.match(presentation, /data-dsh-im-session-leading="weixin"[^}]+color:#07c160/u)
-  assert.match(presentation, /data-dsh-session-source-icon="weixin"[^}]+color:#07c160/u)
-  assert.doesNotMatch(presentation, /data-dsh-session-source-icon="weixin"[^}]+(?:padding|background)/u)
+  assert.doesNotMatch(COMPACT_CHANNEL_ICON_CSS, /(?:filter|opacity|fill|color):/u)
+})
+
+test('uses byte-identical official image assets for every available channel', () => {
+  const sources = JSON.parse(readFileSync(new URL('../client/assets/channel-icons/sources.json', import.meta.url), 'utf8'))
+  assert.deepEqual(Object.keys(sources).sort(), CLAWCLAW_CHANNELS.map(item => item.id).sort())
+  for (const { id: channel } of CLAWCLAW_CHANNELS) {
+    const image = CHANNEL_LOGOS[channel]({ size: 16 })
+    assert.equal(image.type, 'img')
+    assert.equal(image.props['data-im-channel-logo'], channel)
+    assert.equal(image.props.width, 16)
+    assert.equal(image.props.height, 16)
+    assert.equal(image.props.alt, '')
+    const source = sources[channel]
+    const bytes = readFileSync(new URL(`../client/assets/channel-icons/${source.file}`, import.meta.url))
+    assert.equal(image.props.src, `data:${source.mime};base64,${bytes.toString('base64')}`)
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), source.sha256)
+    assert.equal(new URL(source.page).protocol, 'https:')
+    assert.equal(new URL(source.url).protocol, 'https:')
+  }
 })

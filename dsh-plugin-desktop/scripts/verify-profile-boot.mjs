@@ -24,6 +24,7 @@ import { DesktopPluginPackages } from '../lib/desktop-plugin-packages.js'
 import { desktopHarnessProfileContext, prepareDesktopProfile } from '../lib/profile.js'
 import { DesktopProfileService } from '../lib/profile-service.js'
 import { importLegacyDesktopSetupWizardSettings } from '../lib/setup-wizard-settings.js'
+import { verifyChannelHarness } from './verify-channel-harness.mjs'
 import { verifyUpgradeExpertRun, verifyDesktopSchedule } from './verify-upgrade-agent.mjs'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
@@ -400,6 +401,7 @@ try {
   const hostServiceProbe = ctx.get(HOST_SERVICE_PROBE_KEY)
   await verifyUpgradeExpertRun(ctx, home, firstExpert)
   await verifyDesktopSchedule(ctx)
+  await verifyChannelHarness(ctx)
   if (hostServiceProbe?.current?.name !== 'desktop'
     || hostServiceProbe.current.dir !== prepared.profile.dir
     || hostServiceProbe.pnpm?.serviceName !== 'desktopPnpm'

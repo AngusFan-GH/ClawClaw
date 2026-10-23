@@ -106,7 +106,7 @@ export function createImHostPlugin(internals = {}) {
     if (typeof ctx?.inject === 'function') ctx.inject(['sessions'], startTitlePrefix)
     else if (ctx?.sessions && typeof ctx.on === 'function') startTitlePrefix(ctx)
     if (typeof ctx?.inject === 'function') {
-      ctx.inject(['tools', 'systemPrompt'], artifactCtx => installOutboundArtifactTool(artifactCtx))
+      ctx.inject(['tools', 'systemPrompt'], artifactCtx => { installOutboundArtifactTool(artifactCtx) })
     } else installOutboundArtifactTool(ctx)
 
     const logger = typeof ctx?.logger === 'function' ? ctx.logger(name) : (ctx?.logger ?? console)

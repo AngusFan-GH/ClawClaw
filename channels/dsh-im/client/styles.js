@@ -21,21 +21,8 @@ const CSS = `
 .ccChannelCard:disabled { cursor: default; opacity: .68; }
 .ccChannelCard:disabled:hover { border-color: var(--dsw-alias-border-default, #e5e7eb); background: var(--dsw-alias-background-primary, #fff); }
 .ccChannelCard:focus-visible { outline: 2px solid var(--dsw-alias-interactive-primary, #326cf4); outline-offset: 2px; }
-.ccChannelLogo { box-sizing: border-box; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 7px; color: #fff; }
-.ccChannelLogo svg { width: 30px; height: 30px; }
-.ccChannelLogo[data-tone="feishu"] { background: #fff; border: 1px solid var(--dsw-alias-border-default, #e5e7eb); }
-.ccChannelLogo[data-tone="feishu"] svg { width: 38px; height: 38px; }
-.ccChannelLogo[data-tone="dingtalk"] { background: #1684fc; }
-.ccChannelLogo[data-tone="wecom"] { background: #fff; border: 1px solid var(--dsw-alias-border-default, #e5e7eb); }
-.ccChannelLogo[data-tone="wecom"] svg { width: 32px; height: 32px; }
-.ccChannelLogo[data-tone="weixin"] { background: #09c866; }
-.ccChannelLogo[data-tone="slack"] { background: #4a154b; }
-.ccChannelLogo[data-tone="telegram"] { background: #229ed9; }
-.ccChannelLogo[data-tone="discord"] { background: #5865f2; }
-.ccChannelLogo[data-tone="imessage"] { background: #35c759; }
-.ccChannelLogo[data-tone="office"] { background: #167d8d; }
-.ccChannelLogo[data-tone="qq"] { background: #1681e8; }
-.ccChannelLogo[data-tone="whatsapp"] { background: #25d366; }
+.ccChannelLogo { box-sizing: border-box; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 7px; background: #fff; border: 1px solid var(--dsw-alias-border-default, #e5e7eb); }
+.ccChannelLogo img, .ccChannelLogo svg { display: block; width: 32px; height: 32px; object-fit: contain; }
 .ccChannelCopy { min-width: 0; }
 .ccChannelCopy strong { display: block; margin-bottom: 3px; font-size: 15px; line-height: 1.3; }
 .ccChannelCopy p { margin: 0; overflow: hidden; color: var(--dsw-alias-content-secondary, #686d76); font-size: 13px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }

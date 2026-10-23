@@ -1,0 +1,82 @@
+{
+  "weixin": {
+    "page": "https://weixin.qq.com/",
+    "url": "https://res.wx.qq.com/a/wx_fed/assets/res/NTI4MWU5.ico",
+    "file": "weixin.png",
+    "sha256": "a62d7d84bd02b1718106d294d1f2c8387f9967239696c1e8b446201b63f34dc7",
+    "mime": "image/png",
+    "bytes": 827
+  },
+  "wecom": {
+    "page": "https://work.weixin.qq.com/",
+    "url": "https://wwcdn.weixin.qq.com/node/wwnl/wwnl/style/images/independent/favicon/favicon_48h$c976bd14.png",
+    "file": "wecom.png",
+    "sha256": "5b95029b419b45aef63f876b9bb8d86705fbff36da4c51dfdd9f2d63a1de7f2a",
+    "mime": "image/png",
+    "bytes": 1823
+  },
+  "feishu": {
+    "page": "https://www.feishu.cn/",
+    "url": "https://p1-hera.feishucdn.com/tos-cn-i-jbbdkfciu3/84a9f036fe2b44f99b899fff4beeb963~tplv-jbbdkfciu3-image:100:100.image",
+    "file": "feishu.png",
+    "mime": "image/png",
+    "bytes": 6232,
+    "sha256": "a8b56475a902623937409d0fdc68b4b91040aa6ce34cd71e7870acf0cc8a62d9"
+  },
+  "dingtalk": {
+    "page": "https://www.dingtalk.com/",
+    "url": "https://gw.alicdn.com/imgextra/i3/O1CN014ZbI6ZTEhdC0ttN2_!!6000000003783-2-tps-444-444.png",
+    "file": "dingtalk.png",
+    "sha256": "b3fb0715857df5d23213b5265166fabcb7f7b4b290890d7b5682a027cf39c85d",
+    "mime": "image/png",
+    "bytes": 11431
+  },
+  "slack": {
+    "page": "https://slack.com/media-kit",
+    "url": "https://a.slack-edge.com/80588/marketing/img/meta/slack_hash_256.png",
+    "file": "slack.png",
+    "mime": "image/png",
+    "bytes": 5253,
+    "sha256": "fff0ab554a4dc202afd1cbf2033a3ad340cf25b4991035d2d31407b5e7e4c366"
+  },
+  "telegram": {
+    "page": "https://telegram.org/tour/screenshots",
+    "url": "https://telegram.org/img/website_icon.svg?4",
+    "file": "telegram.svg",
+    "sha256": "0019255c610cb0843c524d7995905fa5201651fcc393846bee8414f0610097f5",
+    "mime": "image/svg+xml",
+    "bytes": 1896
+  },
+  "discord": {
+    "page": "https://discord.com/branding",
+    "url": "https://cdn.prod.website-files.com/6257adef93867e50d84d30e2/66e3d80db9971f10a9757c99_Symbol.svg",
+    "file": "discord.svg",
+    "sha256": "296286aa112c4400af8e96191ab888f81abd4bd1d5dc7294112a622ef43581b1",
+    "mime": "image/svg+xml",
+    "bytes": 1310
+  },
+  "whatsapp": {
+    "page": "https://www.whatsapp.com/",
+    "url": "https://static.whatsapp.net/rsrc.php/y1/r/FJbTMJqMap7.svg",
+    "file": "whatsapp.svg",
+    "sha256": "1ab6db0cc2eb55d911f151b0aa339c55b6b225efcceddb8ff2050cab1410e347",
+    "mime": "image/svg+xml",
+    "bytes": 1133
+  },
+  "imessage": {
+    "page": "https://support.apple.com/guide/messages/welcome/mac",
+    "url": "https://ipcdn-web.apple.com/assets/v2/web/126c8a75-d3c5-4333-9d4f-d1ce3c5b53c1",
+    "file": "imessage.png",
+    "mime": "image/png",
+    "bytes": 110735,
+    "sha256": "90bd460555807d38e2b8cd68bfb924b4b452908ae4f7f9a7d2ffec5c726dc0d0"
+  },
+  "qq": {
+    "page": "https://im.qq.com/index",
+    "url": "https://static-res.qq.com/static-res/imqq/qq-logo.png",
+    "file": "qq.png",
+    "mime": "image/png",
+    "bytes": 1167,
+    "sha256": "ee3ab39d757df98d57d676779b97fb8e20d70c97900976b4ffe239f3b6a54bfe"
+  }
+}

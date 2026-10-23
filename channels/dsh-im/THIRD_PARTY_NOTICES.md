@@ -39,3 +39,13 @@ components; corresponding source and license obligations must be preserved by
 downstream distributors. This is an unofficial WhatsApp Web integration, so
 users should use a dedicated bot number and expect protocol changes to require
 connector updates.
+
+## Official channel brand assets
+
+The Desktop client embeds unmodified icon files published by the official QQ,
+Weixin, WeCom, Feishu, DingTalk, Slack, Telegram, Discord, WhatsApp, and Apple
+Messages websites. These marks and artwork remain the property of their
+respective owners; the repository MIT license does not relicense them.
+Source pages, original CDN URLs, MIME types, and SHA-256 digests are retained in
+`client/assets/channel-icons/sources.json` in the source repository.
+The generated client bundle embeds the original bytes for offline display.

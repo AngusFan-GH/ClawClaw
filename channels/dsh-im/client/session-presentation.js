@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { COMPACT_CHANNEL_ICON_CSS } from './channel-icons.js'
 import { parseSessionChannelTitle } from '../node_modules/@xmanrui/dsh-im/src/channels/shared/session-channel-labels.mjs'
 
 const SOURCE_ATTR = 'data-dsh-im-session-channel'
@@ -39,7 +40,9 @@ export function svgAttributeName(name) {
 function domNode(document, reactNode) {
   if (typeof reactNode === 'string') return document.createTextNode(reactNode)
   if (!reactNode || typeof reactNode.type !== 'string') throw new Error('Unsupported channel logo element')
-  const element = document.createElementNS('http://www.w3.org/2000/svg', reactNode.type)
+  const element = reactNode.type === 'img'
+    ? document.createElement('img')
+    : document.createElementNS('http://www.w3.org/2000/svg', reactNode.type)
   for (const [name, value] of Object.entries(reactNode.props)) {
     if (name === 'children' || value == null || typeof value === 'boolean') continue
     const attribute = svgAttributeName(name)
@@ -78,6 +81,7 @@ export function installChannelSessionPresentation(logos, document = globalThis.d
     return () => release(document, entry)
   }
   const owned = new Set()
+  const renderedText = new Map()
   const queued = new Set()
   let closed = false
   let scheduled = false
@@ -86,15 +90,21 @@ export function installChannelSessionPresentation(logos, document = globalThis.d
   style.textContent = `
 [${SOURCE_ATTR}]:not([data-dsh-session-source-surface="row"]){display:inline-flex;align-items:center;gap:6px;min-width:0}
 [${SOURCE_ATTR}]>[data-dsh-session-source-icon]{flex:0 0 16px}
-[data-dsh-im-session-leading]{display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;color:var(--dsw-alias-label-tertiary)}
-[data-dsh-im-session-leading="weixin"],[data-dsh-session-source-icon="weixin"]{color:#07c160}
+[data-dsh-im-session-leading]{display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px}
+${COMPACT_CHANNEL_ICON_CSS}
+[data-dsh-session-source-surface="row"]>[data-dsh-session-source-icon]{display:inline-block;vertical-align:-3px;margin-right:6px}
+[role="treeitem"]:has([data-dsh-im-session-leading]) [data-dsh-session-source-surface="row"]>[data-dsh-session-source-icon]{display:none}
 `
   document.head.append(style)
 
-  const restore = element => {
+  const restore = (element, restoreText = true) => {
     if (!owned.delete(element)) return
     const raw = element.getAttribute(RAW_TITLE_ATTR)
-    if (raw !== null) element.textContent = raw
+    if (restoreText && raw !== null && element.textContent === renderedText.get(element) && element.textContent !== raw) element.textContent = raw
+    for (const child of [...element.children]) {
+      if (child.hasAttribute('data-dsh-session-source-icon')) child.remove()
+    }
+    renderedText.delete(element)
     element.removeAttribute(SOURCE_ATTR)
     element.removeAttribute(RAW_TITLE_ATTR)
     element.removeAttribute('data-dsh-session-source-surface')
@@ -103,19 +113,32 @@ export function installChannelSessionPresentation(logos, document = globalThis.d
     if (!(element instanceof HTMLElement) || !element.isConnected) return
     const surface = surfaceOf(element)
     if (!surface) { restore(element); return }
+    if (owned.has(element) && element.getAttribute('data-dsh-session-source-surface') !== surface) restore(element)
     const text = element.textContent ?? ''
     const parsed = parseSessionChannelTitle(text)
     if (!parsed) {
-      if (!element.hasAttribute(SOURCE_ATTR)) return
+      if (owned.has(element) && text !== renderedText.get(element)) restore(element, false)
       return
     }
     const Logo = logos[parsed.channel]
-    if (!Logo) return
+    if (!Logo) { restore(element, false); return }
     owned.add(element)
     element.setAttribute(SOURCE_ATTR, parsed.channel)
     element.setAttribute(RAW_TITLE_ATTR, text)
     element.setAttribute('data-dsh-session-source-surface', surface)
-    element.replaceChildren(...surface === 'row' ? [] : [logoNode(document, Logo, parsed.channel)], document.createTextNode(parsed.title))
+    // Idle rows use the native leading seat. A second image in the title is
+    // visible only when activity/attention occupies that seat, so removing the
+    // textual channel prefix never removes the channel identity.
+    renderedText.set(element, parsed.title)
+    if (surface === 'row') {
+      const textNode = [...element.childNodes].find(node => node.nodeType === Node.TEXT_NODE)
+      if (textNode && element.childNodes.length === 1) {
+        textNode.nodeValue = parsed.title
+        element.insertBefore(logoNode(document, Logo, parsed.channel), textNode)
+        return
+      }
+    }
+    element.replaceChildren(logoNode(document, Logo, parsed.channel), document.createTextNode(parsed.title))
   }
   const schedule = () => {
     if (closed || scheduled || queued.size === 0) return

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
 
-import { CLAWCLAW_HOST_CHANNELS, resolveChannelWorkspace } from '../src/index.mjs'
+import { CLAWCLAW_HOST_CHANNELS, resolveChannelWorkspace, createImHostPlugin } from '../src/index.mjs'
 
 test('activates every channel exposed by the ClawClaw overview', () => {
   assert.deepEqual(CLAWCLAW_HOST_CHANNELS, [
@@ -25,4 +25,32 @@ test('passes one stable product default Workspace to every channel', async () =>
     if (previous === undefined) delete process.env.CLAWCLAW_DEFAULT_WORKSPACE
     else process.env.CLAWCLAW_DEFAULT_WORKSPACE = previous
   }
+})
+
+
+test('channel tool installation never returns a boolean as a Cordis effect', async () => {
+  let registered = 0, activated = 0
+  const ctx = {
+    typertGateway: { stream() {} },
+    sessions: { get() {}, list: () => [] },
+    tools: { register() { registered++; return () => {} } },
+    systemPrompt: { section() { return () => {} } },
+    effect() {}, on: () => () => {},
+    inject(_services, install) {
+      const result = install(ctx)
+      const validate = value => {
+        if (value !== undefined && typeof value !== 'function') throw new TypeError('Invalid effect')
+      }
+      return result?.then ? result.then(validate) : validate(result)
+    },
+  }
+  const plugin = createImHostPlugin({
+    channels: [['fixture', async () => { activated++ }]],
+    installHostLanguage: () => ({ ready: Promise.resolve() }),
+    installSessionSyncCoordinator() {},
+    installDeliveryHttp() {},
+  })
+  await plugin.apply(ctx)
+  assert.equal(registered, 1)
+  assert.equal(activated, 1)
 })
