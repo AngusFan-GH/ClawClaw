@@ -45,7 +45,7 @@ export async function stageInstaller({ file, output, platform, context, buildAtt
 }
 
 export async function assembleRelease({ input, output, context,
-  origin = 'https://clawclaw.xzinfra.com' }) {
+  origin = 'https://clawclaw.xzinfra.com:8443' }) {
   validateContext(context)
   const url = new URL(origin)
   if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/'

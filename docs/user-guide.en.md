@@ -95,7 +95,9 @@ Shortcuts manage Plugins, Automations, and the Settings sections that currently 
 
 ## Updates
 
-Packaged applications consume only `https://clawclaw.xzinfra.com/updates/dsh/stable/release.json`; they do not use `latest.yml` or `latest-mac.yml`. Background failures or unchanged versions are silent; manual checks show a result.
+Packaged applications consume only `https://clawclaw.xzinfra.com:8443/updates/dsh/stable/release.json`; they do not use `latest.yml` or `latest-mac.yml`. Background failures or unchanged versions are silent; manual checks show a result.
+
+When migrating from 0.2.8–0.2.10, manually install the new client using port 8443 once; subsequent update checks use the new endpoint.
 
 Update qualification evidence in Desktop settings is off by default. When explicitly enabled, it keeps bounded local records of versions, update stages, classified outcomes, durations, and artifact summaries. Full URLs, raw errors, device identity, and user content are excluded. Evidence can be cleared at any time and is included only in a user-requested diagnostic ZIP.
 

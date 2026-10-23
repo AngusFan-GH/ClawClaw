@@ -31,8 +31,8 @@ const testConfig: UpdateConfig = {
 const RELEASE_SHA512 = Buffer.alloc(64, 3).toString('base64')
 function versionResponse(version: unknown, channel: 'stable' = 'stable'): Response {
   return Response.json({ version, channel, artifacts: {
-    darwin: { url: 'https://clawclaw.xzinfra.com/releases/ClawClaw.dmg', sha512: RELEASE_SHA512, size: 1 },
-    win32: { url: 'https://clawclaw.xzinfra.com/releases/ClawClaw.exe', sha512: RELEASE_SHA512, size: 1 },
+    darwin: { url: 'https://clawclaw.xzinfra.com:8443/releases/ClawClaw.dmg', sha512: RELEASE_SHA512, size: 1 },
+    win32: { url: 'https://clawclaw.xzinfra.com:8443/releases/ClawClaw.exe', sha512: RELEASE_SHA512, size: 1 },
   } })
 }
 

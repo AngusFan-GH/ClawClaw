@@ -30,9 +30,15 @@ GitHub 托管的 macOS、Windows Runner 原生构建两个安装包。正式版�
 
 GitHub Release 发布不会修改正式更新服务器。服务器主动拉取指定正式 Release、验证来源和安装包后再发布的流程另行接入；当前不需要为 GitHub Runner 开放服务器 SSH，也不配置定时同步。
 
-客户端更新入口保持 `https://clawclaw.xzinfra.com/updates/dsh/stable/release.json`，兼容范围为 0.2.6 及以上的 0.2.x。新清单中的安装包使用不可覆盖的 `/releases/dsh/<version>/` 路径，继续保留旧清单引用的历史安装包路径。清单保持原有 `version`、`channel` 和两平台的 HTTPS URL、size、SHA-512 格式。
+新版客户端更新入口为 `https://clawclaw.xzinfra.com:8443/updates/dsh/stable/release.json`，清单中的安装包地址也使用同一域名的 HTTPS 8443 和不可覆盖的 `/releases/dsh/<version>/` 路径。清单保留原有 `version`、`channel`、两平台 HTTPS URL、size、SHA-512 格式，以及 16 KiB 清单和 1 GiB 安装包限制。
 
-`deploy/clawclaw-internal.nginx.conf` 保留下载服务和历史路径配置。通用 `scripts/upload-update.mjs` 校验文件并在完整版本目录落盘后原子切换清单；GitHub 工作流只调用其 `--dry-run`，不会 SSH 部署。服务器首次切换前仍须验证 GitHub 下载连通性、HTTPS 证书、DNS、公网 443，以及原 0.2.6–0.2.10 检查器和完整安装包下载。旧服务器继续服务，直至切换验证完成。
+迁移范围只考虑 0.2.8 及以上版本。已安装的 0.2.8–0.2.10 固定请求旧的 HTTPS 443 地址，不能通过 DNS 或 HTTP 跳转自动改用 8443；本方案要求用户先手动安装改用 8443 的新版，之后从新入口自动更新。首次迁移仍使用尚未正式发布的 0.2.11；旧地址的 0.2.11 试打包产物不能用于此次入口切换，必须从修改后的提交重新构建。更早版本不在迁移验证范围内。
+
+服务器为 `192.168.103.220`，下载根目录仍是 `/data/clawclaw/public`，版本目录为 `/data/clawclaw/public/releases/dsh/<version>/`，稳定清单为 `/data/clawclaw/public/updates/dsh/stable/release.json`。`deploy/clawclaw-internal.nginx.conf` 增加 HTTPS 8443，同时保留内网 443；HTTP 80 跳转至显式 8443，不更改 File Browser 的 9527。公网需由网管配置 `218.69.255.22:8443 -> 192.168.103.220:8443`，并将原域名的公网 DNS 指向 `218.69.255.22`；内网可配置分区 DNS 到服务器内网地址。
+
+通用 `scripts/upload-update.mjs` 校验文件并在完整版本目录落盘后原子切换清单；GitHub 工作流只调用其 `--dry-run`，不会 SSH 部署。本地 `.env.server.local` 的 `UPDATE_REMOTE_ROOT` 须为 `/data/clawclaw/public`；`UPDATE_PORT=22` 指 SSH，和下载端口 8443 无关。
+
+正式切换前须验证：可信 HTTPS 证书、内网和真实公网的 8443 连通性、DNS、新清单、两个安装包的完整下载及 SHA-512，以及从 0.2.8–0.2.10 手动安装新版后使用新入口检查更新。内网使用 `curl --resolve clawclaw.xzinfra.com:8443:192.168.103.220 https://clawclaw.xzinfra.com:8443/healthz` 可保留域名和证书校验；此测试不能代替真实公网验证。旧服务器和原稳定清单保留至迁移验证完成，不自动改写历史清单中的地址。
 
 ## 双远端
 

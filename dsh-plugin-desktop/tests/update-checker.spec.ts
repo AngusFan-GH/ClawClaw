@@ -10,15 +10,15 @@ import {
 const sha512 = Buffer.alloc(64, 7).toString('base64')
 function manifest(version: string, channel: 'stable' = 'stable'): Response {
   return Response.json({ version, channel, artifacts: {
-    darwin: { url: `https://clawclaw.xzinfra.com/releases/${channel}/ClawClaw-${version}.dmg`, sha512, size: 1024 },
-    win32: { url: `https://clawclaw.xzinfra.com/releases/${channel}/ClawClaw-${version}.exe`, sha512, size: 1024 },
+    darwin: { url: `https://clawclaw.xzinfra.com:8443/releases/${channel}/ClawClaw-${version}.dmg`, sha512, size: 1024 },
+    win32: { url: `https://clawclaw.xzinfra.com:8443/releases/${channel}/ClawClaw-${version}.exe`, sha512, size: 1024 },
   } })
 }
 
 describe('ClawClaw release manifest', () => {
   it('uses the stable static manifest URL', () => {
-    expect(CLAWCLAW_UPDATE_BASE_URL).toBe('https://clawclaw.xzinfra.com/updates/dsh')
-    expect(desktopReleaseManifestUrl('stable')).toBe('https://clawclaw.xzinfra.com/updates/dsh/stable/release.json')
+    expect(CLAWCLAW_UPDATE_BASE_URL).toBe('https://clawclaw.xzinfra.com:8443/updates/dsh')
+    expect(desktopReleaseManifestUrl('stable')).toBe('https://clawclaw.xzinfra.com:8443/updates/dsh/stable/release.json')
   })
 
   it('checks a newer stable release without sending installation identifiers', async () => {

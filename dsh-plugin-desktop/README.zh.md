@@ -93,31 +93,20 @@ corepack pnpm --filter dsh-plugin-desktop run dist:win
 
 ### 4. 一次性配置发布环境
 
-在更新服务器创建专用的非 root SSH 账号。该账号需要上传到 `/tmp`、写 stable 目录、创建版本归档，并能在以下自有目录中创建 staging 目录：
+GitHub 正式存档使用 `github-release` Environment 和工作流自身的 `GITHUB_TOKEN`，不需要服务器 SSH 私钥。当前工作流不自动部署公司服务器；完整流程见[打包与发布](../docs/github-packaging.md)。
+
+服务器发布使用专用非 root SSH 账号，将以下配置保存在被 Git 忽略的 `.env.server.local`：
 
 ```text
-/var/www/xzinfra/updates/dsh/stable
-/var/www/xzinfra/releases/dsh
-```
-
-创建 GitHub Environment `stable-update`，添加 Environment Secrets：
-
-```text
-UPDATE_SSH_PRIVATE_KEY  无密码的发布专用 OpenSSH 私钥
-UPDATE_KNOWN_HOSTS      经过独立核验的 SSH known_hosts 记录
-```
-
-添加 Environment Variables：
-
-```text
-UPDATE_HOST             SSH 域名或 IP，不包含协议、用户名
+UPDATE_HOST             公司更新服务器的 SSH 域名或 IP
 UPDATE_USER             专用非 root 发布账号
-UPDATE_PORT             可选，默认 22
-UPDATE_REMOTE_ROOT      可选，默认 /var/www/xzinfra
-UPDATE_BASE_URL         可选，默认 https://clawclaw.xzinfra.com/updates/dsh/stable
+UPDATE_PORT             SSH 端口，默认 22，不是下载端口 8443
+UPDATE_REMOTE_ROOT      /data/clawclaw/public
+UPDATE_SSH_KEY_FILE     发布专用私钥的本地路径
+UPDATE_SSH_KNOWN_HOSTS_FILE  经核验的 known_hosts 文件路径
 ```
 
-必须保留 `StrictHostKeyChecking`。不要把 root 密码、个人 SSH 私钥或未经核验的 `ssh-keyscan` 结果放入 GitHub。
+下载服务使用 HTTPS 8443，版本目录和清单分别位于 `/data/clawclaw/public/releases/dsh/<版本>/` 和 `/data/clawclaw/public/updates/dsh/stable/release.json`。必须保留 SSH 服务器指纹校验；密钥、密码和证书私钥不进入 Git。
 
 ### 5. 执行不发布的预构建
 
@@ -131,28 +120,28 @@ gh run watch "$run_id" --repo AngusFan-GH/ClawClaw --exit-status
 gh run download "$run_id" --repo AngusFan-GH/ClawClaw --name desktop-release --dir release
 ```
 
-必须确认同一 commit 上的 `Build macos`、`Build windows` 和 `Assemble release` 全部成功。下载该次运行的 `desktop-release`，确认其中只有一个 DMG、一个 EXE 和 `release.json`；manifest 的版本、大小和 SHA-512 必须与两个安装包一致。
+必须确认同一 commit 上的 `Build macos`、`Build windows` 和 `Assemble release` 全部成功。下载该次运行的 `desktop-release`，确认其中包含一个 DMG、一个 EXE、`release.json` 和 `build-info.json`；manifest 的版本、大小和 SHA-512 必须与两个安装包一致。
 
 ### 6. 正式发布版本
 
 同时更新 `dsh-plugin-desktop/package.json` 与根 README 中的版本，运行完整门禁、提交，并再次执行不发布的预构建。随后给这个已经验证的准确 commit 创建 tag：
 
 ```sh
-version=0.2.10
+version=0.2.11
 git tag -a "clawclaw-v$version" -m "Release ClawClaw $version"
 git push origin "clawclaw-v$version"
 ```
 
-tag 必须与 Desktop package 版本完全一致。匹配的 tag 会从同一 commit 重新构建 macOS 和 Windows，汇总 `desktop-release`，上传安装包，保存 `/releases/dsh/<版本>/` 归档，并在最后原子替换 `release.json`。不要复用或移动已经发布的版本 tag。
+tag 必须与 Desktop package 版本完全一致。匹配的 tag 会从同一 commit 重新构建 macOS 和 Windows，汇总 `desktop-release` 并发布到 GitHub Releases；不会自动切换服务器清单。不要复用或移动已经发布的版本 tag。
 
 ### 7. 验证发布结果
 
-对外宣布前检查 workflow 和公网 manifest：
+GitHub 构建成功且安装包另行部署服务器后，对外宣布前检查 workflow 和公网 manifest：
 
 ```sh
 gh run list --repo AngusFan-GH/ClawClaw --workflow release.yml --limit 3
 curl --fail --show-error --silent \
-  https://clawclaw.xzinfra.com/updates/dsh/stable/release.json
+  https://clawclaw.xzinfra.com:8443/updates/dsh/stable/release.json
 ```
 
 确认 manifest 是目标版本和 `stable` channel，两个安装包 URL 都返回 HTTP 200，`Content-Length` 一致，并且服务器文件符合 manifest 中的 SHA-512。`release.json` 是唯一更新指针，不要添加 `latest.yml` 兼容文件。
@@ -165,18 +154,20 @@ curl --fail --show-error --silent \
 corepack pnpm run upload:update -- --directory /path/to/desktop-release --channel stable
 ```
 
-上传器会校验三个文件，拒绝覆盖已有的版本归档，先上传安装包、最后切换 manifest，并在失败时清理 staging。发现 `/releases/dsh/<版本>/` 已存在时应先调查，不要删除归档或强制二次发布。
+上传器会校验安装包、清单和可选来源信息，拒绝覆盖已有的版本归档，先上传安装包、最后切换 manifest，并在失败时清理 staging。发现 `/releases/dsh/<版本>/` 已存在时应先调查，不要删除归档或强制二次发布。
 
 ## 更新与发布
 
-DSH Desktop 使用 `https://clawclaw.xzinfra.com/updates/dsh/stable/`，并只消费这一目录中的 `release.json`。清单同时声明 Windows NSIS 与 macOS Universal DMG 的 HTTPS 地址、大小和 SHA-512；DSH Desktop 不使用 `latest.yml`、`latest-mac.yml` 或旧 OpenClaw 的 `/updates/stable/` 更新源。
+DSH Desktop 使用 `https://clawclaw.xzinfra.com:8443/updates/dsh/stable/`，并只消费这一目录中的 `release.json`。清单同时声明 Windows NSIS 与 macOS Universal DMG 的 HTTPS 地址、大小和 SHA-512；DSH Desktop 不使用 `latest.yml`、`latest-mac.yml` 或旧 OpenClaw 的 `/updates/stable/` 更新源。
+
+此入口迁移要求 0.2.8–0.2.10 用户先手动安装使用 8443 的新版，之后自动更新。此前 0.2.11 的试打包仍使用旧 443 地址，不用于本次迁移；需重新构建。更早版本不在兼容验证范围内。
 
 打包后的应用在启动 60 秒后检查更新，此后每六小时检查一次。后台对每个可用版本通知一次，不自动下载。设置和托盘共用同一套手动检查及下载流程。确认后，应用会再次读取 `release.json`，把安装包下载到私有更新目录，校验声明大小、SHA-512 和 DMG/PE 容器并显示进度。Windows 只有在用户再次确认且 Host 正常关闭后才启动 NSIS；macOS 会打开 DMG，由用户退出当前应用并拖入“应用程序”完成替换。
 
 发布清单在跨 Host 进程传输前限制为 16 KiB。Windows 发布包含未签名 NSIS，macOS 发布包含未签名 Universal DMG；二者都由同一份 `release.json` 描述。上传命令会重新计算实际安装包的 SHA-512 并核对大小，保留版本化副本，先上传安装包，最后原子切换 `release.json`。尚未实现断点续传。
 
-GitHub Actions 的 `Release ClawClaw Desktop` 工作流会在托管的 macOS 与 Windows Runner 上从同一 commit 构建两个安装包。`clawclaw-v<version>` tag 必须与 `dsh-plugin-desktop/package.json` 完全一致；匹配的 tag 会自动发布。手动运行默认只构建和汇总，只有勾选 `publish` 输入才会正式发布。发布配置统一放在上文说明的 `stable-update` GitHub Environment 中。
+GitHub Actions 的 `Release ClawClaw Desktop` 工作流会在托管的 macOS 与 Windows Runner 上从同一 commit 构建两个安装包。`clawclaw-v<version>` tag 必须与 `dsh-plugin-desktop/package.json` 完全一致；匹配的 tag 会自动发布。手动运行默认只构建和汇总，只有勾选 `publish` 输入才会正式发布。正式存档使用 `github-release` GitHub Environment。日常 CI 只做检查，不生成安装包；服务器发布单独执行。
 
-更新服务器应使用对配置目录有写权限的专用非 root SSH 用户。完成这一次服务器初始化后，日常发布由 GitHub 完成，不需要交互登录服务器。手动发布已准备好的 `release/` 目录时，通过 SSH agent 提供密钥，加载已忽略的 `.env.server.local`，再运行 `pnpm run upload:update -- --directory release --channel stable`；脚本有意不支持基于 `sshpass` 的密码发布。传输前会校验版本、HTTPS URL、文件大小和 SHA-512，并拒绝覆盖已有的 `/releases/dsh/<version>/`，先上传安装包，最后切换清单。
+更新服务器应使用对配置目录有写权限的专用非 root SSH 用户。GitHub 负责构建和版本存档；服务器入库及清单切换仍是独立步骤。手动发布已准备好的 `release/` 目录时，通过 SSH agent 提供密钥，加载已忽略的 `.env.server.local`，再运行 `pnpm run upload:update -- --directory release --channel stable`；脚本有意不支持基于 `sshpass` 的密码发布。传输前会校验版本、HTTPS URL、文件大小和 SHA-512，并拒绝覆盖已有的 `/releases/dsh/<version>/`，先上传安装包，最后切换清单。
 
 生产 dependency 改动后运行 `verify:notices`。产品背景见根 [README](../README.md)、[架构](../docs/architecture.md)和[用户指南](../docs/user-guide.md)。
