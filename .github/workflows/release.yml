@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish installers to GitHub Releases (select an existing version tag)
+        description: Archive a formal GitHub release (select a version tag; deploy locally afterward)
         required: true
         type: boolean
         default: false
@@ -180,7 +180,7 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./dsh-plugin-desktop/package.json').version")"
           test "$RELEASE_TAG" = "clawclaw-v$version"
-          printf 'Commit: %s\nWorkflow: %s/%s/actions/runs/%s\n\nUnsigned macOS Universal DMG and Windows x64 installer. Server publication is a separate step.\n' \
+          printf 'Commit: %s\nWorkflow: %s/%s/actions/runs/%s\n\nUnsigned macOS Universal DMG and Windows x64 installer. Deploy this verified release from the local workstation to the company server.\n' \
             "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > "$RUNNER_TEMP/release-notes.txt"
           # Draft first: incomplete uploads never become a published release.
           # Existing releases (including drafts) fail creation; never use --clobber.

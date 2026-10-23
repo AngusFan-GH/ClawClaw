@@ -9,7 +9,7 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const DEFAULT_PORT = '22'
-const DEFAULT_ROOT = '/var/www/xzinfra'
+const DEFAULT_ROOT = '/data/clawclaw/public'
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/u
 const VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u
 
@@ -145,6 +145,17 @@ export function uploadUpdate(options) {
   const release = collectRelease(options.directory, options.channel)
   console.log(`[upload-update] version ${release.version}; ${release.files.length} files prepared`)
   for (const file of release.files) console.log(`  - ${file}`)
+  if (options.formal) {
+    const manifest = JSON.parse(readFileSync(join(resolve(options.directory), 'release.json'), 'utf8'))
+    const info = JSON.parse(readFileSync(requiredFile(join(resolve(options.directory), 'build-info.json')), 'utf8'))
+    if (info.repository !== 'AngusFan-GH/ClawClaw' || info.commit !== process.env.GITHUB_SHA) {
+      throw new Error('Formal release provenance must match this workflow repository and commit')
+    }
+    for (const [platform, suffix] of [['darwin', 'universal.dmg'], ['win32', 'x64-Setup.exe']]) {
+      const expected = `https://clawclaw.xzinfra.com:9528/releases/dsh/${release.version}/ClawClaw-${release.version}-${suffix}`
+      if (manifest.artifacts[platform].url !== expected) throw new Error('Formal release URL must use the canonical version directory')
+    }
+  }
   if (options.dryRun) return release
 
   if (options.host === '') throw new Error('UPDATE_HOST is required for publishing')
@@ -182,6 +193,7 @@ function main() {
   uploadUpdate({
     channel,
     directory,
+    formal: process.argv.includes('--formal'),
     dryRun: process.argv.includes('--dry-run') || process.env.UPDATE_DRY_RUN === '1',
     host: process.env.UPDATE_HOST ?? '',
     user: process.env.UPDATE_USER ?? '',

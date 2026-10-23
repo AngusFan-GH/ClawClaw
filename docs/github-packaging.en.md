@@ -28,17 +28,35 @@ The publication job runs in the `github-release` environment and is the only job
 
 ## Company server and older clients
 
-Publishing a GitHub Release does not modify the live update server. Server-side retrieval of a specific official Release, source and installer validation, and publication will be connected separately. No inbound server SSH access for GitHub runners or scheduled synchronization is configured.
+The release chain is: GitHub builds both platforms and archives formal Releases → an operator runs the local deployment command from the company network → installers are uploaded over LAN SSH → the canonical version directory is written → the stable feed switches atomically → public downloads are verified. Trial builds never deploy automatically; explicitly selecting a successful trial run for local deployment is supported.
+
+No server polling, public SSH mapping, office Runner, or GitHub-held server credentials are required. The workstation must reach GitHub and the company server during deployment. Existing version directories cannot be overwritten; increase the version for future releases.
+
+Installers always use `/releases/dsh/<version>/ClawClaw-<version>-universal.dmg` and `ClawClaw-<version>-x64-Setup.exe`, without temporary trial paths. The feed remains `/updates/dsh/stable/release.json`. Replacing 0.2.11 was a one-time migration exception and it is already live; the next formal release must be at least 0.2.12. Do not reuse 0.2.11.
 
 New clients use `https://clawclaw.xzinfra.com:9528/updates/dsh/stable/release.json`. Installer URLs use the same HTTPS origin on port 9528 and immutable `/releases/dsh/<version>/` paths. The feed retains the existing version, channel, per-platform HTTPS URL, size, and SHA-512 format, with 16 KiB manifest and 1 GiB installer limits.
 
-Migration covers versions starting at 0.2.8. Installed 0.2.8–0.2.10 clients request the old HTTPS port 443; neither DNS nor HTTP redirects can move them automatically to 9528. This plan requires a manual installation of the new client once, followed by automatic update checks through the new endpoint. The first migration release remains the unpublished 0.2.11. Earlier 0.2.11 trial installers contain the old address and must be replaced by a fresh build of the changed commit. Older versions are outside the migration validation scope.
+Migration covers versions starting at 0.2.8. Installed 0.2.8–0.2.10 clients request the old HTTPS port 443; neither DNS nor HTTP redirects can move them automatically to 9528. This plan requires a manual installation of the new client once, followed by automatic update checks through the new endpoint. 0.2.11 is now live on the 9528 endpoint. Earlier same-version trial builds using 443 require a manual installation of the latest package; same-version comparison cannot update them automatically. Older versions are outside the migration validation scope.
 
 The server remains `192.168.103.220`, with public root `/data/clawclaw/public`, version directories `/data/clawclaw/public/releases/dsh/<version>/`, and stable feed `/data/clawclaw/public/updates/dsh/stable/release.json`. `deploy/clawclaw-internal.nginx.conf` adds HTTPS 9528 while retaining LAN 443; HTTP 80 redirects to explicit port 9528. File Browser on 9527 is unchanged. The network administrator must configure `218.69.255.22:9528 -> 192.168.103.220:9528` and point the original public hostname to `218.69.255.22`; split DNS can resolve the hostname directly to the LAN address internally.
 
-The general `scripts/upload-update.mjs` validates files and atomically switches the feed after storing the complete version directory. GitHub invokes only its `--dry-run` mode and never deploys over SSH. Local `.env.server.local` must set `UPDATE_REMOTE_ROOT=/data/clawclaw/public`; `UPDATE_PORT=22` is the SSH port, unrelated to download port 9528.
+`scripts/upload-update.mjs` handles local SSH publication and defaults to `/data/clawclaw/public`. `UPDATE_PORT=22` is the LAN SSH port, unrelated to HTTPS download port 9528.
 
 Before publication, verify trusted HTTPS certificates, LAN and real public 9528 connectivity, DNS, the new manifest, complete downloads and SHA-512 for both installers, and update checks after manually upgrading 0.2.8–0.2.10 installations. A LAN check with `curl --resolve clawclaw.xzinfra.com:9528:192.168.103.220 https://clawclaw.xzinfra.com:9528/healthz` retains hostname and certificate verification but does not prove public reachability. Retain the old server and stable feed until migration validation completes; do not automatically rewrite URLs in historical feeds.
+
+## Deploy from the local workstation
+
+Configure ignored `.env.server.local` with `UPDATE_HOST=192.168.103.220`, `UPDATE_USER=clawclaw-release`, `UPDATE_PORT=22`, `UPDATE_REMOTE_ROOT=/data/clawclaw/public`, and the existing `UPDATE_SSH_KEY_FILE` / `UPDATE_SSH_KNOWN_HOSTS_FILE` paths. An SSH agent may provide the private key instead. Retain strict host-key verification. Authenticate `gh` locally with repository Actions read access.
+
+```sh
+corepack pnpm deploy:run <GitHub-run-id>
+# Download and validate without changing the server:
+corepack pnpm deploy:run <GitHub-run-id> --dry-run
+```
+
+The command downloads only that run's `desktop-release` artifact, verifies the successful workflow and matching repository/commit/run provenance, checks canonical installer URLs, sizes and SHA-512, uploads installers, then atomically switches the stable feed. Finally it verifies the public feed, full installer checksums and HTTP Range support. Temporary local downloads are removed on exit. Run while artifacts remain available (14 days); failure does not trigger an automatic retry. If upload succeeds but public verification fails, inspect the live feed before retrying because existing versions cannot be overwritten.
+
+Formal tags still archive GitHub Releases automatically; deployment is a separate explicit local command. Increase the product version before each new formal release (next: 0.2.12 or later). Do not recreate or move published tags. No GitHub Actions deployment secrets are needed.
 
 ## Two remotes
 

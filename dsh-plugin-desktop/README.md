@@ -99,7 +99,7 @@ Both commands run their platform package gate, prepare native modules for Electr
 
 ### 4. Configure publishing once
 
-GitHub archives use the `github-release` environment and the workflow's own `GITHUB_TOKEN`; no server SSH key is required. The current workflow does not automatically deploy the company server. See [Packaging and releases](../docs/github-packaging.en.md).
+GitHub archives use the `github-release` environment and `GITHUB_TOKEN`. Deploy explicitly from a workstation on the company network using `corepack pnpm deploy:run <GitHub-run-id>`. See [Packaging and releases](../docs/github-packaging.en.md).
 
 Use a dedicated non-root SSH account for server publication. Store the following settings in the Git-ignored `.env.server.local`:
 
@@ -138,11 +138,11 @@ git tag -a "clawclaw-v$version" -m "Release ClawClaw $version"
 git push origin "clawclaw-v$version"
 ```
 
-The tag must exactly match the desktop package version. A matching tag rebuilds macOS and Windows from the same commit, assembles `desktop-release`, and publishes to GitHub Releases; it does not switch the server feed. Never reuse or move a published version tag.
+The tag must exactly match the desktop package version. A matching tag rebuilds macOS and Windows from the same commit, assembles `desktop-release`, and publishes to GitHub Releases; a separate local deployment command uploads both installers and atomically switches the feed before public verification. Never reuse or move a published version tag.
 
 ### 7. Verify the publication
 
-After successful GitHub builds and separate server deployment, check the workflow and public manifest before announcing the release:
+After the local deployment command completes upload and public verification, check the workflow and public manifest before announcing the release:
 
 ```sh
 gh run list --repo AngusFan-GH/ClawClaw --workflow release.yml --limit 3
@@ -166,7 +166,7 @@ The uploader validates the installers, manifest, and optional provenance, refuse
 
 DSH Desktop uses `https://clawclaw.xzinfra.com:9528/updates/dsh/stable/` and consumes only `release.json` from that directory. The manifest declares HTTPS URLs, sizes, and SHA-512 digests for the Windows NSIS installer and macOS Universal DMG. DSH Desktop does not consume `latest.yml`, `latest-mac.yml`, or the earlier OpenClaw `/updates/stable/` feed.
 
-This endpoint migration requires 0.2.8–0.2.10 users to manually install the new client using 9528 once, then receive automatic updates. Earlier 0.2.11 trial installers still use port 443 and must be rebuilt for this migration. Older versions are outside compatibility validation.
+This endpoint migration requires 0.2.8–0.2.10 users to manually install the new client using 9528 once, then receive automatic updates. 0.2.11 is live; earlier same-version trials using 443 require a manual installation of the latest package. Subsequent formal versions must be at least 0.2.12; never replace a published version. Older versions are outside compatibility validation.
 
 Packaged applications check after 60 seconds and then every six hours. Background checks notify once per available version; they never download automatically. Settings and tray actions share one interactive check and download flow. After confirmation, the application re-reads `release.json`, downloads into its private update directory, and verifies declared size, SHA-512, and the DMG/PE container while showing progress. Windows starts NSIS only after a second confirmation and successful Host shutdown. macOS opens the DMG so the user can quit the running application and replace it in Applications.
 
@@ -174,6 +174,6 @@ Manifest reads are limited to 16 KiB before crossing the Host bridge. Windows pu
 
 The GitHub Actions `Release ClawClaw Desktop` workflow builds both installers from the same commit on hosted macOS and Windows runners. A `clawclaw-v<version>` tag must exactly match `dsh-plugin-desktop/package.json`; a matching tag publishes automatically. Manual dispatch builds and assembles by default, and publishes only when its `publish` input is selected. Official archives use the `github-release` GitHub environment. Daily CI performs checks without producing installers; server publication remains separate.
 
-The update-origin account should be a dedicated non-root SSH user with write access to the configured remote root. GitHub builds and archives versions; server ingestion and feed switching remain separate steps. To publish a prepared `release/` directory manually, use an SSH agent and load the ignored `.env.server.local` file before running `pnpm run upload:update -- --directory release --channel stable`. Password-based `sshpass` publishing is intentionally unsupported. Before transfer, the command checks the version, HTTPS URLs, file sizes, and SHA-512 digests against both installers. It refuses to overwrite an existing `/releases/dsh/<version>/`, uploads installers first, and switches the manifest last.
+The dedicated non-root release account needs write access to `/data/clawclaw/public`. Local deployment downloads one successful packaging run, validates provenance and canonical URLs, uploads over LAN SSH, switches the feed last, and verifies public checksums. No timer or public SSH mapping is required.
 
 Run `verify:notices` after production dependency changes. Current product context is in the root [README](../README.en.md), [architecture](../docs/architecture.en.md), and [user guide](../docs/user-guide.en.md).

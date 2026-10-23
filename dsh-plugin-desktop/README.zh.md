@@ -99,7 +99,7 @@ corepack pnpm --filter dsh-plugin-desktop run dist:win
 
 ### 4. 一次性配置发布环境
 
-GitHub 正式存档使用 `github-release` Environment 和工作流自身的 `GITHUB_TOKEN`，不需要服务器 SSH 私钥。当前工作流不自动部署公司服务器；完整流程见[打包与发布](../docs/github-packaging.md)。
+GitHub 正式存档使用 `github-release` Environment 和 `GITHUB_TOKEN`。在公司内网本机执行 `corepack pnpm deploy:run <GitHub-run-id>` 部署并更新清单，完整流程见[打包与发布](../docs/github-packaging.md)。
 
 服务器发布使用专用非 root SSH 账号，将以下配置保存在被 Git 忽略的 `.env.server.local`：
 
@@ -138,11 +138,11 @@ git tag -a "clawclaw-v$version" -m "Release ClawClaw $version"
 git push origin "clawclaw-v$version"
 ```
 
-tag 必须与 Desktop package 版本完全一致。匹配的 tag 会从同一 commit 重新构建 macOS 和 Windows，汇总 `desktop-release` 并发布到 GitHub Releases；不会自动切换服务器清单。不要复用或移动已经发布的版本 tag。
+tag 必须与 Desktop package 版本完全一致。匹配的 tag 会从同一 commit 重新构建 macOS 和 Windows，汇总 `desktop-release` 并发布到 GitHub Releases；服务器会自动拉取正式 Release，校验两平台安装包后原子切换清单，并由工作流验证公网下载。不要复用或移动已经发布的版本 tag。
 
 ### 7. 验证发布结果
 
-GitHub 构建成功且安装包另行部署服务器后，对外宣布前检查 workflow 和公网 manifest：
+本机部署命令完成上传和公网验证后，对外宣布前检查 workflow 和公网 manifest：
 
 ```sh
 gh run list --repo AngusFan-GH/ClawClaw --workflow release.yml --limit 3
@@ -166,14 +166,14 @@ corepack pnpm run upload:update -- --directory /path/to/desktop-release --channe
 
 DSH Desktop 使用 `https://clawclaw.xzinfra.com:9528/updates/dsh/stable/`，并只消费这一目录中的 `release.json`。清单同时声明 Windows NSIS 与 macOS Universal DMG 的 HTTPS 地址、大小和 SHA-512；DSH Desktop 不使用 `latest.yml`、`latest-mac.yml` 或旧 OpenClaw 的 `/updates/stable/` 更新源。
 
-此入口迁移要求 0.2.8–0.2.10 用户先手动安装使用 9528 的新版，之后自动更新。此前 0.2.11 的试打包仍使用旧 443 地址，不用于本次迁移；需重新构建。更早版本不在兼容验证范围内。
+此入口迁移要求 0.2.8–0.2.10 用户先手动安装使用 9528 的新版，之后自动更新。0.2.11 已上线；更早使用 443 的同版本试包需手动安装最新包。后续正式版本至少使用 0.2.12，不再覆盖已发布版本。更早版本不在兼容验证范围内。
 
 打包后的应用在启动 60 秒后检查更新，此后每六小时检查一次。后台对每个可用版本通知一次，不自动下载。设置和托盘共用同一套手动检查及下载流程。确认后，应用会再次读取 `release.json`，把安装包下载到私有更新目录，校验声明大小、SHA-512 和 DMG/PE 容器并显示进度。Windows 只有在用户再次确认且 Host 正常关闭后才启动 NSIS；macOS 会打开 DMG，由用户退出当前应用并拖入“应用程序”完成替换。
 
 发布清单在跨 Host 进程传输前限制为 16 KiB。Windows 发布包含未签名 NSIS，macOS 发布包含未签名 Universal DMG；二者都由同一份 `release.json` 描述。上传命令会重新计算实际安装包的 SHA-512 并核对大小，保留版本化副本，先上传安装包，最后原子切换 `release.json`。尚未实现断点续传。
 
-GitHub Actions 的 `Release ClawClaw Desktop` 工作流会在托管的 macOS 与 Windows Runner 上从同一 commit 构建两个安装包。`clawclaw-v<version>` tag 必须与 `dsh-plugin-desktop/package.json` 完全一致；匹配的 tag 会自动发布。手动运行默认只构建和汇总，只有勾选 `publish` 输入才会正式发布。正式存档使用 `github-release` GitHub Environment。日常 CI 只做检查，不生成安装包；服务器发布单独执行。
+GitHub Actions 的 `Release ClawClaw Desktop` 工作流会在托管的 macOS 与 Windows Runner 上从同一 commit 构建两个安装包。`clawclaw-v<version>` tag 必须与 `dsh-plugin-desktop/package.json` 完全一致；匹配的 tag 会自动发布。手动运行默认只构建和汇总，只有勾选 `publish` 输入才会正式发布。正式存档使用 `github-release` GitHub Environment。日常 CI 只做检查，不生成安装包；正式 Release 完成后在本机显式执行部署命令；试打包不自动部署。
 
-更新服务器应使用对配置目录有写权限的专用非 root SSH 用户。GitHub 负责构建和版本存档；服务器入库及清单切换仍是独立步骤。手动发布已准备好的 `release/` 目录时，通过 SSH agent 提供密钥，加载已忽略的 `.env.server.local`，再运行 `pnpm run upload:update -- --directory release --channel stable`；脚本有意不支持基于 `sshpass` 的密码发布。传输前会校验版本、HTTPS URL、文件大小和 SHA-512，并拒绝覆盖已有的 `/releases/dsh/<version>/`，先上传安装包，最后切换清单。
+专用非 root 发布账号须对 `/data/clawclaw/public` 有写权限。本机部署下载指定成功打包运行，校验来源和正式 URL，通过内网 SSH 上传，最后切换清单并验证公网校验值。不需要定时任务或公网 SSH 映射。
 
 生产 dependency 改动后运行 `verify:notices`。产品背景见根 [README](../README.md)、[架构](../docs/architecture.md)和[用户指南](../docs/user-guide.md)。

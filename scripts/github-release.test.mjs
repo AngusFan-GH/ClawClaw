@@ -29,6 +29,8 @@ test('assembles both platforms with immutable origin URLs and verified provenanc
   assert.equal(manifest.channel, 'stable')
   assert.equal(manifest.artifacts.darwin.url,
     'https://clawclaw.xzinfra.com:9528/releases/dsh/0.2.11/ClawClaw-0.2.11-universal.dmg')
+  assert.equal(manifest.artifacts.win32.url,
+    'https://clawclaw.xzinfra.com:9528/releases/dsh/0.2.11/ClawClaw-0.2.11-x64-Setup.exe')
   assert.equal(collectRelease(options.output).files.length, 4)
   const info = JSON.parse(await readFile(join(options.output, 'build-info.json'), 'utf8'))
   assert.equal(info.commit, context.commit)

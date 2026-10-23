@@ -6,7 +6,7 @@
 
 GitHub 是主仓库，日常开发分支为 `dsh-desktop`。GitLab 仅保留代码备份；办公电脑不再承担 CI 构建。上游保持官方 Git 子模块及原固定提交，根工程通过 Corepack 使用 pnpm 11.8.0。
 
-GitHub 托管的 macOS、Windows Runner 原生构建两个安装包。正式版本保存到 GitHub Releases；客户端仍从公司下载服务器获取更新。构建机使用公网依赖源，不需要公司 npm 私库、本地上游镜像或服务器 SSH 凭据。
+GitHub 托管的 macOS、Windows Runner 原生构建两个安装包。正式版本保存到 GitHub Releases；客户端仍从公司下载服务器获取更新。构建机使用公网依赖源，不需要公司 npm 私库或本地上游镜像。GitHub 完成打包后，在本机通过内网 SSH 上传安装包、切换清单并验证公网下载。服务器不轮询 GitHub。
 
 ## 日常 CI
 
@@ -28,17 +28,35 @@ GitHub 托管的 macOS、Windows Runner 原生构建两个安装包。正式版�
 
 ## 公司服务器与旧客户端
 
-GitHub Release 发布不会修改正式更新服务器。服务器主动拉取指定正式 Release、验证来源和安装包后再发布的流程另行接入；当前不需要为 GitHub Runner 开放服务器 SSH，也不配置定时同步。
+发布链路为：GitHub 双平台打包及正式 Release 存档 → 在公司内网的本机显式执行部署命令 → 内网 SSH 上传安装包 → 写入正式版本目录 → 原子切换正式清单 → 公网完整下载验证。试打包不会自动部署；需要时也可显式选择一次成功试打包运行进行本机部署。
+
+不需要服务器轮询、公网 SSH 映射、办公 Runner 或 GitHub 保存服务器私钥。部署期间本机须能访问 GitHub 和内网服务器。已有版本目录拒绝覆盖，后续正式发布须提升版本号。
+
+新安装包统一使用 `/releases/dsh/<version>/ClawClaw-<version>-universal.dmg` 和 `ClawClaw-<version>-x64-Setup.exe`，不使用临时试版路径。正式清单仍为 `/updates/dsh/stable/release.json`。0.2.11 的覆盖发布属于一次性迁移例外，当前已正式上线；后续正式发版至少使用 0.2.12，不再复用 0.2.11。
 
 新版客户端更新入口为 `https://clawclaw.xzinfra.com:9528/updates/dsh/stable/release.json`，清单中的安装包地址也使用同一域名的 HTTPS 9528 和不可覆盖的 `/releases/dsh/<version>/` 路径。清单保留原有 `version`、`channel`、两平台 HTTPS URL、size、SHA-512 格式，以及 16 KiB 清单和 1 GiB 安装包限制。
 
-迁移范围只考虑 0.2.8 及以上版本。已安装的 0.2.8–0.2.10 固定请求旧的 HTTPS 443 地址，不能通过 DNS 或 HTTP 跳转自动改用 9528；本方案要求用户先手动安装改用 9528 的新版，之后从新入口自动更新。首次迁移仍使用尚未正式发布的 0.2.11；旧地址的 0.2.11 试打包产物不能用于此次入口切换，必须从修改后的提交重新构建。更早版本不在迁移验证范围内。
+迁移范围只考虑 0.2.8 及以上版本。已安装的 0.2.8–0.2.10 固定请求旧的 HTTPS 443 地址，不能通过 DNS 或 HTTP 跳转自动改用 9528；本方案要求用户先手动安装改用 9528 的新版，之后从新入口自动更新。当前 0.2.11 已使用 9528 正式入口；更早使用 443 的同版本试包不能通过同版本比较自动升级，需手动安装最新包。更早版本不在迁移验证范围内。
 
 服务器为 `192.168.103.220`，下载根目录仍是 `/data/clawclaw/public`，版本目录为 `/data/clawclaw/public/releases/dsh/<version>/`，稳定清单为 `/data/clawclaw/public/updates/dsh/stable/release.json`。`deploy/clawclaw-internal.nginx.conf` 增加 HTTPS 9528，同时保留内网 443；HTTP 80 跳转至显式 9528，不更改 File Browser 的 9527。公网需由网管配置 `218.69.255.22:9528 -> 192.168.103.220:9528`，并将原域名的公网 DNS 指向 `218.69.255.22`；内网可配置分区 DNS 到服务器内网地址。
 
-通用 `scripts/upload-update.mjs` 校验文件并在完整版本目录落盘后原子切换清单；GitHub 工作流只调用其 `--dry-run`，不会 SSH 部署。本地 `.env.server.local` 的 `UPDATE_REMOTE_ROOT` 须为 `/data/clawclaw/public`；`UPDATE_PORT=22` 指 SSH，和下载端口 9528 无关。
+`scripts/upload-update.mjs` 是本机 SSH 上传入口，默认根目录为 `/data/clawclaw/public`。本地 `.env.server.local` 的 `UPDATE_REMOTE_ROOT` 须为该目录；`UPDATE_PORT` 指 SSH 端口，和 HTTPS 下载端口 9528 无关。
 
 正式切换前须验证：可信 HTTPS 证书、内网和真实公网的 9528 连通性、DNS、新清单、两个安装包的完整下载及 SHA-512，以及从 0.2.8–0.2.10 手动安装新版后使用新入口检查更新。内网使用 `curl --resolve clawclaw.xzinfra.com:9528:192.168.103.220 https://clawclaw.xzinfra.com:9528/healthz` 可保留域名和证书校验；此测试不能代替真实公网验证。旧服务器和原稳定清单保留至迁移验证完成，不自动改写历史清单中的地址。
+
+## 本机部署
+
+在已忽略的 `.env.server.local` 配置 `UPDATE_HOST=192.168.103.220`、`UPDATE_USER=clawclaw-release`、`UPDATE_PORT=22`、`UPDATE_REMOTE_ROOT=/data/clawclaw/public`，以及现有 `UPDATE_SSH_KEY_FILE` 和 `UPDATE_SSH_KNOWN_HOSTS_FILE` 路径。也可通过 SSH agent 提供私钥；必须保留主机指纹校验。本机 `gh` 需已登录并拥有仓库 Actions 读取权限。
+
+```sh
+corepack pnpm deploy:run <GitHub-run-id>
+# 仅下载并校验，不修改服务器：
+corepack pnpm deploy:run <GitHub-run-id> --dry-run
+```
+
+命令只下载指定成功打包运行的 `desktop-release`，检查工作流、仓库、commit 和 run 来源，验证正式 URL、大小及 SHA-512，上传安装包后原子切换稳定清单，最后验证公网清单、完整安装包校验值及 Range 下载。退出时清理本地临时下载。须在 artifact 保留期（14 天）内执行；失败不自动重试。若上传成功但公网验证失败，先核对线上清单再处理，已有版本目录不会被覆盖。
+
+正式版本 tag 仍自动生成 GitHub Release，服务器部署改为显式执行本机命令。下次正式发布至少使用 0.2.12，不移动已发布标签。不需要 GitHub Actions 部署 Secrets。
 
 ## 双远端
 

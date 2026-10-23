@@ -111,6 +111,11 @@ test('generates the single cross-platform release manifest without loading whole
     const manifest = JSON.parse(readFileSync(join(directory, 'release.json'), 'utf8'))
     assert.equal(manifest.version, version)
     assert.equal(manifest.channel, 'stable')
+    const canonicalOutput = join(directory, 'canonical-release.json')
+    execFileSync(process.execPath, ['scripts/generate-release-manifest.mjs', '--directory', directory, '--output', canonicalOutput], { cwd: repositoryRoot })
+    const canonical = JSON.parse(readFileSync(canonicalOutput, 'utf8'))
+    assert.equal(canonical.artifacts.darwin.url, `https://clawclaw.xzinfra.com:9528/releases/dsh/${version}/${dmgName}`)
+    assert.equal(canonical.artifacts.win32.url, `https://clawclaw.xzinfra.com:9528/releases/dsh/${version}/${exeName}`)
     assert.deepEqual(manifest.artifacts.darwin, {
       url: `https://updates.example.test/stable/${dmgName}`,
       sha512: createHash('sha512').update(dmg).digest('base64'),
