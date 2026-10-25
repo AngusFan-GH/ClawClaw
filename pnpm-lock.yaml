@@ -706,6 +706,7 @@ pnpmfileChecksum: sha256-lXLpj0NPftt3zW/MCBhdmNy7CyKzfJq4mB59ThRQEW0=
 
 patchedDependencies:
   '@deepseek-ai/dsh-host-directory-picker-browse@0.2.1-rc.2': a85e7a71fcbc1350dd930e823d65aa612d2c13788fe365ffd0a576dddce4ada5
+  '@deepseek-ai/dsh-llm-pi-ai@0.2.1-rc.2': 4bce93d2d70aeaa2a1e933d28f5e976c44b80d2fcba0ab0b158ec354a841346a
   '@deepseek-ai/dsh-settings': d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9
   '@deepseek-ai/dsh-subprocess-local@0.2.1-rc.2': 245f550f31aa12332c95c32217efcea33e20beabb90f24fc21a31b7f2759a928
   '@vscode/ripgrep@1.18.0': 67f076c2d8595fd98ac91b25333faca041fd6c23918c63517d01070a6dde1cea
@@ -1244,7 +1245,7 @@ importers:
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-deepseek-api-key-0.2.1-rc.2.tgz(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-credentials@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-credentials-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-launch-environment@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-launch-environment-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-llm-deepseek@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-deepseek-0.2.1-rc.2.tgz(27d800eba31f6a48f90cafae0765a7f7))(@deepseek-ai/dsh-llm@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))
       '@deepseek-ai/dsh-llm-pi-ai':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-pi-ai-0.2.1-rc.2.tgz
-        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-pi-ai-0.2.1-rc.2.tgz(9bfb2eacedfa59980826b9dad2d4f7c4)
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-pi-ai-0.2.1-rc.2.tgz(patch_hash=4bce93d2d70aeaa2a1e933d28f5e976c44b80d2fcba0ab0b158ec354a841346a)(9bfb2eacedfa59980826b9dad2d4f7c4)
       '@deepseek-ai/dsh-llm-retry':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-retry-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-retry-0.2.1-rc.2.tgz(44e8ab866adada647965149d17fe843e)
@@ -11243,7 +11244,7 @@ snapshots:
       '@deepseek-ai/dsh-llm': file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)
       '@deepseek-ai/dsh-llm-deepseek-account': file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-deepseek-account-0.2.1-rc.2.tgz(3641d855d70d53bd0155a25290de2591)
       '@deepseek-ai/dsh-llm-deepseek-api-key': file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-deepseek-api-key-0.2.1-rc.2.tgz(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-credentials@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-credentials-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-launch-environment@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-launch-environment-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-llm-deepseek@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-deepseek-0.2.1-rc.2.tgz(27d800eba31f6a48f90cafae0765a7f7))(@deepseek-ai/dsh-llm@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))
-      '@deepseek-ai/dsh-llm-pi-ai': file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-pi-ai-0.2.1-rc.2.tgz(9bfb2eacedfa59980826b9dad2d4f7c4)
+      '@deepseek-ai/dsh-llm-pi-ai': file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-pi-ai-0.2.1-rc.2.tgz(patch_hash=4bce93d2d70aeaa2a1e933d28f5e976c44b80d2fcba0ab0b158ec354a841346a)(9bfb2eacedfa59980826b9dad2d4f7c4)
       '@deepseek-ai/dsh-llm-retry': file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-retry-0.2.1-rc.2.tgz(44e8ab866adada647965149d17fe843e)
       '@deepseek-ai/dsh-mcp-resources': file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-mcp-resources-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-scope-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-system-prompt@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-system-prompt-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-scope-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)))(@deepseek-ai/dsh-tools@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tools-0.2.1-rc.2.tgz(dc241a4c1c1137034a3010b158e4bde4))
       '@deepseek-ai/dsh-otel': file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-otel-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-session@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-scope@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-scope-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)))
@@ -12414,7 +12415,7 @@ snapshots:
     optionalDependencies:
       '@deepseek-ai/cordis-plugin-loader': 1.0.6(@deepseek-ai/cordis@4.0.5)(node-addon-require-builtin@0.1.6)
 
-  '@deepseek-ai/dsh-llm-pi-ai@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-pi-ai-0.2.1-rc.2.tgz(9bfb2eacedfa59980826b9dad2d4f7c4)':
+  '@deepseek-ai/dsh-llm-pi-ai@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-pi-ai-0.2.1-rc.2.tgz(patch_hash=4bce93d2d70aeaa2a1e933d28f5e976c44b80d2fcba0ab0b158ec354a841346a)(9bfb2eacedfa59980826b9dad2d4f7c4)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)
       '@deepseek-ai/dsh-attachment': file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-attachment-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-brand@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-brand-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))

@@ -58,6 +58,7 @@ describe('SpiritX provisioning', () => {
     expect(discoverModels).toHaveBeenCalledWith('llm-pi-ai', expect.objectContaining({ apiKey: 'secret' }))
     expect(mutate).toHaveBeenNthCalledWith(1, 'llm-pi-ai', [{
       op: 'set', path: ['providers', 'spiritx'], value: expect.objectContaining({
+        setupPending: false,
         models: [
           { id: 'gpt-image-2', name: 'gpt-image-2' },
           { id: 'chat-first', name: 'Chat First', contextWindow: 16_384 },

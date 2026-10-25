@@ -517,9 +517,35 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop/default-workspace',
       config: { path: { __jsExpr: 'process.env.CLAWCLAW_DEFAULT_WORKSPACE' } },
     })
-    expect(rows.find(row => row.id === 'desktop-profiles')).toEqual(expect.objectContaining({
-      name: 'dsh-plugin-desktop/profiles',
-    }))
+    expect(rows.find(row => row.id === 'desktop-profiles')).toBeUndefined()
+  })
+
+  it('migrates the old empty SpiritX seed to pending setup exactly once', () => {
+    const home = temporaryHome()
+    const prepared = prepareDesktopProfile(undefined, home, 'win32')
+    const path = prepared.profile.patchPath
+    writeFileSync(path, readFileSync(path, 'utf8').replace(/^\s+setupPending: true\r?\n/gm, '\n'))
+    const migrated = prepareDesktopProfile(undefined, home, 'win32')
+    const route = composeEntries([migrated.patches]).find(row => row.id === 'llm-pi-ai')?.config.providers.spiritx
+    expect(route.setupPending).toBe(true)
+    expect(route.models).toEqual([])
+    const content = readFileSync(path, 'utf8')
+    prepareDesktopProfile(undefined, home, 'win32')
+    expect(readFileSync(path, 'utf8')).toBe(content)
+  })
+
+  it.each([
+    { models: [{ id: 'saved-chat' }] },
+    { baseURL: 'https://custom.example/v1' },
+    { modelOverrides: { 'missing-model': { maxTokens: 100 } } },
+  ])('does not overwrite configured or edited SpiritX routes: %j', changes => {
+    const home = temporaryHome()
+    const profileDir = ensureDesktopProfile(home)
+    const route = { displayName: 'SpiritX', apiKeyEnv: 'SPIRITX_API_KEY', api: 'openai-responses',
+      baseURL: 'https://ai.xzinfra.com/spiritx-api/v1', models: [], ...changes }
+    writeFileSync(join(profileDir, 'cordis.patch.yml'), `- id: llm-pi-ai\n  config:\n    providers:\n      spiritx: ${JSON.stringify(route)}\n`)
+    const prepared = prepareDesktopProfile(undefined, home, 'win32')
+    expect(composeEntries([prepared.patches]).find(row => row.id === 'llm-pi-ai')?.config.providers.spiritx).toEqual(route)
   })
 
   it('starts SpiritX without a built-in model catalog', () => {
@@ -535,6 +561,7 @@ virtualStoreDirMaxLength: 60
       config: {
         providers: {
           spiritx: {
+            setupPending: true,
             displayName: 'SpiritX',
             apiKeyEnv: 'SPIRITX_API_KEY',
             api: 'openai-responses',
@@ -854,6 +881,7 @@ virtualStoreDirMaxLength: 60
       providers: {
         'minimax-cn': { apiKeyEnv: 'MINIMAX_CN_API_KEY' },
         spiritx: {
+          setupPending: true,
           displayName: 'SpiritX',
           apiKeyEnv: 'SPIRITX_API_KEY',
           api: 'openai-responses',

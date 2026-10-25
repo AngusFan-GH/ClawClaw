@@ -334,14 +334,14 @@ try {
     throw new Error(`assembled profile selected unexpected default model ${selection.provider}/${selection.model}`)
   }
   const providers = ctx.llm.listProviders()
-  if (!providers.some(provider => provider.id === 'spiritx' && provider.name === 'SpiritX')
-    || providers.some(provider => provider.id === 'deepseek-official')) {
+  if (providers.some(provider => provider.id === 'spiritx' || provider.id === 'deepseek-official')) {
     throw new Error(`assembled profile exposes unexpected model providers: ${JSON.stringify(providers)}`)
   }
   const configurableProviders = ctx.llm.listConfigurableProviders()
   const spiritxDirectory = configurableProviders.find(provider => provider.provider === 'spiritx')
   if (spiritxDirectory?.displayName !== 'SpiritX'
-    || spiritxDirectory.settingsNs !== 'llm-pi-ai') {
+    || spiritxDirectory.settingsNs !== 'llm-pi-ai'
+    || spiritxDirectory.error !== undefined) {
     throw new Error(`assembled profile does not present SpiritX as built in: ${JSON.stringify(configurableProviders)}`)
   }
   const officialCatalog = configurableProviders.filter(provider => provider.settingsNs === 'llm-pi-ai')
@@ -353,10 +353,8 @@ try {
   if (new Set(configurableProviders.map(provider => provider.provider)).size !== configurableProviders.length) {
     throw new Error(`assembled profile has duplicate configurable providers: ${JSON.stringify(configurableProviders)}`)
   }
-  const spiritxModels = await ctx.llm.listModels('spiritx')
-  if (spiritxModels.length !== 0) {
-    throw new Error(`assembled profile unexpectedly materialized SpiritX models before setup: ${JSON.stringify(spiritxModels)}`)
-  }
+  await assert.rejects(() => ctx.llm.listModels('spiritx'), { code: 'NO_ADAPTER' },
+    'SpiritX must remain unregistered for inference until setup supplies real models')
   if (ctx.desktopProfiles.current.name !== 'desktop'
     || ctx.desktopProfiles.current.dir !== prepared.profile.dir) {
     throw new Error('assembled desktop profile service has the wrong active identity')

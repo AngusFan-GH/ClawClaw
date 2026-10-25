@@ -1,0 +1,95 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1047,6 +1047,7 @@
+ /** A {@link modelProfile} whose id lives in the `modelOverrides` dict key. */
+ const modelOverride = z.object(modelFields);
+ const profile = z.object({
++	setupPending: z.boolean().default(false),
+ 	apiKeyEnv: z.string().role("credential-ref"),
+ 	displayName: z.string(),
+ 	api: z.union(supportedProtocols()),
+@@ -1135,10 +1136,12 @@
+ 		const defaultInput = [...source.defaultInput ?? DEFAULT_INPUT];
+ 		if (defaultInput.length === 0) throw new Error(`llm-pi-ai: provider "${provider}" defaultInput must name at least one modality`);
+ 		const displayName = source.displayName ?? provider;
++		// Explicit first-run routes stay discoverable without pretending to serve models.
++		const setupPending = source.setupPending === true && Array.isArray(source.models) && source.models.length === 0 && Object.keys(source.modelOverrides ?? {}).length === 0;
+ 		let catalog;
+ 		let piProvider;
+ 		let catalogError;
+-		try {
++		if (!setupPending) try {
+ 			catalog = resolveRouteModels({
+ 				provider,
+ 				...source.api === void 0 ? {} : { api: source.api },
+@@ -1166,6 +1169,7 @@
+ 		const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source;
+ 		resolved.set(provider, {
+ 			...rest,
++			setupPending,
+ 			provider,
+ 			displayName,
+ 			...apiKeyEnv === void 0 ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
+@@ -2821,7 +2825,7 @@
+ * not mistaken for a route change.
+ */
+ function registrationFacts(profiles) {
+-	return [...profiles.entries()].map(([provider, profile]) => ({
++	return [...profiles.entries()].filter(([, profile]) => !profile.setupPending).map(([provider, profile]) => ({
+ 		provider,
+ 		displayName: profile.displayName,
+ 		retryPolicy: profile.retryPolicy
+@@ -2943,7 +2947,7 @@
+ 	const ensureRegistrationFacts = () => {
+ 		const facts = registrationFacts(profiles());
+ 		if (deepEqualJson(facts, registeredFacts)) return;
+-		const routes = [...profiles().keys()];
++		const routes = [...profiles().entries()].filter(([, profile]) => !profile.setupPending).map(([provider]) => provider);
+ 		if (registration === void 0) {
+ 			if (routes.length === 0) {
+ 				registeredFacts = facts;
+diff --git a/lib/types/config.d.ts b/lib/types/config.d.ts
+--- a/lib/types/config.d.ts
++++ b/lib/types/config.d.ts
+@@ -52,6 +52,8 @@
+ export type { PiAiCompatProfile, PiAiModality, PiAiModelOverride, PiAiModelProfile, PiAiReasoningEfforts, PiAiThinkingFormat, } from './catalog.ts';
+ /** Configuration for one pi-ai provider route; the `providers` dict key IS the route. */
+ export interface PiAiProviderProfile {
++    /** Keep an explicitly empty first-run route configurable until real models are saved. */
++    setupPending?: boolean;
+     /** Credential reference (environment-variable name) resolved per request through `ctx.credentials`. */
+     apiKeyEnv?: string;
+     /** Name shown by configuration surfaces; defaults to the route key. */
+@@ -193,6 +195,7 @@
+ /** Runtime schema for {@link Config}. */
+ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
+     providers: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
++        setupPending?: boolean | null;
+         apiKeyEnv?: string | null;
+         displayName?: string | null;
+         api?: string | null;
+@@ -221,6 +224,7 @@
+         requestImageMaxBytes?: number | null;
+         retryPolicy?: RetryPolicyConfig | null;
+     } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
++        setupPending: z<boolean, boolean, "defined">;
+         apiKeyEnv: z<string, string, "plain">;
+         displayName: z<string, string, "plain">;
+         api: z<string, string, "plain">;
+@@ -256,6 +260,7 @@
+     }>>, string>>, "volatile-defined">;
+ }>>, Schemastery.ObjectT<NoInfer<{
+     providers: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
++        setupPending?: boolean | null;
+         apiKeyEnv?: string | null;
+         displayName?: string | null;
+         api?: string | null;
+@@ -284,6 +289,7 @@
+         requestImageMaxBytes?: number | null;
+         retryPolicy?: RetryPolicyConfig | null;
+     } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
++        setupPending: z<boolean, boolean, "defined">;
+         apiKeyEnv: z<string, string, "plain">;
+         displayName: z<string, string, "plain">;
+         api: z<string, string, "plain">;

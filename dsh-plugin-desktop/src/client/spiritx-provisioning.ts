@@ -230,6 +230,7 @@ export async function provisionSpiritX(
     path: ['providers', 'spiritx'],
     value: {
       displayName: 'SpiritX',
+      setupPending: false,
       apiKeyEnv: SPIRITX_API_KEY_REF,
       api: SPIRITX_API,
       baseURL: SPIRITX_BASE_URL,

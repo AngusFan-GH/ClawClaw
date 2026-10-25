@@ -113,6 +113,7 @@
   config:
     providers:
       spiritx:
+        setupPending: true
         displayName: SpiritX
         apiKeyEnv: SPIRITX_API_KEY
         api: openai-responses

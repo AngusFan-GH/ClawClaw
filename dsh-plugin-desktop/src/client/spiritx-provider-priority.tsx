@@ -303,7 +303,7 @@ function SpiritXProviderEditor(props: SpiritXProviderProps): ReactNode {
         <button type="button" className="spiritxProviderButton" disabled={busy}
           onClick={() => { setEditing(false); setKey(''); setFailure(undefined) }}>{props.t('cancel')}</button>
         <button type="button" className="spiritxProviderButton spiritxProviderButtonPrimary"
-          disabled={disabled || (!modelsValid(models) && (props.configured || key.trim().length === 0))}
+          disabled={disabled || (!modelsValid(models) && !(models.length === 0 && key.trim().length > 0))}
           onClick={() => { void save() }}>{props.t(busy ? 'saving' : 'save')}</button>
       </div>
     </div>}

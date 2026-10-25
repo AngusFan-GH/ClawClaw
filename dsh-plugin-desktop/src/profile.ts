@@ -949,6 +949,20 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
           : undefined
         if (providers !== null && typeof providers === 'object' && !Array.isArray(providers)) {
           piAiProviders = providers as Record<string, unknown>
+          const spiritx = piAiProviders.spiritx
+          // Older Desktop seeds declared an empty custom route as serviceable.
+          // Migrate only that exact seed; edited or populated routes keep their
+          // real validation diagnostics and stored model definitions.
+          if (spiritx !== null && typeof spiritx === 'object' && !Array.isArray(spiritx)) {
+            const route = spiritx as Record<string, unknown>
+            if (Object.keys(route).length === 5
+              && route.displayName === 'SpiritX' && route.apiKeyEnv === 'SPIRITX_API_KEY'
+              && route.api === 'openai-responses' && route.baseURL === 'https://ai.xzinfra.com/spiritx-api/v1'
+              && Array.isArray(route.models) && route.models.length === 0) {
+              document.setIn([patchIndex, 'config', 'providers', 'spiritx', 'setupPending'], true)
+              changed = true
+            }
+          }
         }
       }
       if (config !== null && typeof config === 'object' && !Array.isArray(config)

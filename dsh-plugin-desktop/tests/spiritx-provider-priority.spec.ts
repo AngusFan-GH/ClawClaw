@@ -28,6 +28,35 @@ function injected(overrides: Record<string, unknown> = {}): Record<string, unkno
 }
 
 describe('SpiritX provider priority', () => {
+  it('lets a first-install seeded route fetch its initial models when saving a key', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    const provision = vi.fn(async () => undefined)
+    try {
+      await act(async () => {
+        root.render(createElement(SpiritXProviderPriorityMarker, {
+          provider: { provider: 'spiritx' }, configured: true, keyConfigured: false,
+          ...injected({ load: async () => ({ ok: true, value: { baseURL: 'https://ai.xzinfra.com/spiritx-api/v1', models: [] } }), provision }),
+        } as never))
+      })
+      const input = host.querySelector<HTMLInputElement>('input[type="password"]')!
+      const save = host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!
+      expect(save.disabled).toBe(true)
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, ' test-key ')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      expect(save.disabled).toBe(false)
+      await act(async () => { save.click() })
+      expect(provision).toHaveBeenCalledWith('test-key', undefined)
+      expect(host.querySelector('.spiritxProviderEditor')).toBeNull()
+    } finally {
+      await act(async () => { root.unmount() })
+      host.remove()
+    }
+  })
+
   it('pins the SpiritX card and hides custom and delete chrome', () => {
     const row = document.createElement('li')
     row.innerHTML = `<div><span><span>SpiritX</span><span>自定义</span><span role="img"></span></span><span><button aria-label="编辑 SpiritX">编辑</button><button aria-label="删除 SpiritX">删除</button></span></div><div data-dsh-spiritx-provider></div>`
