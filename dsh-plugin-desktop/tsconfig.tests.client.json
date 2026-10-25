@@ -21,6 +21,7 @@
     "tests/client-selection-sidechat.spec.ts",
     "tests/client-input-suggestions.spec.ts",
     "tests/client-input-assistance.spec.ts",
+    "tests/client-input-continuation-presentation.spec.ts",
     "tests/client-selection-quote.spec.ts"
   ]
 }

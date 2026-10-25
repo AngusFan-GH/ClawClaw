@@ -1,4 +1,12 @@
 export const INPUT_ASSISTANCE_CSS = `
+/* Generated inline content participates in the real paragraph's wrapping,
+   auto-height and scrollport, while remaining outside editor text/history. */
+.dshAiContinuationScope[data-claw-ai-continuation] [contenteditable="true"]:focus > p:last-child::after {
+  content:var(--dsh-ai-continuation-text);
+  content:var(--dsh-ai-continuation-text) / "";
+  font:inherit; line-height:inherit; white-space:inherit; overflow-wrap:inherit; word-break:inherit;
+  color:var(--dsw-alias-label-caption); pointer-events:none; user-select:none;
+}
 .dshAiOptimizeTrigger { flex:none; white-space:nowrap; }
 .dshAiOptimizeTriggerLabel { display:var(--dsh-composer-model-text-display,inline); }
 .dshAiOptimizeTrigger svg { width:14px; height:14px; flex:none; }

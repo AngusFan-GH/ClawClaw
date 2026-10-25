@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InputActions } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -15,6 +15,7 @@ import FileText from 'lucide-react/dist/esm/icons/file-text.mjs'
 import { ASSISTANCE_PATH, type DraftAssistResult, type ContinuationDiagnostic } from '../input-assistance-contract.ts'
 import { DraftAssistanceState, type AssistTransport } from './input-assistance-state.ts'
 import { inputSettingEnabled } from './input-assistance-settings.ts'
+import { continuationCssText, continuationSurface } from './input-continuation-presentation.ts'
 
 type EnabledForm = ConfigForm<{ enabled: boolean }>
 const AssistanceContext = createContext<{ state: DraftAssistanceState; sync(): void; language: string; optimizationEnabled: boolean } | undefined>(undefined)
@@ -61,13 +62,13 @@ export function DraftAssistanceProvider({ ctx, sessionId, actions, continuation,
   }, [ctx, sessionId, actions, root, continuation, optimization])
   useEffect(() => runtime?.sync(), [blocked, runtime])
   const state = runtime?.state
-  const ghost = state?.phase === 'idle' ? state.text : ''
-  const position = ghost ? runtime?.position() : undefined
+  const ghost = state?.phase === 'idle' && runtime?.surface() !== undefined ? state.text : ''
   return <AssistanceContext.Provider value={runtime === undefined ? undefined : { ...runtime, language, optimizationEnabled }}>
-    {children}
-    {ghost !== '' && position !== undefined && <div aria-hidden="true" data-claw-ai-continuation
-      style={{ position: 'fixed', left: position.left, top: position.top, maxWidth: position.width, whiteSpace: 'pre-wrap',
-        pointerEvents: 'none', color: 'var(--dsw-alias-label-tertiary)', fontSize: 14, lineHeight: '22px', zIndex: 1 }}>{ghost}</div>}
+    <div className="dshAiContinuationScope" data-claw-ai-continuation={ghost !== '' || undefined}
+      data-continuation-revision={ghost === '' ? undefined : runtime?.draftRevision()}
+      style={{ display: 'contents', ...(ghost === '' ? {} : { '--dsh-ai-continuation-text': continuationCssText(ghost) }) } as CSSProperties}>
+      {children}
+    </div>
   </AssistanceContext.Provider>
 }
 
@@ -93,7 +94,7 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
     cancel: (request, reason) => api.cancel(request, reason),
     generate: async (request, signal) => { sync(); signal.throwIfAborted(); const result = await api.generate(request, signal); sync(); return result },
   }, () => {
-    if (state.phase === 'idle' && state.text !== '') api.report?.(position() === undefined ? 'result-unpositioned' : 'result-shown', input.state.getSnapshot().draftRev)
+    if (state.phase === 'idle' && state.text !== '') api.report?.(surface() === undefined ? 'result-unpositioned' : 'result-shown', input.state.getSnapshot().draftRev)
     changed()
   })
   const atEnd = (): boolean => {
@@ -120,16 +121,7 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
       : state.phase !== 'idle' ? 'edit-optimization' : 'edit-eligible'
     state.update(snapshot, false)
   }
-  const position = () => {
-    if (!atEnd()) return undefined
-    const range = document.getSelection()?.getRangeAt(0)
-    const rect = range?.getBoundingClientRect?.()
-    const bounds = root.current?.getBoundingClientRect()
-    if (rect === undefined || bounds === undefined || rect.height === 0 || rect.bottom > bounds.bottom || rect.right > bounds.right) return undefined
-    const width = Math.max(0, bounds.right - rect.right - 16)
-    return width < 40 ? { left: bounds.left + 16, top: rect.bottom, width: Math.max(0, bounds.width - 32) }
-      : { left: rect.right, top: rect.top, width }
-  }
+  const surface = () => atEnd() ? continuationSurface(root.current) : undefined
   const start = (): (() => void) => {
     mounted = true
     const settledEdit = (revision: number) => {
@@ -174,7 +166,9 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
     const key = (event: KeyboardEvent) => {
       const shown = state.text
       sync()
-      if (shown !== '' && state.text === shown && position() !== undefined) state.accept(event, actions)
+      const painted = root.current?.closest('[data-claw-ai-continuation]')
+      if (shown !== '' && state.text === shown && surface() !== undefined
+        && painted?.getAttribute('data-continuation-revision') === String(input.state.getSnapshot().draftRev)) state.accept(event, actions)
       if (event.key === 'Enter') state.interacting() // Enter sends only the real draft.
     }
     target?.addEventListener('keydown', key, true)
@@ -202,7 +196,7 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
       window.removeEventListener('resize', layout); window.removeEventListener('scroll', layout, true)
     }
   }
-  return { state, sync, start, position }
+  return { state, sync, start, surface, draftRevision: () => input.state.getSnapshot().draftRev }
 }
 
 export function DraftOptimizationButton({ inputActions, useInput }: PropsRuntime<'conversation.input.left'>): JSX.Element | null {
