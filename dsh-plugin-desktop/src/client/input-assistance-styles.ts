@@ -7,7 +7,7 @@ export const INPUT_ASSISTANCE_CSS = `
   font:inherit; line-height:inherit; white-space:inherit; overflow-wrap:inherit; word-break:inherit;
   color:var(--dsw-alias-label-caption); pointer-events:none; user-select:none;
 }
-.dshAiOptimizeTrigger { flex:none; white-space:nowrap; }
+button.dshAiOptimizeTrigger { flex:none; white-space:nowrap; color:var(--dsw-alias-label-secondary); }
 .dshAiOptimizeTriggerLabel { display:var(--dsh-composer-model-text-display,inline); }
 .dshAiOptimizeTrigger svg { width:14px; height:14px; flex:none; }
 @container(max-width:560px) {
