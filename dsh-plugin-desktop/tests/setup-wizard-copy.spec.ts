@@ -35,35 +35,16 @@ describe('Desktop Setup Wizard copy and contract', () => {
     expect(Object.values(chinese).every(value => value.length > 0)).toBe(true)
   })
 
-  it('describes the sequential navigation, skip confirmation, and final success action', () => {
-    const english = desktopSetupWizardCopy('en')
-    const chinese = desktopSetupWizardCopy('zh')
-    expect(chinese.back).toBe('上一步')
-    expect(chinese.next).toBe('下一步')
-    expect(chinese.successTitle).toContain('完成')
-    expect(chinese.startUsing).toBe('开始使用')
-    expect(chinese.skipDialogBody).toContain('设置')
-    expect(chinese.skipDialogBody).toContain('桌面设置')
-    expect(english.back).toMatch(/^(?:Back|Previous)$/u)
-    expect(english.next).toBe('Next')
-    expect(english.startUsing).toContain('Start using')
-    expect(english.skipDialogBody).toContain('Settings')
-    expect(english.skipDialogBody).toContain('Desktop settings')
-  })
-
-  it('introduces first-time setup for the current Profile before showing settings', () => {
-    const english = desktopSetupWizardCopy('en')
-    const chinese = desktopSetupWizardCopy('zh')
-    expect(chinese.welcomeTitle).toBeTruthy()
-    expect(chinese.welcomeBody).toContain('Profile')
-    expect(chinese.firstProfileSetup).toContain('首次')
-    expect(chinese.firstProfileSetup).toContain('桌面设置')
-    expect(chinese.startSetup).toBe('开始设置')
-    expect(english.welcomeTitle).toBeTruthy()
-    expect(english.welcomeBody).toContain('Profile')
-    expect(english.firstProfileSetup).toMatch(/first(?:-time| time)/iu)
-    expect(english.firstProfileSetup).toMatch(/Desktop setup/iu)
-    expect(english.startSetup).toBe('Start setup')
+  it('introduces model setup and defers optional preferences without exposing Profile', () => {
+    for (const locale of ['en', 'zh'] as const) {
+      const copy = desktopSetupWizardCopy(locale)
+      expect(copy.modelBody).toContain('SpiritX')
+      expect(copy.defaultsBody).toContain(locale === 'zh' ? '桌面设置' : 'Desktop settings')
+      expect(copy.modelBody).toContain(locale === 'zh' ? '稍后' : 'later')
+      expect(JSON.stringify(copy)).not.toContain('Profile')
+      expect(JSON.stringify(copy)).not.toContain(locale === 'zh' ? '已保存' : 'saved')
+      expect(copy.continue).toBe(locale === 'zh' ? '继续' : 'Continue')
+    }
   })
 
   it('strictly validates complete input and platform capability gates', () => {

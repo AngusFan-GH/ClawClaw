@@ -1,5 +1,5 @@
 /** Product-owned onboarding without the upstream preview notice. */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
@@ -51,44 +51,71 @@ function ProductOnboardingModal({ title, focusTitle = false, children }: {
   </Modal>
 }
 
-function SpiritXCredential({ complete, loadCredential, storeCredential, t }: CredentialProps): ReactNode {
+export function SpiritXCredential({ complete, loadCredential, storeCredential, t }: CredentialProps): ReactNode {
   const [state, setState] = useState<CredentialState>({ kind: 'loading' })
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>()
+  const [attempt, setAttempt] = useState(0)
+  const saving = useRef(false)
+  const finished = useRef(false)
+  const finish = useCallback(() => {
+    if (finished.current) return
+    finished.current = true
+    complete()
+  }, [complete])
   useEffect(() => {
     let stale = false
-    void loadCredential().then(next => { if (!stale) setState(next) })
+    setState({ kind: 'loading' })
+    void loadCredential().then(
+      next => { if (!stale && !finished.current) setState(next) },
+      () => { if (!stale && !finished.current) setState({ kind: 'unavailable' }) },
+    )
     return () => { stale = true }
-  }, [loadCredential])
+  }, [loadCredential, attempt])
   useEffect(() => {
-    if (state.kind === 'configured' || state.kind === 'unavailable') complete()
-  }, [complete, state.kind])
-  if (state.kind !== 'missing') return null
+    if (state.kind === 'configured') finish()
+  }, [finish, state.kind])
+  if (state.kind === 'configured') return null
+  if (state.kind === 'loading' || state.kind === 'unavailable') return <ProductOnboardingModal title={t('title')} focusTitle>
+    <p className="spiritxOnboardingDescription" role={state.kind === 'loading' ? 'status' : 'alert'}>{t(state.kind === 'loading' ? 'loading' : 'unavailable')}</p>
+    <p className="spiritxOnboardingDescription">{t('laterHelp')}</p>
+    <div className="spiritxOnboardingActions">
+      <Button variant="outline" onClick={finish}>{t('later')}</Button>
+      {state.kind === 'unavailable' ? <Button variant="primary" onClick={() => { setAttempt(value => value + 1) }}>{t('retry')}</Button> : null}
+    </div>
+  </ProductOnboardingModal>
   const save = async (): Promise<void> => {
+    if (saving.current) return
     const value = key.trim()
     if (value.length === 0) { setFailure(t('required')); return }
+    saving.current = true
     setBusy(true); setFailure(undefined)
     try {
       const refused = await storeCredential(value)
       if (refused !== undefined) { setFailure(refused); return }
-      complete()
-    } finally { setBusy(false) }
+      setKey('')
+      finish()
+    } catch {
+      setFailure(t('saveFailed'))
+    } finally { saving.current = false; setBusy(false) }
   }
   return <ProductOnboardingModal title={t('title')}>
     <p className="spiritxOnboardingDescription">{t('description')}</p>
+    <form aria-busy={busy} onSubmit={event => { event.preventDefault(); void save() }}>
     <label className="spiritxOnboardingField">
       <span>{t('keyLabel')}</span>
       <input type="password" autoComplete="off" autoFocus value={key} placeholder={t('keyPlaceholder')}
-        aria-invalid={failure !== undefined} disabled={busy || !state.writable}
+        aria-invalid={failure !== undefined} aria-describedby="spiritx-onboarding-help spiritx-onboarding-error" disabled={busy || !state.writable}
         onChange={(event) => { setKey(event.target.value); setFailure(undefined) }} />
     </label>
-    {failure === undefined ? null : <p className="spiritxOnboardingError" role="alert">{failure}</p>}
+    <p className="spiritxOnboardingDescription" id="spiritx-onboarding-help">{t('laterHelp')}</p>
+    <p className="spiritxOnboardingError" id="spiritx-onboarding-error" role="alert">{failure}</p>
     <div className="spiritxOnboardingActions">
-      <Button variant="outline" disabled={busy} onClick={complete}>{t('later')}</Button>
-      <Button variant="primary" disabled={busy || !state.writable}
-        onClick={() => { void save() }}>{busy ? t('saving') : t('save')}</Button>
+      <Button type="button" variant="outline" disabled={busy} onClick={finish}>{t('later')}</Button>
+      <Button type="submit" variant="primary" disabled={busy || !state.writable}>{busy ? t('saving') : t('save')}</Button>
     </div>
+    </form>
   </ProductOnboardingModal>
 }
 
