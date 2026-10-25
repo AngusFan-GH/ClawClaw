@@ -1,13 +1,13 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
-import { catalogState } from './catalog.js';
+import { catalogState, refreshCatalog, subscribeCatalog } from './catalog.js';
 import { refreshTeams, subscribeTeams, teamState } from './team-cache.js';
 import { useTeamLocale, localizeTeam, localizedExperts } from './team-locale.js';
 import React from 'react';
-import type { ExpertTeam, TeamSnapshot } from '../team-contract.js';
+import { isTeamRecalled, type ExpertTeam, type TeamSnapshot } from '../team-contract.js';
 import type { ExpertSummary } from '../expert-contract.js';
 import type { TeamReferenceTarget } from './team-reference.js';
-import { TeamDetails, unwrap, type TeamRemote } from './team-ui.js';
-import { TeamAvatars, teamIssue, IconEye } from './team-shared.js';
+import { TeamDetails, type TeamRemote } from './team-ui.js';
+import { TeamAvatars, teamIssue, teamRepairIssue, IconEye } from './team-shared.js';
 import { useTeamCapabilityHealth } from './use-team-capabilities.js';
 import type { ExpertCapabilityRegistry } from './capability-registry.js';
 export function TeamMenu(props: {
@@ -26,6 +26,12 @@ export function TeamMenu(props: {
         return catalog.revision < 0 ? [] : [...catalog.experts];
     });
     const experts = localizedExperts(rawExperts, locale);
+    React.useEffect(() => subscribeCatalog(props.remote, () => {
+        const catalog = catalogState(props.remote);
+        setExperts([...catalog.experts]);
+        setSnapshot(current => current && catalog.revision >= current.revision
+            ? { ...current, enabledExperts: [...catalog.enabled], revision: catalog.revision } : current);
+    }), [props.remote]);
     const [query, setQuery] = React.useState('');
     const [error, setError] = React.useState('');
     const [busy, setBusy] = React.useState(false);
@@ -39,8 +45,10 @@ export function TeamMenu(props: {
             if (!alive.current)
                 return;
             const next = teamState(props.remote);
-            if (next)
-                setSnapshot(next);
+            if (next) {
+                const catalog = catalogState(props.remote);
+                setSnapshot(catalog.revision > next.revision ? { ...next, enabledExperts: [...catalog.enabled], revision: catalog.revision } : next);
+            }
         });
         return () => {
             alive.current = false;
@@ -50,18 +58,11 @@ export function TeamMenu(props: {
     }, [props.remote, busy]);
     const load = async () => {
         try {
-            const teams = await refreshTeams(props.remote);
+            const [teams, catalog] = await Promise.all([refreshTeams(props.remote), refreshCatalog(props.remote)]);
             if (!alive.current)
                 return;
-            setSnapshot(teams);
-            const known = catalogState(props.remote);
-            if (known.revision >= 0)
-                setExperts([...known.experts]);
-            else {
-                const catalog = await unwrap(props.remote.getCatalog());
-                if (alive.current)
-                    setExperts(catalog.experts);
-            }
+            setSnapshot(catalog.revision >= teams.revision ? { ...teams, enabledExperts: [...catalog.enabled], revision: catalog.revision } : teams);
+            setExperts([...catalog.experts]);
             if (alive.current)
                 setError('');
         }
@@ -93,10 +94,11 @@ export function TeamMenu(props: {
                 setBusy(false);
         }
     };
-    const teams = snapshot?.teams.map(team => localizeTeam(team, locale)).filter((t) =>
+    const summoned = snapshot?.teams.filter(team => isTeamRecalled(team, snapshot.enabledExperts)) ?? [];
+    const teams = summoned.map(team => localizeTeam(team, locale)).filter((t) =>
         `${t.name} ${t.description}`
             .toLowerCase()
-            .includes(query.toLowerCase())) ?? [];
+            .includes(query.toLowerCase()));
     return (<div className="agt-compact">
       <div className="aag-discovery-tools">
         <input type="search" autoFocus aria-label={tx("搜索专家团")} placeholder={tx("搜索团队或工作目标")} value={query} onChange={(e) => setQuery(e.target.value)}/>
@@ -107,12 +109,14 @@ export function TeamMenu(props: {
         </div>)}
       <div className="agt-compact-list">
         {teams.map((team) => {
-          const blocked = !!snapshot && !!teamIssue(team, experts, snapshot.enabledExperts, healthFor(team, rawExperts));
+          const repair = teamRepairIssue(team, experts, healthFor(team, rawExperts));
+          const checking = repair === '能力检查中';
+          const status = checking ? '能力检查中' : repair ? '需修复' : '已召唤';
           return (<div className="agt-compact-row" key={team.id}>
-            <button type="button" disabled={busy || blocked} onClick={() => void pick(team)}>
+            <button type="button" disabled={busy || !!repair} onClick={() => void pick(team)}>
               <TeamAvatars team={team} experts={experts}/>
               <span>{team.name}</span>
-              <small>{team.members.length}{tx("人")}{blocked ? tx(" · 需修复") : ''}</small>
+              <small>{team.members.length}{tx("人")} · {tx(status)}</small>
             </button>
             <button type="button" aria-label={tx("查看{0}详情", [team.name])} onClick={() => setDetail(team)}>
               <IconEye size={16}/>
@@ -120,9 +124,9 @@ export function TeamMenu(props: {
           </div>);
         })}
         {!teams.length && (<p className="aag-menu-empty" role="status">
-            {snapshot ? tx("没有匹配的专家团。") : tx("正在加载…")}
+            {snapshot ? tx(summoned.length ? "没有匹配的专家团。" : "尚未召唤专家团，请先前往专家团管理页召唤。") : tx("正在加载…")}
           </p>)}
       </div>
-      {detail && (<TeamDetails team={detail} experts={experts} health={healthFor(detail, rawExperts)} close={() => setDetail(null)} onSelect={snapshot && !teamIssue(detail, experts, snapshot.enabledExperts, healthFor(detail, rawExperts)) ? (example) => void pick(detail, example) : undefined}/>)}
+      {detail && summoned.some(team => team.id === detail.id) && (<TeamDetails team={detail} experts={experts} health={healthFor(detail, rawExperts)} close={() => setDetail(null)} onSelect={snapshot && !teamIssue(detail, experts, snapshot.enabledExperts, healthFor(detail, rawExperts)) ? (example) => void pick(detail, example) : undefined}/>)}
     </div>);
 }

@@ -14,6 +14,7 @@ interface CatalogCache {
   listeners: Set<() => void>
   pending?: Promise<CatalogState>
   generation: number
+  enabledReceipt?: { enabled: string[]; revision: number }
 }
 const caches = new WeakMap<AgencyCatalogRemote, CatalogCache>()
 function cache(remote: AgencyCatalogRemote): CatalogCache {
@@ -41,6 +42,9 @@ export function acceptCatalog(remote: AgencyCatalogRemote, value: CatalogSnapsho
 // 查询允许宿主重启后的 revision 重置；写回执必须先通过上面的顺序检查。
 function publishCatalog(remote: AgencyCatalogRemote, value: CatalogSnapshot): CatalogState {
   const entry = cache(remote)
+  if (entry.enabledReceipt && entry.enabledReceipt.revision >= value.revision)
+    value = { ...value, ...entry.enabledReceipt }
+  entry.enabledReceipt = undefined
   entry.generation += 1
   const experts = value.experts.map(expert => ({ ...expert, divisionEn: EN_DIVISION[expert.division] ?? expert.division }))
   if (value.revision === entry.value.revision && JSON.stringify(experts) === JSON.stringify(entry.value.experts)
@@ -56,6 +60,15 @@ function publishCatalog(remote: AgencyCatalogRemote, value: CatalogSnapshot): Ca
 export function acceptEnabled(remote: AgencyCatalogRemote, value: { enabled: string[]; revision: number }): CatalogState {
   const entry = cache(remote)
   if (value.revision < entry.value.revision) return entry.value
+  if (value.revision === entry.value.revision && value.enabled.length === entry.value.enabled.size
+    && value.enabled.every(slug => entry.value.enabled.has(slug))) return entry.value
+  // A partial team/enable receipt cannot stand in for a loaded expert roster.
+  // Retain it for the first full response, including a query already in flight.
+  if (entry.value.revision < 0) {
+    if (!entry.enabledReceipt || value.revision >= entry.enabledReceipt.revision)
+      entry.enabledReceipt = value
+    return entry.value
+  }
   return acceptCatalog(remote, { experts: [...entry.value.experts], enabled: value.enabled, revision: value.revision })
 }
 /** 一次 @ 查询会并发读取多个分区，复用同一个请求而不重复传输名册。 */

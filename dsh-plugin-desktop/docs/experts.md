@@ -21,6 +21,27 @@ the desktop client entry so all three faces use the same ClawClaw release.
 
 ## Runtime Composition
 
+### Team recall and selection
+
+Recalling a team enables all of its member experts in one settings transaction.
+There is no independent team enablement flag or record of which recall button
+was clicked: a team is recalled whenever all of its members are enabled,
+including members enabled individually or through another team.
+
+The management page shows all teams. The composer menu and `@` candidates show
+only recalled teams, using the shared `isTeamRecalled` predicate. Selecting from
+the composer does not enable members. Disabling any member removes its teams
+from the selection list. Capability health is checked separately: disabled
+members mean a team is not recalled; missing members or required capabilities
+need repair; a pending capability check is not a repair failure.
+
+Catalog and team receipts share the settings revision. A partial enabled-member
+receipt must not mark an unloaded expert catalog as loaded, and an older query
+must not overwrite a newer settings receipt. The live UI and cache regression
+tests cover these boundaries.
+
+### Expert execution
+
 An expert run is assembled from three parts at summon time:
 
 1. The expert persona from the bundled catalog or custom settings.

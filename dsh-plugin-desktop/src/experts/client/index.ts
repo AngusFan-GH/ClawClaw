@@ -10,7 +10,7 @@ import { TEAM_REFERENCE_SOURCE, insertTeamReference, teamReference, teamSubmissi
 import { TeamLocaleContext } from './team-locale.js'
 import { localizeTeam } from '../team-content-en.js'
 import { teamText } from '../team-i18n.js'
-import type { ExpertTeam } from '../team-contract.js'
+import { isTeamRecalled, type ExpertTeam } from '../team-contract.js'
 import React from 'react'
 import { CategorySelect } from './category-select.js'
 import { ExpertDiscovery, DISCOVERY_CSS } from './expert-discovery.js'
@@ -1286,17 +1286,14 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       setInitialOrder((order) => order ?? sortExpertsByEnabled(current.experts, current.enabled).map((expert) => expert.slug))
     }
     const loadCatalog = (): Promise<void> => readEnabled(props.remote).then((current) => { if (alive) applySnapshot(current) })
-    const known = catalogState(props.remote)
-    const pending = known.revision < 0
-      ? loadCatalog()
-      : props.remote.getEnabled().then(result => {
-        if (!alive || !result.ok || result.value.revision === known.revision) return
-        return loadCatalog()
-      })
+    const pending = loadCatalog()
     void pending.catch((err: unknown) => {
       if (alive && catalogState(props.remote).revision < 0) setError(err instanceof Error ? err.message : String(err))
     })
-    return () => { alive = false }
+    const timer = setInterval(() => {
+      if (!saving.current) void loadCatalog().catch(() => {})
+    }, 3000)
+    return () => { alive = false; clearInterval(timer) }
   }, [props.remote])
 
   const toggle = (slug: string): void => {
@@ -1793,7 +1790,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     const teamsRemote = remote as TeamRemote
     let snapshot = teamState(teamsRemote) ?? await refreshTeams(teamsRemote)
     let current = snapshot.teams.find(item => item.id === team.id) ?? team
-    if (!current.members.every(member => snapshot.enabledExperts.includes(member.expertSlug))) {
+    if (!isTeamRecalled(current, snapshot.enabledExperts)) {
       const next = await unwrap(teamsRemote.recallTeam(current.id, snapshot.revision))
       snapshot = acceptTeamSnapshot(teamsRemote, next)
       current = snapshot.teams.find(item => item.id === team.id) ?? current
@@ -2026,7 +2023,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           const snapshot = cached ?? await refreshTeams(teamRemote)
           if (cached) void refreshTeams(teamRemote).catch((error: unknown) => console.warn('[clawclaw-experts] 专家团刷新失败：', error))
           teamCache = snapshot.teams
-            .filter(team => team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug)))
+            .filter(team => isTeamRecalled(team, snapshot.enabledExperts))
             .map(team => localizeTeam(team, active))
           return teamCache.filter(team => `${team.name}`.toLowerCase().includes(String(request.query ?? '').toLowerCase())).map(team => ({ name: `${team.name} · ${teamText(active, '专家团')}`, hint: team.id, section: teamText(active, '专家团') }))
         },
@@ -2043,7 +2040,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           serialize: async id => {
             const [snapshot, catalog] = await Promise.all([refreshTeams(teamRemote), unwrap(teamRemote.getCatalog())])
             teamCache = snapshot.teams
-              .filter(team => team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug)))
+              .filter(team => isTeamRecalled(team, snapshot.enabledExperts))
               .map(team => localizeTeam(team, active))
             const team = teamCache.find(team => team.id === id)
             const legacy = snapshot.teams.find(candidate => candidate.id === id)

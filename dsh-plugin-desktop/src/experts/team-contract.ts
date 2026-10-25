@@ -104,6 +104,10 @@ export const teamSchema = z.object({
   conversationCreated: z.boolean().optional(),
 }).strict()
 export type ExpertTeam = z.infer<typeof teamSchema>
+/** Recall enables every member; settings, composer and @ must share this rule. */
+export function isTeamRecalled(team: Pick<TeamInput, 'members'>, enabledExperts: readonly string[]): boolean {
+  return team.members.length > 0 && team.members.every(member => enabledExperts.includes(member.expertSlug))
+}
 export const teamSnapshotSchema = z.object({
   teams: z.array(teamSchema),
   enabledExperts: z.array(z.string()),

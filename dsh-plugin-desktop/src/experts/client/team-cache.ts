@@ -44,6 +44,7 @@ function publishTeams(remote: AgencyTeamsRemote, value: TeamSnapshot): TeamSnaps
   entry.generation += 1
   if (entry.value !== null && sameSnapshot(entry.value, value)) return entry.value
   entry.value = value
+  acceptEnabled(remote as AgencyTeamsRemote & AgencyCatalogRemote, { enabled: value.enabledExperts, revision: value.revision })
   for (const listener of entry.listeners) listener()
   return entry.value
 }

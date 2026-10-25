@@ -1,5 +1,5 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
-import { catalogState } from './catalog.js';
+import { catalogState, refreshCatalog, subscribeCatalog } from './catalog.js';
 import { acceptTeamSnapshot, refreshTeams, subscribeTeams, teamState } from './team-cache.js';
 import { useTeamLocale, localizeTeam, localizedExperts } from './team-locale.js';
 import { LibraryCard } from './library-ui.js';
@@ -11,7 +11,7 @@ import { Button, Input, MaybeAntdProvider } from './antd-ui.js';
 import { antdLocale } from './antd-locale.js';
 import { CategorySelect } from './category-select.js';
 import React from 'react';
-import { effectiveCoordinator, type ExpertTeam, type TeamInput, type TeamSnapshot, } from '../team-contract.js';
+import { effectiveCoordinator, isTeamRecalled, type ExpertTeam, type TeamInput, type TeamSnapshot, } from '../team-contract.js';
 import type { ExpertSummary } from '../expert-contract.js';
 import type { AgencyCatalogRemote, AgencyTeamsRemote } from './remote.js';
 import { TeamEditor } from './team-editor.js';
@@ -171,6 +171,12 @@ export function TeamsPanel(props: {
         return catalog.revision < 0 ? [] : [...catalog.experts];
     });
     const experts = localizedExperts(rawExperts, locale);
+    React.useEffect(() => subscribeCatalog(props.remote, () => {
+        const catalog = catalogState(props.remote);
+        setExperts([...catalog.experts]);
+        setSnapshot(current => current && catalog.revision >= current.revision
+            ? { ...current, enabledExperts: [...catalog.enabled], revision: catalog.revision } : current);
+    }), [props.remote]);
     React.useEffect(() => {
         const available = snapshot?.teams.filter(team => !teamIssue(team, rawExperts, snapshot.enabledExperts, healthFor(team, rawExperts))).length ?? 0;
         props.onSummary?.({ total: snapshot?.teams.length ?? 0, enabled: available });
@@ -204,7 +210,8 @@ export function TeamsPanel(props: {
             if (!next)
                 return;
             sequence.current++;
-            setSnapshot(next);
+            const catalog = catalogState(props.remote);
+            setSnapshot(catalog.revision > next.revision ? { ...next, enabledExperts: [...catalog.enabled], revision: catalog.revision } : next);
         });
         return () => {
             alive.current = false;
@@ -216,21 +223,13 @@ export function TeamsPanel(props: {
     const load = async () => {
         const generation = ++sequence.current;
         try {
-            const teams = await refreshTeams(props.remote);
+            const [teams, catalog] = await Promise.all([refreshTeams(props.remote), refreshCatalog(props.remote)]);
             if (!alive.current)
                 return;
             // 团队缓存通知会推进 sequence，避免旧查询覆盖新快照；专家名册仍要落到当前面板。
             if (generation === sequence.current)
-                setSnapshot(teams);
-            const known = catalogState(props.remote);
-            if (known.revision >= 0)
-                setExperts([...known.experts]);
-            else {
-                const catalog = await unwrap(props.remote.getCatalog());
-                if (!alive.current)
-                    return;
-                setExperts(catalog.experts);
-            }
+                setSnapshot(catalog.revision >= teams.revision ? { ...teams, enabledExperts: [...catalog.enabled], revision: catalog.revision } : teams);
+            setExperts([...catalog.experts]);
             setError('');
         }
         catch (cause) {
@@ -300,9 +299,10 @@ export function TeamsPanel(props: {
     const filteredTeams = snapshot?.teams.map(team => localizeTeam(team, locale)).filter(team =>
         (filter === 'all' || teamSource(team) === filter) &&
         (!status || (() => {
-            const repair = teamRepairIssue(team, experts, healthFor(team, rawExperts)) !== undefined;
-            const recalled = team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug));
-            return status === 'available' ? recalled && !repair : status === 'recall' ? !recalled && !repair : repair;
+            const issue = teamRepairIssue(team, experts, healthFor(team, rawExperts));
+            const repair = issue !== undefined && issue !== '能力检查中';
+            const recalled = isTeamRecalled(team, snapshot.enabledExperts);
+            return status === 'available' ? recalled && !issue : status === 'recall' ? !recalled && !issue : repair;
         })()) &&
         `${team.name} ${team.description} ${team.goal} ${team.deliveryRequirements} ${team.tags.join(' ')} ${team.examples.join(' ')} ${team.members.map(member => experts.find(expert => expert.slug === member.expertSlug)?.name ?? '').join(' ')}`
             .toLowerCase().includes(query.toLowerCase())) ?? [];
@@ -359,14 +359,14 @@ export function TeamsPanel(props: {
             const repairIssue = teamRepairIssue(team, experts, healthFor(team, rawExperts));
             const memberCount = team.members.length;
             const validMembers = team.members.every(member => experts.some(expert => expert.slug === member.expertSlug && !expert.conflict));
-            const recalled = team.members.every(member => snapshot!.enabledExperts.includes(member.expertSlug));
+            const recalled = isTeamRecalled(team, snapshot!.enabledExperts);
             return (<LibraryCard key={team.id} testId="team-card" name={team.name} avatar={<div className="aag-team-avatar">
                   <TeamAvatars team={team} experts={experts}/>
-                </div>} metadata={<>{tx("{0} 位专家", [memberCount])}{team.tags.slice(0, 2).map(tag => <span key={tag} className="aag-source-badge">{tag}</span>)}{repairIssue ? <> · {tx("需修复")}</> : null}</>} description={repairIssue
+                </div>} metadata={<>{tx("{0} 位专家", [memberCount])}{team.tags.slice(0, 2).map(tag => <span key={tag} className="aag-source-badge">{tag}</span>)}{repairIssue ? <> · {tx(repairIssue === '能力检查中' ? repairIssue : "需修复")}</> : null}</>} description={repairIssue
                     ? `${team.description} ${tx(repairIssue)}`
                     : team.description} guidance={<span title={team.deliveryRequirements}>{tx('交付要求')} · {team.deliveryRequirements}</span>} openLabel={tx("查看详情")} onOpen={() => setDetails(team)} actions={<>
                   <button type="button" className={`aag-card-action aag-card-action-primary aag-team-summon${recalled ? ' is-active' : ''}`} disabled={busy || recalled || !validMembers || !!repairIssue} title={tx("召唤团队成员")} aria-label={tx("召唤团队成员")} aria-pressed={recalled} onClick={() => void summon(team)}>
-                    <IconUsers size={18}/>{tx("召唤")}</button>
+                    <IconUsers size={18}/>{tx(recalled ? "已召唤" : "召唤")}</button>
                   <button type="button" className="aag-card-action aag-team-copy" disabled={busy} onClick={() => copy(team)}>
                     <CopyPlus size={17} strokeWidth={1.7} aria-hidden="true"/>{tx("复制")}</button>
                   {!team.builtin && <button type="button" className="aag-card-action aag-team-edit" disabled={busy} onClick={() => edit(team)}>

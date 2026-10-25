@@ -8,6 +8,7 @@ import { acceptTeamSnapshot } from '../src/experts/client/team-cache.ts'
 import { TeamLocaleContext } from '../src/experts/client/team-locale.ts'
 import { isDeletableTeam, TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
 import { TeamEditor } from '../src/experts/client/team-editor.tsx'
+import { TeamMenu } from '../src/experts/client/team-composer.tsx'
 import { customZh } from '../src/experts/client/custom-locales.ts'
 import { BUILTIN_TEAMS } from '../src/experts/team-contract.ts'
 
@@ -37,6 +38,80 @@ afterEach(async () => {
 })
 
 describe('expert team live UI state', () => {
+  it('only lists summoned teams and removes them immediately when a member is disabled', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    const team = { ...structuredClone(BUILTIN_TEAMS[0]!), members: [{ expertSlug: expert.slug, duty: 'Review', instructions: 'Inspect evidence.' }] }
+    let snapshot = { teams: [team], enabledExperts: [] as string[], revision: 1 }
+    const insert = vi.fn(async () => true)
+    const selected = vi.fn()
+    const remote = {
+      getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert], enabled: snapshot.enabledExperts, revision: snapshot.revision } })),
+      getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
+      recallTeam: vi.fn(),
+    } as unknown as TeamRemote
+    const host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await act(async () => root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' },
+      React.createElement(TeamMenu, { remote, prepareSelect: () => insert, onSelected: selected }))))
+    expect(host.querySelector('.agt-compact-row')).toBeNull()
+    expect(host.textContent).toContain('尚未召唤专家团')
+    snapshot = { ...snapshot, enabledExperts: ['reviewer'], revision: 2 }
+    await act(async () => { acceptTeamSnapshot(remote, snapshot) })
+    const button = host.querySelector<HTMLButtonElement>('.agt-compact-row > button')!
+    expect(button.textContent).toContain('已召唤')
+    expect(button.disabled).toBe(false)
+    await act(async () => { button.click() })
+    expect(remote.recallTeam).not.toHaveBeenCalled()
+    expect(insert).toHaveBeenCalledExactlyOnceWith(team, undefined)
+    expect(selected).toHaveBeenCalledOnce()
+    expect(button.textContent).toContain('已召唤')
+    snapshot = { ...snapshot, enabledExperts: [], revision: 3 }
+    await act(async () => { acceptCatalog(remote, { experts: [expert], enabled: [], revision: 3 }) })
+    expect(host.querySelector('.agt-compact-row')).toBeNull()
+    expect(host.textContent).toContain('尚未召唤专家团')
+  })
+
+  it('keeps recalled teams visible while hiding teams with only some members enabled', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    const writer = { ...expert, slug: 'writer', name: '写作专家' }
+    const team = { ...structuredClone(BUILTIN_TEAMS[0]!), members: [expert, writer].map(item => ({ expertSlug: item.slug, duty: 'Review', instructions: 'Inspect evidence.' })) }
+    const recalled = { ...team, id: 'recalled-review', name: '已就绪评审团', members: [team.members[0]!] }
+    const snapshot = { teams: [team, recalled], enabledExperts: ['reviewer'], revision: 1 }
+    const remote = {
+      getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert, writer], enabled: ['reviewer'], revision: 1 } })),
+      getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
+    } as unknown as TeamRemote
+    const host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await act(async () => root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' }, React.createElement(TeamMenu, { remote, onSelected: vi.fn() }))))
+    expect(host.querySelectorAll('.agt-compact-row')).toHaveLength(1)
+    expect(host.textContent).toContain(recalled.name)
+    expect(host.textContent).not.toContain(team.name)
+    await act(async () => { acceptCatalog(remote, { experts: [expert, writer], enabled: ['reviewer', 'writer'], revision: 2 }) })
+    expect(host.querySelectorAll('.agt-compact-row')).toHaveLength(2)
+    expect(host.textContent).toContain(team.name)
+  })
+
+  it('refreshes a stale expert roster and updates team summon state after expert changes', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const team = { ...structuredClone(BUILTIN_TEAMS[0]!), members: [{ expertSlug: expert.slug, duty: 'Review', instructions: 'Inspect evidence.' }] }
+    const snapshot = { teams: [team], enabledExperts: ['reviewer'], revision: 2 }
+    const remote = {
+      getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert], enabled: ['reviewer'], revision: 2 } })),
+      getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
+    } as unknown as TeamRemote
+    acceptTeamSnapshot(remote, snapshot)
+    const host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await act(async () => root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' }, React.createElement(TeamsPanel, { remote, sharedHeader: true }))))
+    expect(remote.getCatalog).toHaveBeenCalledOnce()
+    expect(host.textContent).not.toContain('需修复')
+    const button = host.querySelector<HTMLButtonElement>('.aag-team-summon')!
+    expect(button.textContent).toBe('已召唤')
+    expect(button.disabled).toBe(true)
+    await act(async () => { acceptCatalog(remote, { experts: [expert], enabled: [], revision: 3 }) })
+    expect(button.textContent).toBe('召唤')
+    expect(button.disabled).toBe(false)
+  })
+
   it('blocks a team with missing member Skills and updates when the shared registry becomes ready', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
@@ -197,10 +272,10 @@ describe('expert team live UI state', () => {
     expect(host.querySelector<HTMLButtonElement>('.aag-team-copy')?.textContent).toBe('复制')
     expect(host.querySelector('.aag-team-copy .lucide-copy-plus')).not.toBeNull()
     const summon = host.querySelector<HTMLButtonElement>('.aag-team-summon')
-    expect(summon?.textContent).toBe('召唤')
+    expect(summon?.textContent).toBe('已召唤')
     expect(summon?.classList.contains('is-active')).toBe(true)
     expect(summon?.getAttribute('aria-pressed')).toBe('true')
-    expect(host.querySelector('[data-testid="team-card"]')?.textContent).not.toContain('已召唤')
+    expect(host.querySelector('[data-testid="team-card"]')?.textContent).toContain('已召唤')
     expect(host.querySelector('[data-testid="team-card"]')?.textContent).not.toContain('已召回')
     await act(async () => details?.click())
     expect(document.querySelector('.aag-team-details-drawer')).not.toBeNull()
