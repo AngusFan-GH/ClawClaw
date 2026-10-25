@@ -235,8 +235,8 @@ function LiveSuggestionComposer({ sectionComponent: Composer, suggestionContext:
   </div></DraftAssistanceProvider>
 }
 
-const zh = { title: 'AI 输入建议', description: '基于当前对话调用已配置的模型，生成下一步请求建议。按 Tab 或 Enter 采纳后可编辑或发送。' }
-const en: Record<keyof typeof zh, string> = { title: 'AI input suggestions', description: 'Uses your configured model and current conversation to suggest a next request. Press Tab or Enter to adopt, then edit or send.' }
+const zh = { title: 'AI建议', description: '根据对话推荐下一步提问，按 Tab 或 Enter 采纳。' }
+const en: Record<keyof typeof zh, string> = { title: 'AI suggestions', description: 'Suggests what to ask next. Press Tab or Enter to accept.' }
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'desktop.input-suggestions': keyof typeof zh }
   interface LocaleNamespaceMap { 'desktop.continuation': keyof typeof zh }
@@ -298,15 +298,15 @@ export function applyInputSuggestions(ctx: Context): void {
   const optimizationSettings = immediateSuggestionSettings(ctx.configForms.get<InputSuggestionsSettings>(OPTIMIZATION_ENTRY))
   ctx.effect(() => ctx.locale.register('desktop.input-suggestions', { zh, en }), 'desktop: input suggestions locale')
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item', id: INPUT_SUGGESTIONS_ENTRY, order: 36, locale: 'desktop.input-suggestions',
+    name: 'settings.general.item', id: INPUT_SUGGESTIONS_ENTRY, order: 33, locale: 'desktop.input-suggestions',
     inject: () => ({ settings }),
   }, SuggestionSettings))
   ctx.effect(() => ctx.locale.register('desktop.continuation', {
-    zh: { title: '输入时 AI 续写', description: '输入至少六个字并停顿后，生成灰色续写；Tab 采纳，Enter 仅发送原草稿。功能调用已配置的模型。' },
-    en: { title: 'AI continuation', description: 'After typing at least six characters and pausing, show a gray continuation. Tab accepts; Enter sends only your draft. Uses your configured model.' },
+    zh: { title: 'AI补全', description: '输入时提供补全建议，按 Tab 采纳。' },
+    en: { title: 'AI completion', description: 'Suggests completions as you type. Press Tab to accept.' },
   }), 'desktop: continuation locale')
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item', id: CONTINUATION_ENTRY, order: 37, locale: 'desktop.continuation', inject: () => ({ settings: continuationSettings }),
+    name: 'settings.general.item', id: CONTINUATION_ENTRY, order: 34, locale: 'desktop.continuation', inject: () => ({ settings: continuationSettings }),
   }, SuggestionSettings))
   ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
     name: 'conversation.input.left', id: OPTIMIZATION_ENTRY, order: 31,

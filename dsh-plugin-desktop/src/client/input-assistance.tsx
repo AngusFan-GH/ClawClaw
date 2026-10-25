@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InputActions } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -12,19 +12,19 @@ import { Button, Modal, IconCheckOutlineRegular, IconCloseOutlineRegular, IconRe
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.mjs'
 // @ts-expect-error package subpath has no declaration file
 import FileText from 'lucide-react/dist/esm/icons/file-text.mjs'
-import { ASSISTANCE_PATH, type DraftAssistResult, type ContinuationDiagnostic } from '../input-assistance-contract.ts'
+import { ASSISTANCE_PATH, type ContinuationDiagnostic } from '../input-assistance-contract.ts'
 import { DraftAssistanceState, type AssistTransport } from './input-assistance-state.ts'
 import { inputSettingEnabled } from './input-assistance-settings.ts'
 import { continuationCssText, continuationSurface } from './input-continuation-presentation.ts'
+import { readAssistanceStream } from './input-assistance-stream.ts'
 
 type EnabledForm = ConfigForm<{ enabled: boolean }>
 const AssistanceContext = createContext<{ state: DraftAssistanceState; sync(): void; language: string; optimizationEnabled: boolean } | undefined>(undefined)
 const transport: AssistTransport = {
-  generate: async (request, signal) => {
+  generate: async (request, signal, progress) => {
     const response = await fetch(`${ASSISTANCE_PATH}/${request.kind}/action`, { method: 'POST', signal,
-      headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) })
-    if (!response.ok) throw new Error('Draft assistance unavailable')
-    return await response.json() as DraftAssistResult
+      headers: { 'content-type': 'application/json', ...(request.kind === 'optimization' ? { accept: 'application/x-ndjson' } : {}) }, body: JSON.stringify(request) })
+    return await readAssistanceStream(response, request, signal, progress)
   },
   cancel: (request, reason) => {
     void fetch(`${ASSISTANCE_PATH}/${request.kind}/action`, { method: 'POST', keepalive: true,
@@ -92,7 +92,7 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
   let events = binding.eventSource.getSnapshot().revision
   const state = new DraftAssistanceState({
     cancel: (request, reason) => api.cancel(request, reason),
-    generate: async (request, signal) => { sync(); signal.throwIfAborted(); const result = await api.generate(request, signal); sync(); return result },
+    generate: async (request, signal, progress) => { sync(); signal.throwIfAborted(); const result = await api.generate(request, signal, event => { sync(); progress?.(event) }); sync(); return result },
   }, () => {
     if (state.phase === 'idle' && state.text !== '') api.report?.(surface() === undefined ? 'result-unpositioned' : 'result-shown', input.state.getSnapshot().draftRev)
     changed()
@@ -199,9 +199,34 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
   return { state, sync, start, surface, draftRevision: () => input.state.getSnapshot().draftRev }
 }
 
+/** Follow new output, but preserve the reader's position after a manual upward scroll. */
+function useOptimizationScroll(state: DraftAssistanceState | undefined) {
+  const content = useRef<HTMLDivElement>(null)
+  const update = useRef<() => void>(() => {})
+  const shown = state?.phase === 'generating' || state?.phase === 'preview'
+  useLayoutEffect(() => {
+    const node = content.current, scrollport = node?.parentElement
+    if (!shown || !node || !scrollport) return
+    let following = true
+    const scroll = (): void => {
+      following = scrollport.scrollHeight - scrollport.clientHeight - scrollport.scrollTop <= 24
+    }
+    const follow = (): void => { if (following) scrollport.scrollTop = scrollport.scrollHeight }
+    update.current = follow
+    scrollport.addEventListener('scroll', scroll, { passive: true })
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(follow)
+    observer?.observe(node); observer?.observe(scrollport)
+    follow()
+    return () => { update.current = () => {}; scrollport.removeEventListener('scroll', scroll); observer?.disconnect() }
+  }, [shown])
+  useLayoutEffect(() => update.current(), [shown, state?.reasoning, state?.streamText, state?.text, state?.notes])
+  return content
+}
+
 export function DraftOptimizationButton({ inputActions, useInput }: PropsRuntime<'conversation.input.left'>): JSX.Element | null {
   const runtime = useContext(AssistanceContext)
   const input = useInput(value => value)
+  const preview = useOptimizationScroll(runtime?.state)
   if (runtime === undefined || !runtime.optimizationEnabled) return null
   const { state, sync } = runtime
   const zh = runtime.language.startsWith('zh')
@@ -214,17 +239,20 @@ export function DraftOptimizationButton({ inputActions, useInput }: PropsRuntime
       onClick={() => { sync(); state.optimize() }}><span className="dshAiOptimizeTriggerLabel">{label}</span></Button>
     <Modal open={state.phase !== 'idle'} onClose={() => state.close()} title={label} closeLabel={zh ? '关闭' : 'Close'}
       className="dshAiOptimizeDialog" contentClassName="dshAiOptimizeDialogContent"
-      description={zh ? '整理表达与结构，保留原意和约束。确认替换前，原草稿保持不变。' : 'Improve clarity and structure while preserving meaning and constraints. Your draft stays unchanged until you replace it.'}
+      description={zh ? '确认替换前，原草稿保持不变。' : 'Your draft stays unchanged until you replace it.'}
       footer={<div className="dshAiOptimizeActions"><Button variant="outline" icon={<IconCloseOutlineRegular />} onClick={() => state.close()}>{zh ? '取消' : 'Cancel'}</Button>
         {state.phase === 'preview' && <Button variant="primary" icon={<IconCheckOutlineRegular />} onClick={() => { sync(); state.replace(inputActions) }}>{zh ? '替换草稿' : 'Replace draft'}</Button>}
         {(state.phase === 'error' || state.phase === 'empty') && <Button variant="primary" icon={<IconRefreshOutlineRegular />} onClick={() => { sync(); state.optimize() }}>{zh ? '重试' : 'Retry'}</Button>}</div>}>
-      {state.phase === 'generating' && <div className="dshAiOptimizeStatus" role="status" aria-live="polite"><IconRefreshOutlineRegular className="dshAiOptimizeSpinner" size={24} /><p>{zh ? '正在优化草稿…' : 'Optimizing draft…'}</p></div>}
       {state.phase === 'empty' && <div className="dshAiOptimizeStatus" role="status"><Sparkles size={24} aria-hidden="true" /><p>{zh ? '未生成可用的修改，已保留原草稿。' : 'No usable changes. Your original draft is preserved.'}</p></div>}
       {state.phase === 'error' && <div className="dshAiOptimizeStatus" role="alert"><p>{zh ? '优化失败或超时，请重试。' : 'Optimization failed or timed out. Please retry.'}</p></div>}
-      {state.phase === 'preview' && <div className="dshAiOptimizePreview">
-        <section className="dshAiOptimizePane"><h3><FileText size={14} aria-hidden="true" />{zh ? '原文' : 'Original'}</h3><pre>{state.original}</pre></section>
-        <section className="dshAiOptimizePane" data-result><h3><Sparkles size={14} aria-hidden="true" />{zh ? '优化后' : 'Optimized'}</h3><pre>{state.text}</pre></section>
-        {state.notes.length > 0 && <section className="dshAiOptimizeNotes"><h3>{zh ? '待补充信息' : 'Missing information'}</h3><ul>{state.notes.map((note, i) => <li key={i}>{note}</li>)}</ul></section>}
+      {(state.phase === 'preview' || state.phase === 'generating') && <div ref={preview} className="dshAiOptimizePreview">
+        <section className="dshAiOptimizeText" data-original><h3><FileText size={14} aria-hidden="true" />{zh ? '优化前' : 'Before'}</h3><pre>{state.original}</pre></section>
+        <section className="dshAiOptimizeText" data-result aria-busy={state.phase === 'generating'}><h3><Sparkles size={14} aria-hidden="true" />{zh ? '优化后' : 'After'}</h3>
+          {state.phase === 'generating' && <div className="dshAiOptimizeProgress" role="status"><IconRefreshOutlineRegular className="dshAiOptimizeSpinner" size={14} /><span>{zh ? '正在优化草稿…' : 'Optimizing draft…'}</span></div>}
+          <pre>{state.phase === 'generating' ? state.streamText : state.text}</pre>
+          {state.reasoning !== '' && <details className="dshAiOptimizeReasoning" open={state.phase === 'generating' && state.streamText === ''}><summary tabIndex={0}>{zh ? '思考过程' : 'Reasoning'}</summary><pre>{state.reasoning}</pre></details>}
+        </section>
+        {state.notes.length > 0 && <section className="dshAiOptimizeNotes"><h3>{zh ? '优化说明' : 'Edit notes'}</h3><ul>{state.notes.map((note, i) => <li key={i}>{note}</li>)}</ul></section>}
       </div>}
     </Modal>
   </>

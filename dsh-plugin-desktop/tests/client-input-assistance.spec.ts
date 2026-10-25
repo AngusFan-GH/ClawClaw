@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftAssistanceState, type AssistSnapshot } from '../src/client/input-assistance-state.ts'
-import type { DraftAssistRequest, DraftAssistResult } from '../src/input-assistance-contract.ts'
+import { OPTIMIZATION_CLIENT_TIMEOUT_MS, type DraftAssistRequest, type DraftAssistResult, type DraftAssistProgress } from '../src/input-assistance-contract.ts'
 
 const initial: AssistSnapshot = { sessionId: 'a', context: 'model:context', available: true, atEnd: true,
   continuationEnabled: true, optimizationEnabled: true,
@@ -76,8 +76,28 @@ describe('continuation and optimization lifecycle', () => {
     h.update({ atEnd: true }); await vi.advanceTimersByTimeAsync(4000); expect(h.api.generate).toHaveBeenCalledOnce(); h.state.dispose()
   })
   it('handles a client timeout without leaving a late preview or timers', async () => {
-    const h = harness(); h.state.optimize(); await vi.advanceTimersByTimeAsync(20_000)
+    const h = harness(); h.state.optimize(); await vi.advanceTimersByTimeAsync(OPTIMIZATION_CLIENT_TIMEOUT_MS)
     expect(h.state.phase).toBe('error'); await h.finish('Late result.'); expect(h.state.text).toBe('')
     h.state.dispose(); expect(vi.getTimerCount()).toBe(0)
+  })
+  it('keeps streamed output separate from adoptable text and rejects late progress after closing', async () => {
+    let publish!: (event: DraftAssistProgress) => void
+    let finish!: (value: DraftAssistResult) => void
+    const state = new DraftAssistanceState({ generate: (_request, _signal, progress) => {
+      publish = progress!; return new Promise(resolve => { finish = resolve })
+    }, cancel: vi.fn() }, vi.fn(), () => 'stream')
+    state.update(initial); state.optimize()
+    publish({ requestId: 'stream', draftRev: 1, channel: 'reasoning', delta: '整理结构。' })
+    publish({ requestId: 'stream', draftRev: 1, channel: 'text', delta: 'Improved' })
+    expect(state.reasoning).toBe('整理结构。'); expect(state.streamText).toBe('Improved')
+    expect(state.text).toBe(''); expect(state.phase).toBe('generating')
+    const insertText = vi.fn(() => true)
+    expect(state.replace({ insertText })).toBe(false); expect(insertText).not.toHaveBeenCalled()
+    state.close()
+    publish({ requestId: 'stream', draftRev: 1, channel: 'text', delta: 'late' })
+    finish({ requestId: 'stream', draftRev: 1, text: 'Improved draft.', notes: [] })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(state.streamText).toBe(''); expect(state.reasoning).toBe(''); expect(state.phase).toBe('idle')
+    state.dispose()
   })
 })

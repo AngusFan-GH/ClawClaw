@@ -53,9 +53,10 @@ export interface DesktopJsonApiOptions {
   readonly maxBodyBytes?: number
   readonly read: () => Promise<object>
   readonly action: (value: unknown) => Promise<object>
+  readonly streamAction?: (value: unknown, emit: (event: object) => void, signal: AbortSignal) => Promise<object>
 }
 
-/** Register a loopback-only, same-origin JSON read/action pair. */
+/** Register a loopback-only, same-origin JSON pair with optional bounded action streaming. */
 export function registerDesktopJsonApi(ctx: Context, options: DesktopJsonApiOptions): void {
   const expectedOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
   const register = (path: string, action: boolean): void => {
@@ -72,7 +73,24 @@ export function registerDesktopJsonApi(ctx: Context, options: DesktopJsonApiOpti
           return finishJson(res, 415, { error: 'content type must be application/json' })
         }
         try {
-          finishJson(res, 200, action ? await options.action(await readJson(req, options.maxBodyBytes ?? MAX_BODY_BYTES)) : await options.read())
+          const value = action ? await readJson(req, options.maxBodyBytes ?? MAX_BODY_BYTES) : undefined
+          if (action && options.streamAction !== undefined && req.headers.accept === 'application/x-ndjson') {
+            const abort = new AbortController()
+            const close = (): void => abort.abort()
+            res.on('close', close)
+            const emit = (event: object): void => {
+              if (!abort.signal.aborted && !res.writableEnded) res.write(`${JSON.stringify(event)}\n`)
+            }
+            try {
+              res.setHeader('content-type', 'application/x-ndjson; charset=utf-8')
+              res.setHeader('cache-control', 'no-store, no-transform')
+              res.setHeader('x-content-type-options', 'nosniff')
+              res.flushHeaders()
+              const result = await options.streamAction(value, emit, abort.signal)
+              emit({ type: 'result', result })
+            } catch { emit({ type: 'error' }) }
+            finally { res.off('close', close); if (!res.writableEnded) res.end() }
+          } else finishJson(res, 200, action ? await options.action(value) : await options.read())
         } catch (cause) {
           const status = cause instanceof BodyTooLargeError ? 413 : cause instanceof TypeError ? 400 : 409
           finishJson(res, status, { error: cause instanceof Error ? cause.message : `${options.label} operation failed` })

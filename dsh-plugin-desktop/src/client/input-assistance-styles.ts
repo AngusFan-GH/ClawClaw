@@ -14,17 +14,22 @@ button.dshAiOptimizeTrigger { flex:none; white-space:nowrap; color:var(--dsw-ali
   .dshAiOptimizeTrigger { width:28px; padding:0; gap:0; }
   .dshAiOptimizeTriggerLabel { display:none; }
 }
-.dshAiOptimizeDialog { width:min(840px,100%); max-height:100%; min-height:0; padding-bottom:20px; }
-.dshAiOptimizeDialogContent { min-height:0; overflow:auto; overscroll-behavior:contain; }
+.dshAiOptimizeDialog { width:min(720px,100%); max-height:100%; min-height:0; }
+.dshAiOptimizeDialogContent { min-height:0; overflow:hidden; }
+.dshAiOptimizeDialogContent > :not(:last-child) { flex-shrink:0; }
+.dshAiOptimizeDialogContent > :last-child { min-height:0; overflow:auto; overscroll-behavior:contain; }
 .dshAiOptimizeDialog > :last-child { flex-shrink:0; }
-.dshAiOptimizePreview { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; min-width:0; }
-.dshAiOptimizePane { min-width:0; border:1px solid var(--dsw-alias-border-l2); border-radius:12px; overflow:hidden; }
-.dshAiOptimizePane h3,.dshAiOptimizeNotes h3 { margin:0; display:flex; align-items:center; gap:8px; padding:12px 16px; font-size:13px; font-weight:500; line-height:20px; color:var(--dsw-alias-label-secondary); }
-.dshAiOptimizePane h3 { border-bottom:1px solid var(--dsw-alias-border-l2); background:var(--dsw-alias-bg-layer-1); }
-.dshAiOptimizePane pre { margin:0; padding:16px; white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit; font-size:14px; line-height:24px; color:var(--dsw-alias-label-primary); }
-.dshAiOptimizePane[data-result] { border-color:var(--dsw-alias-brand-primary); }
-.dshAiOptimizeNotes { grid-column:1/-1; min-width:0; border-radius:12px; background:var(--dsw-alias-bg-layer-1); }
-.dshAiOptimizeNotes ul { margin:0; padding:0 20px 16px 36px; font-size:13px; line-height:22px; color:var(--dsw-alias-label-secondary); overflow-wrap:anywhere; }
+.dshAiOptimizePreview { display:flex; flex-direction:column; gap:20px; min-width:0; }
+.dshAiOptimizeText,.dshAiOptimizeNotes { min-width:0; }
+.dshAiOptimizePreview > * + * { border-top:1px solid var(--dsw-alias-border-l2); padding-top:16px; }
+.dshAiOptimizeText h3,.dshAiOptimizeNotes h3 { margin:0 0 8px; display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; line-height:20px; color:var(--dsw-alias-label-secondary); }
+.dshAiOptimizeText pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit; font-size:14px; line-height:24px; color:var(--dsw-alias-label-primary); }
+.dshAiOptimizeNotes ul { margin:0; padding-left:20px; font-size:13px; line-height:22px; color:var(--dsw-alias-label-secondary); overflow-wrap:anywhere; }
+.dshAiOptimizeReasoning { margin-top:12px; }
+.dshAiOptimizeReasoning summary { cursor:pointer; font-size:13px; line-height:20px; color:var(--dsw-alias-label-secondary); }
+.dshAiOptimizeReasoning summary:focus-visible { outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary)); outline-offset:2px; }
+.dshAiOptimizeReasoning pre { margin-top:8px; color:var(--dsw-alias-label-secondary); }
+.dshAiOptimizeProgress { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:13px; line-height:20px; color:var(--dsw-alias-label-secondary); }
 .dshAiOptimizeActions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; width:100%; }
 .dshAiOptimizeStatus { display:flex; flex-direction:column; align-items:center; gap:12px; padding:28px 16px; text-align:center; color:var(--dsw-alias-label-secondary); font-size:14px; line-height:22px; }
 .dshAiOptimizeStatus p { margin:0; }
@@ -32,9 +37,7 @@ button.dshAiOptimizeTrigger { flex:none; white-space:nowrap; color:var(--dsw-ali
 @keyframes dshAiOptimizeSpin { to { transform:rotate(360deg); } }
 @media(prefers-reduced-motion:reduce) { .dshAiOptimizeSpinner { animation:none; } }
 @media(max-width:640px) {
-  .dshAiOptimizeDialog { padding-bottom:16px; }
-  .dshAiOptimizePreview { grid-template-columns:minmax(0,1fr); gap:12px; }
-  .dshAiOptimizePane pre { padding:12px; font-size:13px; line-height:22px; }
+  .dshAiOptimizePreview { gap:16px; }
   .dshAiOptimizeActions > button { flex:1; min-width:0; }
 }
 `

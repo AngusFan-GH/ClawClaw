@@ -4,7 +4,7 @@ import type { ConfigureCall, GenerateOptions, StreamChunk } from '@deepseek-ai/d
 import { HostDraftAssistance, applyDraftAssistance, draftAssistanceInject, generateDraftAssistance, parseDraftAssistRequest } from '../src/input-assistance.ts'
 import { registerDesktopJsonApi } from '../src/desktop-json-api.ts'
 import { exclusiveInputCall } from '../src/input-assistance-call.ts'
-import { AUTOMATIC_ASSIST_TIMEOUT_MS, continuationText, optimizationValue, type DraftAssistRequest, type DraftAssistResult } from '../src/input-assistance-contract.ts'
+import { AUTOMATIC_ASSIST_TIMEOUT_MS, OPTIMIZATION_TIMEOUT_MS, continuationText, optimizationValue, optimizationPreview, type DraftAssistRequest, type DraftAssistResult, type DraftAssistProgress } from '../src/input-assistance-contract.ts'
 vi.mock('../src/desktop-json-api.ts', () => ({ registerDesktopJsonApi: vi.fn() }))
 
 const request: DraftAssistRequest = { kind: 'continuation', sessionId: 'session:a', requestId: 'r1', draft: 'Please help me', draftRev: 2 }
@@ -60,7 +60,7 @@ describe('Host cancellation and shared physical concurrency', () => {
   it.each(['continuation', 'optimization'] as const)('bounds %s deadlines even when the provider ignores abort', async kind => {
     vi.useFakeTimers(); const h = harness()
     const result = h.controller.request({ ...request, kind })
-    await vi.advanceTimersByTimeAsync(kind === 'optimization' ? 20_000 : AUTOMATIC_ASSIST_TIMEOUT_MS)
+    await vi.advanceTimersByTimeAsync(kind === 'optimization' ? OPTIMIZATION_TIMEOUT_MS : AUTOMATIC_ASSIST_TIMEOUT_MS)
     expect((await result).text).toBe('')
     await h.controller.request({ ...request, requestId: 'r2' })
     expect(h.generate).toHaveBeenCalledOnce()
@@ -83,6 +83,24 @@ describe('Host cancellation and shared physical concurrency', () => {
 })
 
 describe('one-shot model calls', () => {
+  it('streams reasoning and decoded preview before a fully validated result is available', async () => {
+    const next = deferred<void>(), finish = deferred<void>(), progress = vi.fn()
+    const ctx = { llm: { prepareCall: async () => ({ config: {}, stream: async function* () {
+      yield { type: 'reasoning-delta', index: 0, text: '整理语句结构。' }
+      await next.promise
+      yield { type: 'text-delta', index: 1, text: '{"optimized":"Clear\\n' }
+      yield { type: 'text-delta', index: 1, text: 'draft","notes":[]}' }
+      await finish.promise
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    } }) } } as unknown as Pick<Context, 'llm'>
+    const result = generateDraftAssistance(ctx, { ...request, kind: 'optimization' }, snapshot, new AbortController().signal, progress)
+    await vi.waitFor(() => expect(progress).toHaveBeenCalledWith(expect.objectContaining({ channel: 'reasoning', delta: '整理语句结构。' })))
+    next.resolve()
+    await vi.waitFor(() => expect(progress.mock.calls.filter(([event]) => event.channel === 'text').map(([event]) => event.delta).join('')).toBe('Clear\ndraft'))
+    finish.resolve()
+    await expect(result).resolves.toEqual({ text: 'Clear\ndraft', notes: [] })
+  })
+
   function model(raw: string, finish: 'stop' | 'max-tokens' = 'stop', cap = 10_000) {
     const stream = vi.fn(async function* (_options: GenerateOptions) {
       yield* [{ type: 'text-delta', index: 0, text: raw }, { type: 'finish', reason: { kind: finish } }] as StreamChunk[]
@@ -127,5 +145,28 @@ describe('one-shot model calls', () => {
   it.each(['max-tokens', 'stop'] as const)('rejects %s output when incomplete or malformed', async finish => {
     const m = model(finish === 'stop' ? 'Here is an optimized draft' : '{"optimized":"cut off","notes":[]}', finish)
     expect((await generateDraftAssistance(m.ctx, { ...request, kind: 'optimization' }, snapshot, new AbortController().signal)).text).toBe('')
+  })
+})
+
+describe('stream preview decoding and lifetime', () => {
+  it('holds incomplete escapes and surrogate pairs without exposing JSON framing', () => {
+    expect(optimizationPreview('{"optimized":"a\\n\\u4')).toBe('a\n')
+    expect(optimizationPreview('{"optimized":"\\ud83d')).toBe('')
+    expect(optimizationPreview('{"optimized":"\\ud83d\\ude00')).toBe('😀')
+    expect(optimizationPreview('{"optimized":"a\\\"b\\\\c","notes":[]}')).toBe('a"b\\c')
+    expect(optimizationPreview('{"notes":["x"],"optimized":"y"}')).toBe('y')
+    expect(optimizationPreview('{"notes":["\\\"optimized\\\":\\\"fake"],"optimized":"real"}')).toBe('real')
+  })
+  it('drops progress from a physical model task after cancellation', async () => {
+    let publish: ((event: DraftAssistProgress) => void) | undefined
+    const pending = deferred<{ text: string; notes: string[] }>(), progress = vi.fn()
+    const controller = new HostDraftAssistance({ enabled: () => true, current: () => true, snapshot: async () => snapshot,
+      generate: async (_request, _snapshot, _signal, emit) => { publish = emit; return pending.promise } })
+    const running = controller.request({ ...request, kind: 'optimization' }, progress)
+    await vi.waitFor(() => expect(publish).toBeDefined())
+    controller.cancel(request.requestId)
+    publish!({ requestId: request.requestId, draftRev: request.draftRev, channel: 'text', delta: 'late' })
+    await running; expect(progress).not.toHaveBeenCalled()
+    pending.resolve({ text: 'late', notes: [] }); controller.dispose()
   })
 })

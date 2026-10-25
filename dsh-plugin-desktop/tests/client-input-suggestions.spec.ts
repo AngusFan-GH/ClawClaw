@@ -214,7 +214,7 @@ describe('public composer integration', () => {
       insertText: vi.fn((text: string) => { f.input.set({ ...EMPTY, draft: text, draftRev: 3 }); return true }) } as unknown as InputActions
     const fetcher = vi.fn(async (_url: unknown, options?: RequestInit) => {
       const request = JSON.parse(String(options?.body)) as { requestId: string; draftRev: number }
-      return { ok: true, json: async () => ({ requestId: request.requestId, draftRev: request.draftRev, text: '请为这个功能补充回归测试。', notes: [] }) }
+      return { ok: true, json: async () => ({ requestId: request.requestId, draftRev: request.draftRev, text: '请为这个功能补充回归测试。', notes: ['明确了测试范围。'] }) }
     })
     vi.stubGlobal('fetch', fetcher)
     const Composer = () => createElement('div', {}, createElement(DraftOptimizationButton, {
@@ -236,7 +236,14 @@ describe('public composer integration', () => {
       await act(async () => button.click())
       expect(document.querySelector('[role="dialog"]')?.textContent).toContain('请为这个功能补充回归测试。')
       expect(document.querySelector('[role="dialog"]')?.classList.contains('dshAiOptimizeDialog')).toBe(true)
-      expect(document.querySelectorAll('.dshAiOptimizePreview > .dshAiOptimizePane')).toHaveLength(2)
+      const comparison = document.querySelector('.dshAiOptimizePreview')!
+      expect([...comparison.querySelectorAll('.dshAiOptimizeText h3')].map(node => node.textContent)).toEqual(['优化前', '优化后'])
+      expect(comparison.querySelector('[data-original] pre')?.textContent).toBe('给这个功能加测试')
+      expect(comparison.querySelector('[data-result] pre')?.textContent).toBe('请为这个功能补充回归测试。')
+      expect(comparison.querySelector('details')).toBeNull()
+      expect(comparison.querySelector('.dshAiOptimizeNotes h3')?.textContent).toBe('优化说明')
+      expect(comparison.querySelector('.dshAiOptimizeNotes li')?.textContent).toBe('明确了测试范围。')
+      expect(fetcher).toHaveBeenCalledOnce()
       expect(actions.insertText).not.toHaveBeenCalled()
       const replace = [...document.querySelectorAll('button')].find(item => item.textContent === '替换草稿')!
       expect(replace.querySelector('svg')).not.toBeNull()
@@ -347,10 +354,10 @@ describe('public composer integration', () => {
     document.body.append(container)
     const root = createRoot(container)
     try {
-      await act(async () => { root.render(createElement(SuggestionSettings, { settings, t: key => key === 'title' ? 'AI 输入建议' : 'Description' })) })
+      await act(async () => { root.render(createElement(SuggestionSettings, { settings, t: key => key === 'title' ? 'AI建议' : 'Description' })) })
       const toggle = container.querySelector<HTMLButtonElement>('button[role="switch"]')!
       expect(toggle).not.toBeNull()
-      expect(toggle.getAttribute('aria-label')).toBe('AI 输入建议')
+      expect(toggle.getAttribute('aria-label')).toBe('AI建议')
       expect(toggle.getAttribute('aria-checked')).toBe('false')
       expect(toggle.querySelector('span')).not.toBeNull()
       expect(container.querySelector('input[type="checkbox"]')).toBeNull()

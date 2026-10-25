@@ -1,12 +1,12 @@
 import type { InputActions, InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { AUTOMATIC_ASSIST_CLIENT_TIMEOUT_MS, continuationText, optimizationValue, type DraftAssistRequest, type DraftAssistResult, type ContinuationDiagnostic, type AssistCancellation } from '../input-assistance-contract.ts'
+import { AUTOMATIC_ASSIST_CLIENT_TIMEOUT_MS, OPTIMIZATION_CLIENT_TIMEOUT_MS, continuationText, optimizationValue, type DraftAssistRequest, type DraftAssistResult, type DraftAssistProgress, type ContinuationDiagnostic, type AssistCancellation } from '../input-assistance-contract.ts'
 
 export interface AssistSnapshot {
   sessionId: string; context: string; input: InputState
   available: boolean; continuationEnabled: boolean; optimizationEnabled: boolean; atEnd: boolean
 }
 export interface AssistTransport {
-  generate(request: DraftAssistRequest, signal: AbortSignal): Promise<DraftAssistResult>
+  generate(request: DraftAssistRequest, signal: AbortSignal, progress?: (event: DraftAssistProgress) => void): Promise<DraftAssistResult>
   cancel(request: DraftAssistRequest, reason?: AssistCancellation): void
   report?(event: ContinuationDiagnostic, draftRev: number): void
 }
@@ -25,6 +25,8 @@ export class DraftAssistanceState {
   phase: OptimizationPhase = 'idle'
   original = ''
   notes: readonly string[] = []
+  reasoning = ''
+  streamText = ''
   get optimizationAvailable(): boolean {
     const s = this.snapshot
     return s !== undefined && s.available && s.optimizationEnabled && this.plain(s.input)
@@ -53,7 +55,7 @@ export class DraftAssistanceState {
       const visible = this.text !== '' || this.phase !== 'idle'
       this.cancel(edited ? 'draft-edited' : before?.context !== next.context ? 'context-changed' : !next.available ? 'unavailable'
         : !next.atEnd && !wasOptimizing ? 'caret-moved' : (!next.continuationEnabled && !wasOptimizing) || (!next.optimizationEnabled && wasOptimizing) ? 'disabled' : 'content-changed')
-      this.text = ''; this.notes = []; this.bound = undefined; this.phase = 'idle'; if (visible) this.changed()
+      this.text = ''; this.notes = []; this.reasoning = ''; this.streamText = ''; this.bound = undefined; this.phase = 'idle'; if (visible) this.changed()
     }
     if (availabilityChanged) this.changed()
     // Seed/mount, focus and toggles do not constitute an edit. Optimization's
@@ -78,13 +80,13 @@ export class DraftAssistanceState {
       && s.input.draft.length <= 4000 && s.input.draft.replace(/\s/gu, '').length >= 6
   }
   interacting(reason: AssistCancellation = 'interaction'): void {
-    this.cancel(reason); this.text = ''; this.notes = []; this.bound = undefined; this.phase = 'idle'; this.changed()
+    this.cancel(reason); this.text = ''; this.notes = []; this.reasoning = ''; this.streamText = ''; this.bound = undefined; this.phase = 'idle'; this.changed()
   }
   optimize(): void {
     const s = this.snapshot
     if (s === undefined || !s.available || !s.optimizationEnabled || !this.plain(s.input)
       || s.input.draft.trim() === '' || s.input.draft.length > 8000) return
-    this.cancel('optimization-started'); this.text = ''; this.notes = []; this.original = s.input.draft; this.phase = 'generating'
+    this.cancel('optimization-started'); this.text = ''; this.notes = []; this.reasoning = ''; this.streamText = ''; this.original = s.input.draft; this.phase = 'generating'
     this.attempted = s.input.draftRev; this.changed()
     void this.run('optimization', s)
   }
@@ -98,10 +100,17 @@ export class DraftAssistanceState {
       this.cancel('timeout'); this.text = ''; this.bound = undefined
       if (kind === 'optimization') this.phase = 'error'
       this.changed()
-    }, kind === 'optimization' ? 20_000 : AUTOMATIC_ASSIST_CLIENT_TIMEOUT_MS) }
+    }, kind === 'optimization' ? OPTIMIZATION_CLIENT_TIMEOUT_MS : AUTOMATIC_ASSIST_CLIENT_TIMEOUT_MS) }
     this.active = active; this.lastRequestAt = Date.now()
     try {
-      const result = await this.transport.generate(request, abort.signal)
+      const result = await this.transport.generate(request, abort.signal, event => {
+        if (kind !== 'optimization' || this.phase !== 'generating' || this.active !== active || this.disposed || abort.signal.aborted
+          || revision !== this.revision || this.snapshot?.context !== s.context || this.snapshot.input.draftRev !== s.input.draftRev
+          || event.requestId !== request.requestId || event.draftRev !== s.input.draftRev) return
+        if (event.channel === 'reasoning') this.reasoning = (this.reasoning + event.delta).slice(0, 16_000)
+        else this.streamText = (this.streamText + event.delta).slice(0, 8000)
+        this.changed()
+      })
       if (this.disposed || this.active !== active || abort.signal.aborted || revision !== this.revision
         || this.snapshot?.context !== s.context || this.snapshot.input.draftRev !== s.input.draftRev
         || result.requestId !== request.requestId || result.draftRev !== s.input.draftRev) return
@@ -109,6 +118,7 @@ export class DraftAssistanceState {
         if (!this.eligible(this.snapshot)) return
         this.text = continuationText(result.text, s.input.draft)
       } else {
+        if (result.error !== undefined) { this.phase = 'error'; this.streamText = ''; this.changed(); return }
         const parsed = optimizationValue({ optimized: result.text, notes: result.notes })
         this.text = parsed?.text ?? ''; this.notes = parsed?.notes ?? []
         this.phase = this.text === '' || this.text === s.input.draft ? 'empty' : 'preview'
@@ -143,5 +153,5 @@ export class DraftAssistanceState {
     this.attempted = this.snapshot?.input.draftRev ?? -1
     this.interacting('closed')
   }
-  dispose(): void { this.disposed = true; this.cancel('disposed'); this.text = ''; this.phase = 'idle' }
+  dispose(): void { this.disposed = true; this.cancel('disposed'); this.text = ''; this.reasoning = ''; this.streamText = ''; this.phase = 'idle' }
 }
