@@ -12,6 +12,8 @@ This implementation incorporates the interaction design of `arch` at `f0eb2699`,
 
 Suggestions and continuation default off and use the same public General Settings Switch, spacing and typography as other settings. Optimization is an explicit action, available by default. Settings are live and Profile-owned; plugin activation remains separate.
 
+All three Host modules export a Loader `Config` schema with volatile fields. The settings registration's fallback alone does not populate the Client's described value: without the exported schema an untouched optimization entry describes `{}` and its toolbar button is hidden despite the Host's default `true`. Real Cordis/Settings regressions verify described defaults and explicit opt-out; a mounted composer test verifies visibility with both automatic features off, empty-draft disabling, preview and confirmed replacement.
+
 Suggestions work in existing conversations: a new chat or a new reply after enabling is no longer required. Empty conversations without a completed exchange have no context. Focus or clearing input alone does not create another request. Each completed context is attempted once; failure, cancellation and timeout do not auto-retry. Completed cached text may reappear after clearing an ordinary draft edit, but invalidated in-flight work cannot revive after type-and-delete.
 
 Continuation never generates simply on mount, navigation or refocus. IME composition hides/cancels it; completing an actual composition permits generation after the closing-key guard and stable pause. It requires no attachments, references, claims, queues, menus or pending submissions. Whitespace at the draft/suffix join is preserved. Caret movement, selection, blur, editing, model changes and disabling invalidate its result. Optimization cancels continuation; closing or accepting optimization does not auto-resume continuation without another user edit.
@@ -53,7 +55,7 @@ All three settings-backed plugins are Profile-owned editable entries. Preparatio
 
 Desktop `check` covers build, all TypeScript projects, unit tests, closure, CLI, Loader, Profile, licenses and operation reliability. Feature regressions cover existing-history activation, scoped adoption, IME completion, whitespace joins, strict output, attachment preservation, stale previews, model changes, ignored abort, shared concurrency, deadlines and cleanup. Tests use mocked model calls plus real Cordis service boundaries.
 
-The final unit run passed 200 files and 1,779 tests, with 11 skipped. Build and all TypeScript checks passed as part of the same Desktop gate.
+The final unit run passed 201 files and 1,784 tests, with 11 skipped. Build and all TypeScript checks passed as part of the same Desktop gate.
 
 Root validation has pre-existing blockers: a staged submodule pin differing from `upstream.json`, and the IM fixture's unavailable default `https-proxy-agent` export. User-staged changes are preserved; Desktop is validated independently. No graphical application is launched or paid model call made. Actual native IME candidate panels and model quality/latency still require graphical/model acceptance.
 

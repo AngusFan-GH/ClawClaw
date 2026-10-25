@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createElement, act } from 'react'
+import { createElement, act, useSyncExternalStore } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { Context } from '@deepseek-ai/cordis'
 import { Context as CordisContext } from '@deepseek-ai/cordis'
@@ -11,7 +11,7 @@ import { InputSuggestionState, type SuggestionSnapshot, type SuggestionTransport
 import { applyInputSuggestions, createSuggestionRuntime, immediateSuggestionSettings, SuggestionComposer, SuggestionSettings, INPUT_SUGGESTIONS_INJECT } from '../src/client/input-suggestions.tsx'
 import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { InputSuggestionsSettings, SuggestionResult } from '../src/input-suggestions-contract.ts'
-import { createDraftAssistanceRuntime } from '../src/client/input-assistance.tsx'
+import { createDraftAssistanceRuntime, DraftOptimizationButton } from '../src/client/input-assistance.tsx'
 
 const EMPTY: InputState = { draft: '', draftRev: 1, attachmentIds: [], occurrences: [], phase: 'plain', queue: [] }
 function snapshot(overrides: Partial<SuggestionSnapshot> = {}): SuggestionSnapshot {
@@ -190,6 +190,39 @@ function runtimeFixture(api: SuggestionTransport, changed = () => {}, visible = 
 }
 
 describe('public composer integration', () => {
+  it('shows the default-enabled optimization action with automatic features off, previews and replaces through the public composer', async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const f = runtimeFixture({ generate: vi.fn(), cancel: vi.fn() })
+    f.session.set({ ...f.session.getSnapshot(), running: false })
+    const disabled = { ...store({ value: { enabled: false } }) } as unknown as ConfigForm<InputSuggestionsSettings>
+    const actions = { captureInsertion: () => ({ start: 0, end: 0, draftRev: f.input.getSnapshot().draftRev }),
+      insertText: vi.fn((text: string) => { f.input.set({ ...EMPTY, draft: text, draftRev: 3 }); return true }) } as unknown as InputActions
+    const fetcher = vi.fn(async (_url: unknown, options?: RequestInit) => {
+      const request = JSON.parse(String(options?.body)) as { requestId: string; draftRev: number }
+      return { ok: true, json: async () => ({ requestId: request.requestId, draftRev: request.draftRev, text: '请为这个功能补充回归测试。', notes: [] }) }
+    })
+    vi.stubGlobal('fetch', fetcher)
+    const Composer = () => createElement('div', {}, createElement(DraftOptimizationButton, {
+      inputActions: actions,
+      useInput: selector => useSyncExternalStore(f.input.subscribe, () => selector(f.input.getSnapshot())),
+    } as Parameters<typeof DraftOptimizationButton>[0]))
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container)
+    try {
+      await act(async () => root.render(createElement(SuggestionComposer, { sectionComponent: Composer, suggestionContext: f.ctx,
+        suggestionSettings: disabled, continuationSettings: disabled, optimizationSettings: f.settings, sessionId: 'a' as SessionId,
+        inputActions: actions } as unknown as Parameters<typeof SuggestionComposer>[0])))
+      const button = [...container.querySelectorAll('button')].find(item => item.textContent === '优化草稿')!
+      expect(button).toBeDefined(); expect(button.disabled).toBe(true); expect(fetcher).not.toHaveBeenCalled()
+      await act(async () => f.input.set({ ...EMPTY, draft: '给这个功能加测试', draftRev: 2 }))
+      expect(button.disabled).toBe(false)
+      await act(async () => button.click())
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain('请为这个功能补充回归测试。')
+      expect(actions.insertText).not.toHaveBeenCalled()
+      const replace = [...document.querySelectorAll('button')].find(item => item.textContent === '替换草稿')!
+      await act(async () => replace.click())
+      expect(actions.insertText).toHaveBeenCalledExactlyOnceWith('请为这个功能补充回归测试。', { start: 0, end: '给这个功能加测试'.length, draftRev: 2 })
+    } finally { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals() }
+  })
   it('initializes draft assistance with real Cordis services and adopts a continuation through the scoped DOM capture', async () => {
     const f = runtimeFixture({ generate: vi.fn(), cancel: vi.fn() })
     f.session.set({ ...f.session.getSnapshot(), running: false })
