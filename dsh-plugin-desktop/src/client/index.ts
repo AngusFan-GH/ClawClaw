@@ -30,6 +30,7 @@ import { installShortcutMenuStyles } from './shortcut-menu-styles.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { applySpiritXProviderPriority } from './spiritx-provider-priority.tsx'
 import { applySelectionQuote } from './selection-quote.tsx'
+import { applyInputSuggestions, INPUT_SUGGESTIONS_INJECT } from './input-suggestions.tsx'
 import { applyDesktopGitGraph } from './git-graph.ts'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 import { apply as applyExperts } from '../experts/client/index.ts'
@@ -101,6 +102,7 @@ export type {
 
 /** Services required by Desktop settings and Desktop-owned presentations. */
 export const inject = [
+  ...INPUT_SUGGESTIONS_INJECT,
   'slots',
   'locale',
   'connection',
@@ -138,6 +140,7 @@ export function apply(ctx: ClientContext): void {
   applyLegacyAgentPresetDeleteAction(ctx)
   applySkillsSettings(ctx, { registerSection: false })
   applySelectionQuote(ctx)
+  applyInputSuggestions(ctx)
   applyDesktopGitGraph(ctx)
   ctx.effect(() => applyExperts(ctx), 'dsh-plugin-desktop: experts')
   applyShortcutMenu(ctx)

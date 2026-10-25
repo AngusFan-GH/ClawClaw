@@ -607,6 +607,104 @@ virtualStoreDirMaxLength: 60
     }
   })
 
+  it.each([
+    { prior: '[]\n', expected: undefined },
+    { prior: '- id: desktop-input-suggestions\n  config:\n    enabled: false\n', expected: false },
+    { prior: '- id: desktop-input-suggestions\n  config:\n    enabled: true\n', expected: true },
+  ])('upgrades older Profiles with absent or config-only input suggestion rows: $expected', ({ prior, expected }) => {
+    const home = temporaryHome()
+    const profileDir = ensureDesktopProfile(home)
+    const path = join(profileDir, 'cordis.patch.yml')
+    writeFileSync(path, prior)
+    const first = prepareDesktopProfile(undefined, home, 'win32')
+    const persisted = readFileSync(path, 'utf8')
+    const second = prepareDesktopProfile(undefined, home, 'win32')
+    for (const prepared of [first, second]) {
+      const rows = composeEntries([prepared.patches]).filter(row => row.id === 'desktop-input-suggestions')
+      expect(rows).toHaveLength(1)
+      expect((rows[0]?.config as { enabled?: boolean } | undefined)?.enabled).toBe(expected)
+    }
+    expect(readFileSync(path, 'utf8')).toBe(persisted)
+  })
+
+  it.each([
+    { canonical: undefined, oldDisabled: false, expected: true },
+    { canonical: undefined, oldDisabled: true, expected: false },
+    { canonical: false, oldDisabled: false, expected: false },
+    { canonical: true, oldDisabled: true, expected: true },
+  ])('retires removed input plugin exports without losing settings or re-enabling a disabled feature: $expected', ({ canonical, oldDisabled, expected }) => {
+    const home = temporaryHome()
+    const profileDir = ensureDesktopProfile(home)
+    const path = join(profileDir, 'cordis.patch.yml')
+    writeFileSync(path, JSON.stringify([
+      { insert: [
+        { id: 'desktop-ai-input-suggestions', name: 'dsh-plugin-desktop/ai-input-suggestions', disabled: oldDisabled,
+          config: { enabled: true, savedLegacyOption: 'preserve' } },
+        { id: 'desktop-ai-input-continuations', name: 'dsh-plugin-desktop/ai-input-continuations', config: { enabled: true } },
+      ] },
+      ...(canonical === undefined ? [] : [{ id: 'desktop-input-suggestions', config: { enabled: canonical, untouched: 'preserve' } }]),
+    ]))
+    const first = prepareDesktopProfile(undefined, home, 'win32')
+    const persisted = readFileSync(path, 'utf8')
+    const second = prepareDesktopProfile(undefined, home, 'win32')
+    for (const prepared of [first, second]) {
+      const rows = composeEntries([prepared.patches])
+      expect(rows.filter(row => row.id === 'desktop-input-suggestions')).toHaveLength(1)
+      expect(rows.find(row => row.id === 'desktop-input-suggestions')?.config).toEqual({
+        enabled: expected, ...(canonical === undefined ? {} : { untouched: 'preserve' }),
+      })
+      expect(rows.find(row => row.id === 'desktop-ai-input-suggestions')).toMatchObject({
+        disabled: true, config: { enabled: true, savedLegacyOption: 'preserve' },
+      })
+      expect(rows.find(row => row.id === 'desktop-ai-input-continuations')).toMatchObject({ disabled: true, config: { enabled: true } })
+    }
+    expect(readFileSync(path, 'utf8')).toBe(persisted)
+  })
+
+  it('keeps suggestion preferences isolated between upgraded Profiles', () => {
+    const home = temporaryHome()
+    ensureDesktopProfile(home)
+    const alternateDir = join(home, 'profiles', 'work')
+    initProfile(alternateDir, PROFILE_TEMPLATES.web!.bundles)
+    for (const [profileName, enabled] of [['desktop', true], ['work', false]] as const) {
+      writeFileSync(join(home, 'profiles', profileName, 'cordis.patch.yml'), JSON.stringify([
+        { id: 'desktop-input-suggestions', config: { enabled } },
+      ]))
+      const prepared = prepareDesktopProfile(undefined, home, 'win32', profileName)
+      expect(composeEntries([prepared.patches]).find(row => row.id === 'desktop-input-suggestions')?.config).toEqual({ enabled })
+    }
+    const again = prepareDesktopProfile(undefined, home, 'win32')
+    expect(composeEntries([again.patches]).find(row => row.id === 'desktop-input-suggestions')?.config).toEqual({ enabled: true })
+  })
+
+  it.each([false, true])('keeps an already persisted input suggestions insertion unique and preserves enabled=%s across restarts', enabled => {
+    const home = temporaryHome()
+    const profileDir = ensureDesktopProfile(home)
+    const patchPath = join(profileDir, 'cordis.patch.yml')
+    writeFileSync(patchPath, [
+      '- insert:',
+      '    - id: desktop-input-suggestions',
+      '      name: dsh-plugin-desktop/input-suggestions',
+      '- id: desktop-input-suggestions',
+      '  name: dsh-plugin-desktop/input-suggestions',
+      '  config:',
+      `    enabled: ${enabled}`,
+      '',
+    ].join('\n'))
+
+    const first = prepareDesktopProfile(undefined, home, 'win32')
+    const persisted = readFileSync(patchPath, 'utf8')
+    const second = prepareDesktopProfile(undefined, home, 'win32')
+    for (const prepared of [first, second]) {
+      expect(composeEntries([prepared.patches]).filter(row => row.id === 'desktop-input-suggestions')).toEqual([{
+        id: 'desktop-input-suggestions', name: 'dsh-plugin-desktop/input-suggestions', config: { enabled },
+      }])
+      expect(prepared.overlays.some(patch => Array.isArray(patch.insert)
+        && patch.insert.some(row => row.id === 'desktop-input-suggestions'))).toBe(false)
+    }
+    expect(readFileSync(patchPath, 'utf8')).toBe(persisted)
+  })
+
   it('keeps every settings-backed Desktop feature in the Profile layer instead of launcher overlays', () => {
     const home = temporaryHome()
     const profileDir = ensureDesktopProfile(home)
@@ -629,6 +727,9 @@ virtualStoreDirMaxLength: 60
       '  config:',
       '    items:',
       '      - desktop-reminders',
+      '- id: desktop-input-suggestions',
+      '  config:',
+      '    enabled: true',
       '- id: desktop-cron-tasks',
       '  config:',
       '    jobs:',
@@ -681,6 +782,9 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop/shortcut-menu',
       config: { items: ['desktop-reminders'] },
     })
+    expect(rows.filter(row => row.id === 'desktop-input-suggestions')).toEqual([{
+      id: 'desktop-input-suggestions', name: 'dsh-plugin-desktop/input-suggestions', config: { enabled: true },
+    }])
     expect(rows.find(row => row.id === 'desktop-cron-tasks')).toEqual({
       id: 'desktop-cron-tasks',
       name: 'dsh-plugin-desktop/cron-tasks',
@@ -751,6 +855,7 @@ virtualStoreDirMaxLength: 60
     expect(prepared.overlays.some(patch => patch.id === 'desktop-shell')).toBe(true)
     expect(prepared.overlays.some(patch => Array.isArray(patch.insert)
       && patch.insert.some(row => row.id === 'desktop-shortcuts' || row.id === 'desktop-cron-tasks'
+        || row.id === 'desktop-input-suggestions'
         || row.id === 'desktop-skills' || row.id === 'desktop-mcp' || row.id === 'desktop-reminders'
         || row.id === 'desktop-notifications' || row.id === 'desktop-default-workspace'
         || row.id === 'clawclaw-experts'))).toBe(false)

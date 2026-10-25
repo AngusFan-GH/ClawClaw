@@ -2,6 +2,7 @@
 
 import { createRequire } from 'node:module'
 import type { DesktopPnpmBootstrap } from './pnpm.ts'
+import { INPUT_SUGGESTIONS_ENTRY } from './input-suggestions-contract.ts'
 import { withDesktopPnpmPolicy } from './pnpm-policy.ts'
 import {
   existsSync,
@@ -112,6 +113,7 @@ const RETIRED_DESKTOP_SPIRITX_PACKAGE = `${DESKTOP_PACKAGE_NAME}/spiritx`
 const DESKTOP_EXPERTS_ROW_ID = 'clawclaw-experts'
 const DESKTOP_EXPERTS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/experts`
 const DESKTOP_EDITABLE_PROFILE_ENTRIES = [
+  { id: INPUT_SUGGESTIONS_ENTRY, name: `${DESKTOP_PACKAGE_NAME}/input-suggestions` },
   { id: DESKTOP_SHORTCUTS_ROW_ID, name: DESKTOP_SHORTCUTS_PACKAGE },
   { id: DESKTOP_CRON_TASKS_ROW_ID, name: DESKTOP_CRON_TASKS_PACKAGE },
   { id: DESKTOP_SKILLS_ROW_ID, name: DESKTOP_SKILLS_PACKAGE },
@@ -124,6 +126,10 @@ const DESKTOP_EDITABLE_PROFILE_ENTRIES = [
 ] as const
 const DESKTOP_EDITABLE_PROFILE_ENTRY_IDS = new Set<string>(DESKTOP_EDITABLE_PROFILE_ENTRIES.map(entry => entry.id))
 const DESKTOP_EDITABLE_PROFILE_PATCH_IDS = new Set<string>(['agent-default-model', 'llm-pi-ai'])
+const RETIRED_INPUT_ENTRIES = new Map([
+  ['desktop-ai-input-suggestions', `${DESKTOP_PACKAGE_NAME}/ai-input-suggestions`],
+  ['desktop-ai-input-continuations', `${DESKTOP_PACKAGE_NAME}/ai-input-continuations`],
+])
 const DIRECTORY_PICKER_ROW_ID = 'directory-picker'
 const AUTO_PICKER_PACKAGE = '@deepseek-ai/dsh-host-directory-picker-auto'
 const BROWSE_PICKER_BACKEND = '@deepseek-ai/dsh-host-directory-picker-browse'
@@ -839,6 +845,52 @@ function loadDesktopMachinePatches(home: string): PatchOptions[] {
  * config rows. A launcher overlay would be applied after those rows and reset
  * every ConfigEditor write back to the entry's inherited value.
  */
+function migrateRetiredInputEntries(document: ReturnType<typeof parseDocument>, patches: unknown[]): boolean {
+  let changed = false
+  let inheritedEnabled: boolean | undefined
+  let legacyDisabled = false
+  let currentConfig: Record<string, unknown> = {}
+  let currentConfigPath: Array<string | number> | undefined
+  const inspect = (value: unknown, path: Array<string | number>, inserted: boolean): void => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return
+    const row = value as Record<string, unknown>
+    if (row.id === INPUT_SUGGESTIONS_ENTRY && (row.name === undefined || row.name === `${DESKTOP_PACKAGE_NAME}/input-suggestions`)
+      && row.config !== null && typeof row.config === 'object' && !Array.isArray(row.config)) {
+      currentConfig = row.config as Record<string, unknown>
+      currentConfigPath = [...path, 'config']
+    }
+    if (typeof row.id !== 'string') return
+    const retiredName = RETIRED_INPUT_ENTRIES.get(row.id)
+    if (retiredName === undefined || (row.name !== retiredName && (inserted || row.name !== undefined))) return
+    if (row.id === 'desktop-ai-input-suggestions' && row.disabled !== undefined) legacyDisabled = row.disabled !== false
+    if (row.id === 'desktop-ai-input-suggestions' && row.config !== null && typeof row.config === 'object'
+      && !Array.isArray(row.config) && typeof (row.config as Record<string, unknown>).enabled === 'boolean') {
+      inheritedEnabled = (row.config as { enabled: boolean }).enabled
+    }
+    // Retain the old row and all its settings for inspection/rollback. Never
+    // resolve removed package exports, or reinterpret continuation as suggestions.
+    if (row.disabled !== true) { document.setIn([...path, 'disabled'], true); changed = true }
+  }
+  patches.forEach((patch, index) => {
+    if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) return
+    inspect(patch, [index], false)
+    const insert = (patch as { insert?: unknown }).insert
+    if (Array.isArray(insert)) insert.forEach((row, rowIndex) => inspect(row, [index, 'insert', rowIndex], true))
+  })
+  if (inheritedEnabled !== undefined && !Object.hasOwn(currentConfig, 'enabled') && isSeq(document.contents)) {
+    if (currentConfigPath !== undefined) {
+      document.setIn([...currentConfigPath, 'enabled'], inheritedEnabled && !legacyDisabled)
+    } else {
+      document.contents.items.push(document.createNode({
+        id: INPUT_SUGGESTIONS_ENTRY, name: `${DESKTOP_PACKAGE_NAME}/input-suggestions`,
+        config: { enabled: inheritedEnabled && !legacyDisabled },
+      }) as never)
+    }
+    changed = true
+  }
+  return changed
+}
+
 function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
   const path = join(profileDir, PROFILE_PATCH_FILENAME)
   const content = existsSync(path) ? readFileSync(path, 'utf8') : '[]\n'
@@ -875,7 +927,7 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
   let retiredSpiritXProvider: unknown
   let piAiPatchIndex: number | undefined
   let piAiProviders: Record<string, unknown> | undefined
-  let changed = false
+  let changed = migrateRetiredInputEntries(document, patches)
   for (const [patchIndex, patch] of patches.entries()) {
     if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) continue
     const patchId = (patch as { id?: unknown }).id

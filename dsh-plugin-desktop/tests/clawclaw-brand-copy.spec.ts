@@ -3,6 +3,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/client/index.ts'
 import { applyWorkspaceDirectoryFlow } from '../src/client/workspace-directory-flow.tsx'
+import { applyInputSuggestions } from '../src/client/input-suggestions.tsx'
 
 // Keep native UI dependencies outside this browser-entry regression test.
 vi.mock('../src/client/desktop-settings.ts', () => ({ applyDesktopSettings: vi.fn() }))
@@ -16,6 +17,7 @@ vi.mock('../src/client/cron-tasks-settings.ts', () => ({ applyCronTasksSettings:
 vi.mock('../src/client/reminders-settings.ts', () => ({ applyRemindersSettings: vi.fn() }))
 vi.mock('../src/client/skills-settings.ts', () => ({ applySkillsSettings: vi.fn() }))
 vi.mock('../src/client/shortcut-menu.tsx', () => ({ applyShortcutMenu: vi.fn() }))
+vi.mock('../src/client/input-suggestions.tsx', () => ({ applyInputSuggestions: vi.fn(), INPUT_SUGGESTIONS_INJECT: ['conversation'] }))
 vi.mock('../src/client/plugin-manager.ts', () => ({ applyManagedPluginManager: vi.fn() }))
 vi.mock('../src/client/git-graph.ts', () => ({ applyDesktopGitGraph: vi.fn() }))
 vi.mock('../src/experts/client/index.ts', () => ({ apply: vi.fn() }))
@@ -52,6 +54,7 @@ describe('ClawClaw product copy', () => {
       ])
       expect(inject).toHaveBeenCalledWith(['market'], expect.any(Function))
       expect(applyWorkspaceDirectoryFlow).toHaveBeenCalledWith(expect.any(Object))
+      expect(applyInputSuggestions).toHaveBeenCalledWith(expect.any(Object))
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([
         'dsh-plugin-desktop: ClawClaw page identity',
         'dsh-plugin-desktop: market integration dictionaries',

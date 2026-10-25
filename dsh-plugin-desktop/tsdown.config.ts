@@ -74,6 +74,7 @@ export default defineConfig([
       'cron-tasks': 'src/cron-tasks.ts',
       reminders: 'src/reminders.ts',
       'shortcut-menu': 'src/shortcut-menu.ts',
+      'input-suggestions': 'src/input-suggestions.ts',
       'plugin-registry-probe': 'src/plugin-registry-probe.ts',
       'default-workspace': 'src/default-workspace.ts',
       'git-graph': 'src/git-graph.ts',

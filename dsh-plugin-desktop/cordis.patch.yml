@@ -16,6 +16,8 @@
       name: dsh-plugin-desktop/cron-tasks
     - id: desktop-shortcuts
       name: dsh-plugin-desktop/shortcut-menu
+    - id: desktop-input-suggestions
+      name: dsh-plugin-desktop/input-suggestions
     - id: desktop-plugin-registry-probe
       name: dsh-plugin-desktop/plugin-registry-probe
     - id: desktop-reminders

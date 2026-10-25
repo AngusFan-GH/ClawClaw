@@ -19,6 +19,7 @@
     "tests/client-desktop-settings.spec.ts",
     "tests/client-environment.spec.ts",
     "tests/client-selection-sidechat.spec.ts",
+    "tests/client-input-suggestions.spec.ts",
     "tests/client-selection-quote.spec.ts"
   ]
 }
