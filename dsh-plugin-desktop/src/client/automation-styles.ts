@@ -3,7 +3,19 @@ export const AUTOMATION_CSS = `
 .dshAutomationPage{padding:32px clamp(16px,4vw,56px) 48px}
 .dshAutomationPage>.dshCronTasks{max-width:1080px;gap:24px}
 .dshCronTasks .dshIntegrationsHeader p{max-width:600px;line-height:1.7}
-.dshCronTasks .dshCronPolicyNotice{padding:12px 16px;border-left-width:2px;line-height:1.7}
+.dshCronHeaderDescription{max-width:720px;margin-top:6px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.dshCronHeaderPolicy{display:inline;font-size:inherit}
+.dshCronHeaderPolicy summary{display:inline-flex;align-items:center;gap:4px;width:auto;margin-left:8px;padding:0;list-style:none;font-size:inherit}
+.dshCronHeaderPolicy summary::-webkit-details-marker{display:none}
+.dshCronHeaderPolicy summary>svg{width:12px;height:12px;flex-shrink:0;transition:transform .15s ease}
+.dshCronHeaderPolicy[open] summary>svg{transform:rotate(180deg)}
+.dshCronTasks .dshCronHeaderPolicy p{max-width:680px;margin:8px 0 0;font-size:12px;line-height:1.65}
+@media(prefers-reduced-motion:reduce){.dshCronHeaderPolicy summary>svg{transition:none}}
+.dshCronTasks .dshCronEmpty{box-sizing:border-box;min-height:260px;justify-content:center;gap:10px;padding:40px 20px;border:0;border-radius:0;background:transparent}
+.dshCronTasks .dshCronEmpty>svg{width:32px;height:32px;margin-bottom:6px}
+.dshCronTasks .dshCronEmpty h3{font-size:16px;font-weight:600;line-height:1.5}
+.dshCronTasks .dshCronEmpty p{font-size:13px;line-height:1.65}
+@container(max-width:520px){.dshCronTasks>.dshIntegrationsHeader{flex-wrap:wrap}.dshCronTasks>.dshIntegrationsHeader>.dshIntegrationsCommand{margin-left:auto}}
 .dshCronTasks .dshCronToolbar{grid-template-columns:minmax(0,1fr) auto auto;gap:12px}
 .dshCronTasks .dshCronList{gap:14px}
 .dshCronTasks .dshCronRow{grid-template-columns:minmax(0,1fr) auto;gap:20px;padding:20px;border-radius:12px;align-items:start}

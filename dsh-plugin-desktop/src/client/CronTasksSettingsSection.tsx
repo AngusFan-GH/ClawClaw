@@ -319,12 +319,16 @@ export function CronTasksSettingsSection({ t, api, localeId, openSession, close 
 
   const enabledCount = jobs.filter(job => job.enabled).length
   return <section className="dshIntegrations dshCronTasks" aria-label={t('title')}>
-    <header className="dshIntegrationsHeader"><div><h2>{t('title')}</h2><p>{t('intro')}</p></div><button className="dshIntegrationsCommand dshCronPrimary" type="button" disabled={registryBusy} onClick={() => { setDraft(emptyDraft()) }}><Plus />{t('add')}</button></header>
-    <div className="dshCronPolicyNotice">{t('hostRequired')}</div>
+    <header className="dshIntegrationsHeader">
+      <div><h2>{t('title')}</h2><div className="dshCronHeaderDescription"><span>{t('hostSummary')}</span>{' '}
+        <details className="dshManagementHelp dshCronHeaderPolicy"><summary>{t('executionPolicy')}<IconChevronDownOutlineMedium aria-hidden="true" /></summary><p>{t('hostRequired')}</p></details>
+      </div></div>
+      <button className="dshIntegrationsCommand dshCronPrimary" type="button" disabled={registryBusy} onClick={() => { setDraft(emptyDraft()) }}><Plus />{t('add')}</button>
+    </header>
     {error !== undefined && <div className="dshIntegrationsError" role="alert"><span>{error}</span><button className="dshIntegrationsCommand" type="button" disabled={loading} onClick={() => { void refresh() }}>{t('refresh')}</button></div>}
     {jobs.length > 0 && <div className="dshCronToolbar"><div className="dshIntegrationsSearch"><Search aria-hidden="true" /><input aria-label={t('search')} placeholder={t('searchPlaceholder')} value={query} onChange={event => { setQuery(event.target.value) }} /></div><p>{t('taskCount').replace('{total}', String(jobs.length)).replace('{enabled}', String(enabledCount))}</p><SettingsIconButton label={t('refresh')} disabled={loading || busy !== undefined} onClick={() => { void refresh() }}><RefreshCw /></SettingsIconButton></div>}
     {loading && jobs.length === 0 ? <p className="dshIntegrationsEmpty">{t('loading')}</p> : jobs.length === 0
-      ? <div className="dshCronEmpty"><Clock3 aria-hidden="true" /><h3>{t('empty')}</h3><p>{t('emptyHint')}</p><button className="dshIntegrationsCommand" type="button" disabled={registryBusy} onClick={() => { setDraft(emptyDraft()) }}><Plus />{t('addFirst')}</button></div>
+      ? <div className="dshCronEmpty"><Clock3 aria-hidden="true" /><h3>{t('empty')}</h3><p>{t('emptyHint')}</p></div>
       : filtered.length === 0 ? <p className="dshIntegrationsEmpty">{t('noSearchResults')}</p>
       : <div className="dshCronList">{filtered.map(job => <article className="dshCronRow" key={job.id}>
         <button className="dshCronMain" type="button" onClick={() => { setDetailId(job.id) }}><span className="dshCronTitle"><strong>{job.name}</strong><em data-enabled={job.enabled}><span className="dshCronStatusDot" data-enabled={job.enabled} aria-hidden="true" />{running.includes(job.id) ? t('running') : job.enabled ? t('enabled') : t('disabled')}</em></span><span className="dshCronPromptPreview">{job.prompt}</span><span className="dshCronCardMeta"><span className="dshCronSchedule"><Clock3 aria-hidden="true" />{scheduleLabel(job)}<span className="dshCronZone">{job.timeZone}</span></span><span className="dshCronNext"><b>{t('nextRun')}</b><span>{localDate(job.nextRunAt, activeLocale, job.timeZone)}</span></span><span className="dshCronLatest"><b>{t('lastRun')}</b><span>{job.lastRun === undefined ? t('noRun') : runStatusLabel(job.lastRun)}</span></span></span></button>

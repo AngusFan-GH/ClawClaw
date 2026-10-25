@@ -65,8 +65,17 @@ describe('automation list and navigation controls', () => {
   it('shows a load error and recovers with an empty-list creation entry', async () => {
     read.mockRejectedValueOnce(new Error('Offline'))
     await mount(); expect(host.querySelector('[role="alert"]')!.textContent).toContain('Offline')
-    view = { ...view, jobs: [] }; await click('refresh'); await click('addFirst'); expect(host.querySelector('form')).not.toBeNull()
+    view = { ...view, jobs: [] }; await click('refresh'); await click('add'); expect(host.querySelector('form')).not.toBeNull()
     await click('cancel'); expect(host.textContent).toContain('emptyHint')
+    expect(host.querySelectorAll('.dshCronPrimary')).toHaveLength(1)
+    expect(host.querySelector('.dshCronEmpty button')).toBeNull()
+    expect(host.querySelector('.dshCronPolicyNotice')).toBeNull()
+    expect(host.querySelector('.dshIntegrationsHeader .dshCronHeaderDescription')!.textContent).toContain('hostSummary')
+    const policy = host.querySelector<HTMLDetailsElement>('.dshIntegrationsHeader details')!
+    expect(policy.open).toBe(false)
+    await act(async () => { policy.querySelector('summary')!.click() })
+    expect(policy.open).toBe(true)
+    expect(policy.textContent).toContain('hostRequired')
   })
   it.each(['openTaskSession', 'openSession'])('opens the original or historical Session via %s', async (entry) => {
     await mount(); await act(async () => { host.querySelector<HTMLButtonElement>('.dshCronMain')!.click() })
