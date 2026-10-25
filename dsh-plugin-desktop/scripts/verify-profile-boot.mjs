@@ -446,9 +446,8 @@ try {
     && !trayItems.some(item => item.label() === 'Open ClawClaw Terminal')) {
     throw new Error('assembled desktop profile is missing the terminal tray command')
   }
-  const profileMenu = trayItems.find(item => item.label() === 'Profile: desktop')
-  if (profileMenu?.submenu?.()[0]?.label() !== 'desktop') {
-    throw new Error('assembled desktop profile is missing the active profile tray submenu')
+  if (trayItems.some(item => item.group === 'profiles')) {
+    throw new Error('assembled desktop profile exposes profile management in everyday native menus')
   }
   const unauthenticated = await fetch(expectedUrl, {
     headers: {

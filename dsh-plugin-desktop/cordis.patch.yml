@@ -44,8 +44,8 @@
       name: dsh-plugin-desktop/mcp
     - id: desktop-pnpm
       name: dsh-plugin-desktop/pnpm
-    - id: desktop-profiles
-      name: dsh-plugin-desktop/profiles
+    # Profile management stays in the recovery assistant; everyday native menus
+    # do not expose profile selection or creation.
     - id: desktop-updates
       name: dsh-plugin-desktop/updates
     # ClawClaw owns both expert faces. Keep the Remote row top-level so the
