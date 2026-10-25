@@ -4,7 +4,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
-import { exclusiveInputCall } from './input-assistance-call.ts'
+import { exclusiveInputCall, waitForInputAgent } from './input-assistance-call.ts'
 import { inputSuggestionCallControls, relevantSuggestionEvent, suggestionContext } from './input-suggestions.ts'
 import { singleInputCandidate } from './input-suggestions-contract.ts'
 import { ASSISTANCE_PATH, ASSIST_CANCELLATIONS, AUTOMATIC_ASSIST_TIMEOUT_MS, CONTINUATION_DIAGNOSTICS, continuationText, optimizationValue,
@@ -125,7 +125,7 @@ export function applyDraftAssistance(ctx: Context, kind: DraftAssistKind): void 
   const controller = new HostDraftAssistance({
     enabled: () => settings.get().enabled,
     snapshot: async (request, signal) => {
-      const agent = ctx.agents.get(SessionId(request.sessionId))
+      const agent = await waitForInputAgent(ctx, SessionId(request.sessionId), signal)
       if (agent === undefined || !idle(agent)) return undefined
       const before = identity(agent); const route = routeFor(agent)
       if (route === undefined) return undefined
