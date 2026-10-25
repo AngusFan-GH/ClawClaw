@@ -8,16 +8,18 @@ import { CUSTOM_EXPERT_LIMIT, CUSTOM_EXPERT_SLUG, customError, customExpertInput
 import { ZH_DIVISION } from './names.js'
 
 export const AGENCY_LIBRARY_SERVICE = 'agencyAgentsLibrary'
-export interface AgencySettings { enabled: string[]; customExperts?: CustomExpert[]; customTeams?: TeamInput[] }
+export interface AgencySettings { enabled: string[]; recalledTeams?: string[]; customExperts?: CustomExpert[]; customTeams?: TeamInput[] }
 
 /** 兼容只有 enabled 的旧配置；内容与启用状态在同一 namespace 原子持久化。 */
 export const agencySettingsSchema = schema.object({
   enabled: schema.array(schema.string()).default([]),
+  recalledTeams: schema.array(schema.string()).default([]),
   customExperts: schema.array(schema.any()).default([]),
   customTeams: schema.array(schema.any()).default([]),
 })
 
 export function validateAgencySettings(value: AgencySettings, locale: 'zh' | 'en' = 'zh'): void {
+  z.array(z.string().min(1)).parse(value.recalledTeams ?? [])
   const teams = z.array(teamInputSchema).max(100).parse(value.customTeams ?? [])
   const teamIds = new Set<string>()
   const teamNames = new Set(BUILTIN_TEAMS.map(team => normalizeName(team.name)))

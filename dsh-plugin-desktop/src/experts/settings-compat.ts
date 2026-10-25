@@ -173,6 +173,7 @@ function objectList(value: unknown): unknown[] {
 
 export function hasAgencySettingsData(value: AgencySettings): boolean {
   return value.enabled.length > 0
+    || (value.recalledTeams?.length ?? 0) > 0
     || (value.customExperts?.length ?? 0) > 0
     || (value.customTeams?.length ?? 0) > 0
 }
@@ -181,11 +182,13 @@ export function hasAgencySettingsData(value: AgencySettings): boolean {
 export function readAgencySettings(config: object, locale: 'zh' | 'en' = 'zh'): AgencySettings {
   const record = config as {
     enabled?: unknown
+    recalledTeams?: unknown
     customExperts?: unknown
     customTeams?: unknown
   }
   const value: AgencySettings = {
     enabled: stringList(unwrapLive(record.enabled)),
+    recalledTeams: stringList(unwrapLive(record.recalledTeams)),
     customExperts: objectList(unwrapLive(record.customExperts)) as AgencySettings['customExperts'],
     customTeams: objectList(unwrapLive(record.customTeams)) as AgencySettings['customTeams'],
   }
@@ -205,6 +208,7 @@ export function agencySettingsFromLegacyDocument(document: unknown): AgencySetti
   const record = section as Record<string, unknown>
   return {
     enabled: stringList(record.enabled),
+    recalledTeams: stringList(record.recalledTeams),
     customExperts: objectList(record.customExperts) as AgencySettings['customExperts'],
     customTeams: objectList(record.customTeams) as AgencySettings['customTeams'],
   }
@@ -312,6 +316,7 @@ export async function recoverImportedAgencySettings(
     }
     await settings?.mutate?.(namespace, [
       { op: 'set', path: ['enabled'], value: section.enabled },
+      { op: 'set', path: ['recalledTeams'], value: section.recalledTeams ?? [] },
       { op: 'set', path: ['customExperts'], value: section.customExperts ?? [] },
       { op: 'set', path: ['customTeams'], value: section.customTeams ?? [] },
     ], revision)

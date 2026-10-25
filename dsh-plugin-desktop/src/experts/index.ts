@@ -3,7 +3,7 @@ import { PersonaError } from './persona-error.js'
 import { teamText } from './team-i18n.js'
 import { teamCollaboration } from './team-collaboration.js'
 import { createTeamLibrary, AGENCY_TEAM_SERVICE, type TeamConnectorLifecycle } from './team-library.js'
-import { effectiveCoordinator, type TeamSnapshot } from './team-contract.js'
+import { effectiveCoordinator, isTeamRecalled, type TeamSnapshot } from './team-contract.js'
 import { executeTeam, type TeamMemberRun } from './team-runtime.js'
 import { localizeTeam } from './team-content-en.js'
 /**
@@ -279,6 +279,7 @@ const configFields: Record<string, unknown> = {
 }
 for (const [key, field] of [
   ['enabled', schema.array(schema.string()).default([])],
+  ['recalledTeams', schema.array(schema.string()).default([])],
   ['customExperts', schema.array(schema.any()).default([])],
   ['customTeams', schema.array(schema.any()).default([])],
 ] as const) {
@@ -823,6 +824,13 @@ export function apply(ctx: Context, config: Config): void {
       const removed = await removeConversationCreatedExpertPlugin(conversationPluginRoot, packageName)
       const removedSlugs = new Set(projectExpertPluginAgents(removed).map(item => item.expert.slug))
       await refreshPlugins(true)
+      const removedTeam = projectExpertPluginTeam(removed)
+      if (removedTeam && settingsSource().recalledTeams?.includes(removedTeam.id)) {
+        const latest = await library.catalog()
+        await ctx.settings.mutate(settingsNamespace, [
+          { op: 'set', path: ['recalledTeams'], value: (settingsSource().recalledTeams ?? []).filter(id => id !== removedTeam.id) },
+        ], latest.revision)
+      }
       if (before.enabled.some(slug => removedSlugs.has(slug))) {
         try {
           const latest = await library.catalog()
@@ -1083,7 +1091,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'list_expert_teams', desc
     async execute(_args, exec) {
         requireParent(exec);
         const snapshot = await teamLibrary.snapshot();
-        const teams = snapshot.teams.filter(team => team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug)))
+        const teams = snapshot.teams.filter(team => isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams))
             .map(team => ({ ...localizeTeam(team, activeLocale()), runtime: team.runtime.mode }));
         return { report: JSON.stringify(teams) };
     }, }), activeLocale));
@@ -1095,12 +1103,12 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'get_expert_team', descri
         const pluginTeam = [...pluginTeams.values()].find(team => team.id === args.team || pluginText(team.name, activeLocale()) === args.team);
         if (pluginTeam !== undefined) {
             const candidate = snapshot.teams.find(team => team.id === pluginTeam.id);
-            if (!candidate || candidate.runtime.mode !== 'lead' || candidate.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug))) throw new Error(teamTx("专家团成员不存在、冲突或未就绪，请修复后重试。"));
+            if (!candidate || candidate.runtime.mode !== 'lead' || !isTeamRecalled(candidate, snapshot.enabledExperts, snapshot.recalledTeams)) throw new Error(teamTx("专家团成员不存在、冲突或未就绪，请修复后重试。"));
             return { report: JSON.stringify({ ...localizeTeam(candidate, activeLocale()), revision: catalog.revision,
                 instruction: teamTx("该专家团由独立主理人规划和汇总；主会话只负责发起任务并交付最终结果。") }) };
         }
         const team = snapshot.teams.filter(candidate => candidate.runtime.mode === 'coordinator').map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
-        if (!team || team.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
+        if (!team || !isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams))
             throw new Error(teamTx("专家团不存在或成员未就绪。"));
         const engine = resolveTeamEngine(ctx, exec.agent, maxDepth, teamRequiresToolFilter(team, catalog.experts)).status;
         return { report: JSON.stringify({ ...team, engine, coordinator: effectiveCoordinator(team, activeLocale()), collaboration: teamCollaboration(team, activeLocale()), revision: snapshot.revision, instruction: teamTx("确认目标与评审范围后立即将简报传给 summon_expert_team，相关资料路径可直接交给专家阅读，主理人不要预先读完整个项目。只有确实无法确定评审对象时才询问；用户已明确整体评审后不再反复确认。若 engine.recommendation 非空，简短转述其中的会话恢复建议，但不阻断普通调用、不自行修改配置。原生模式返回的是启动确认，必须等待实际成员结论后才汇总。") }) };
@@ -1116,7 +1124,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
         const pluginTeam = [...pluginTeams.values()].find(team => team.id === args.team || pluginText(team.name, activeLocale()) === args.team);
         if (pluginTeam !== undefined) {
             const candidate = snapshot.teams.find(team => team.id === pluginTeam.id);
-            if (!candidate || candidate.runtime.mode !== 'lead' || candidate.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
+            if (!candidate || candidate.runtime.mode !== 'lead' || !isTeamRecalled(candidate, snapshot.enabledExperts, snapshot.recalledTeams))
                 throw new Error(teamTx("专家团成员不存在、冲突或未就绪，请修复后重试。"));
             const summary = candidate;
             const unavailable = summary.connectorStates.filter(connector => {
@@ -1148,7 +1156,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
             return { report: JSON.stringify({ ...result, runtime: 'lead' }) };
         }
         const team = snapshot.teams.filter(candidate => candidate.runtime.mode === 'coordinator').map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
-        if (!team || team.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
+        if (!team || !isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams))
             throw new Error(teamTx("专家团不存在或成员未就绪。"));
         await preflightExpertTeam(ctx, team, catalog.experts, exec.agent!, exec.signal);
         const engine = resolveTeamEngine(ctx, exec.agent, maxDepth, teamRequiresToolFilter(team, catalog.experts));
@@ -1197,7 +1205,7 @@ async function runSelectedTeam(teamId: string, task: string, agent: Agent, signa
     if (snapshot.revision !== catalog.revision)
         throw new Error(teamTx("名册已更新，请重新读取专家团。"));
     const selected = snapshot.teams.find(team => team.id === teamId);
-    if (!selected || selected.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
+    if (!selected || !isTeamRecalled(selected, snapshot.enabledExperts, snapshot.recalledTeams))
         throw new Error(teamTx("专家团不存在或成员未就绪。"));
     await preflightExpertTeam(ctx, selected, catalog.experts, agent, signal);
     const provider = ctx.subagents.getProvider(config.provider);

@@ -38,10 +38,28 @@ afterEach(async () => {
 })
 
 describe('expert team live UI state', () => {
+  it('does not infer recall from enabled members and only shows explicitly recalled overlapping teams', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    const team = { ...structuredClone(BUILTIN_TEAMS[0]!), members: [{ expertSlug: expert.slug, duty: 'Review', instructions: 'Inspect evidence.' }] }
+    const other = { ...team, id: 'other-team', name: '另一评审团' }
+    const snapshot = { teams: [team, other], enabledExperts: ['reviewer'], revision: 1 }
+    const remote = {
+      getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert], enabled: ['reviewer'], revision: 1 } })),
+      getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
+    } as unknown as TeamRemote
+    const host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await act(async () => root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' }, React.createElement(TeamMenu, { remote, onSelected: vi.fn() }))))
+    expect(host.querySelector('.agt-compact-row')).toBeNull()
+    await act(async () => { acceptTeamSnapshot(remote, { ...snapshot, recalledTeams: [team.id], revision: 2 }) })
+    expect(host.querySelectorAll('.agt-compact-row')).toHaveLength(1)
+    expect(host.textContent).toContain(team.name)
+    expect(host.textContent).not.toContain(other.name)
+  })
+
   it('only lists summoned teams and removes them immediately when a member is disabled', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const team = { ...structuredClone(BUILTIN_TEAMS[0]!), members: [{ expertSlug: expert.slug, duty: 'Review', instructions: 'Inspect evidence.' }] }
-    let snapshot = { teams: [team], enabledExperts: [] as string[], revision: 1 }
+    let snapshot = { teams: [team], enabledExperts: [] as string[], recalledTeams: [] as string[], revision: 1 }
     const insert = vi.fn(async () => true)
     const selected = vi.fn()
     const remote = {
@@ -54,7 +72,7 @@ describe('expert team live UI state', () => {
       React.createElement(TeamMenu, { remote, prepareSelect: () => insert, onSelected: selected }))))
     expect(host.querySelector('.agt-compact-row')).toBeNull()
     expect(host.textContent).toContain('尚未召唤专家团')
-    snapshot = { ...snapshot, enabledExperts: ['reviewer'], revision: 2 }
+    snapshot = { ...snapshot, enabledExperts: ['reviewer'], recalledTeams: [team.id], revision: 2 }
     await act(async () => { acceptTeamSnapshot(remote, snapshot) })
     const button = host.querySelector<HTMLButtonElement>('.agt-compact-row > button')!
     expect(button.textContent).toContain('已召唤')
@@ -75,7 +93,7 @@ describe('expert team live UI state', () => {
     const writer = { ...expert, slug: 'writer', name: '写作专家' }
     const team = { ...structuredClone(BUILTIN_TEAMS[0]!), members: [expert, writer].map(item => ({ expertSlug: item.slug, duty: 'Review', instructions: 'Inspect evidence.' })) }
     const recalled = { ...team, id: 'recalled-review', name: '已就绪评审团', members: [team.members[0]!] }
-    const snapshot = { teams: [team, recalled], enabledExperts: ['reviewer'], revision: 1 }
+    const snapshot = { teams: [team, recalled], enabledExperts: ['reviewer'], recalledTeams: [team.id, recalled.id], revision: 1 }
     const remote = {
       getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert, writer], enabled: ['reviewer'], revision: 1 } })),
       getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
@@ -94,7 +112,7 @@ describe('expert team live UI state', () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     const team = { ...structuredClone(BUILTIN_TEAMS[0]!), members: [{ expertSlug: expert.slug, duty: 'Review', instructions: 'Inspect evidence.' }] }
-    const snapshot = { teams: [team], enabledExperts: ['reviewer'], revision: 2 }
+    const snapshot = { teams: [team], enabledExperts: ['reviewer'], recalledTeams: [team.id], revision: 2 }
     const remote = {
       getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert], enabled: ['reviewer'], revision: 2 } })),
       getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
@@ -245,7 +263,7 @@ describe('expert team live UI state', () => {
       runtime: { mode: 'coordinator' as const, initPrompt: '' }, skills: [], connectors: [], connectorStates: [],
     }
     const writer = { ...expert, slug: 'writer', name: '记录专家', nameEn: 'Writer' }
-    const snapshot = { teams: [team], enabledExperts: ['reviewer', 'writer'], revision: 1 }
+    const snapshot = { teams: [team], enabledExperts: ['reviewer', 'writer'], recalledTeams: [team.id], revision: 1 }
     const remote = {
       getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
       getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert, writer], enabled: snapshot.enabledExperts, revision: 1 } })),

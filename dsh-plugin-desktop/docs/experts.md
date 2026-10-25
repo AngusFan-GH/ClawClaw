@@ -24,14 +24,17 @@ the desktop client entry so all three faces use the same ClawClaw release.
 ### Team recall and selection
 
 Recalling a team enables all of its member experts in one settings transaction.
-There is no independent team enablement flag or record of which recall button
-was clicked: a team is recalled whenever all of its members are enabled,
-including members enabled individually or through another team.
+The same transaction records its ID in `recalledTeams`. Only explicitly recalled
+teams are selectable; enabling experts individually or recalling another team
+with overlapping members never recalls a team implicitly. The record survives
+restarts. Old settings without this field start with no recalled teams; previous
+recall actions cannot be inferred reliably from enabled members.
 
 The management page shows all teams. The composer menu and `@` candidates show
 only recalled teams, using the shared `isTeamRecalled` predicate. Selecting from
 the composer does not enable members. Disabling any member removes its teams
-from the selection list. Capability health is checked separately: disabled
+from the selection list until that member is enabled again (the explicit recall
+record is retained). Deleting a custom team clears its record. Capability health is checked separately: disabled
 members mean a team is not recalled; missing members or required capabilities
 need repair; a pending capability check is not a repair failure.
 

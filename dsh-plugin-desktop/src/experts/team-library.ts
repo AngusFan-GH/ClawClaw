@@ -150,6 +150,7 @@ export function createTeamLibrary(
       return {
         teams: catalogTeams,
         enabledExperts: all.enabled,
+        recalledTeams: [...new Set(store.read().recalledTeams ?? [])].filter(id => catalogTeams.some(team => team.id === id)),
         revision: all.revision,
       }
     },
@@ -166,8 +167,10 @@ export function createTeamLibrary(
       if (team === undefined) throw new Error(tx('专家团不存在，请重新选择。'))
       requireMembers(team, all)
       const next = [...new Set([...all.enabled, ...team.members.map(member => member.expertSlug)])]
-      if (next.length !== all.enabled.length) await store.mutate([
+      const recalled = store.read().recalledTeams ?? []
+      if (next.length !== all.enabled.length || !recalled.includes(id)) await store.mutate([
         { op: 'set', path: ['enabled'], value: next },
+        { op: 'set', path: ['recalledTeams'], value: [...new Set([...recalled, id])] },
       ], revision)
       return library.snapshot()
     },
@@ -257,6 +260,7 @@ export function createTeamLibrary(
         throw new Error(tx('只能删除已有的自定义专家团。'))
       await store.mutate(
         [
+          { op: 'set', path: ['recalledTeams'], value: (store.read().recalledTeams ?? []).filter(item => item !== id) },
           {
             op: 'set',
             path: ['customTeams'],

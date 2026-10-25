@@ -74,7 +74,7 @@ export function TeamMenu(props: {
     const pick = async (team: ExpertTeam, example?: string) => {
         if (busy || !snapshot)
             return;
-        if (teamIssue(team, experts, snapshot.enabledExperts, healthFor(team, rawExperts))) {
+        if (!isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams) || teamIssue(team, experts, snapshot.enabledExperts, healthFor(team, rawExperts))) {
             setError(tx("专家团成员或必需能力尚未就绪，请先在设置中修复。"));
             return;
         }
@@ -94,7 +94,7 @@ export function TeamMenu(props: {
                 setBusy(false);
         }
     };
-    const summoned = snapshot?.teams.filter(team => isTeamRecalled(team, snapshot.enabledExperts)) ?? [];
+    const summoned = snapshot?.teams.filter(team => isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams)) ?? [];
     const teams = summoned.map(team => localizeTeam(team, locale)).filter((t) =>
         `${t.name} ${t.description}`
             .toLowerCase()

@@ -76,6 +76,7 @@ async function hostFixture() {
   let revision = 7
   let state = {
     enabled: ['research-team--lead', 'research-team--analyst'],
+    recalledTeams: ['plugin-team:research-team'],
     customExperts: [], customTeams: [],
   }
   let connectorState: 'running' | 'error' = 'running'
@@ -232,6 +233,16 @@ describe('Expert deletion through the strict Remote gateway', () => {
 })
 
 describe('Plugin Team Host tools', () => {
+  it('does not list or execute teams whose members are enabled without an explicit recall', async () => {
+    const fixture = await hostFixture()
+    await writeTeamPackage(fixture.home, '1.0.0')
+    await fixture.ctx.settings.mutate('clawclaw-experts', [{ op: 'set', path: ['recalledTeams'], value: [] }], 7)
+    expect(JSON.parse(String((await fixture.execute('list_expert_teams', {})).report))).toEqual([])
+    await expect(fixture.execute('get_expert_team', { team: 'plugin-team:research-team' })).rejects.toThrow()
+    await expect(fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Research evidence' })).rejects.toThrow()
+    expect(fixture.starts).toHaveLength(0)
+  })
+
   it('replaces legacy placeholder MCP names with configured capability aliases', async () => {
     const fixture = await hostFixture()
     const library = fixture.services.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary
@@ -308,6 +319,8 @@ describe('Plugin Team Host tools', () => {
     expect(result.catalog.experts.some(expert => expert.packageName === 'research-team')).toBe(false)
     expect(result.catalog.enabled).toEqual([])
     expect(result.teams.teams.some(team => team.id === 'plugin-team:research-team')).toBe(false)
+    expect(result.teams.recalledTeams).toEqual([])
+    expect(fixture.ctx.settings.get('clawclaw-experts')).toMatchObject({ recalledTeams: [] })
     await expect(stat(root)).rejects.toThrow()
   })
 })

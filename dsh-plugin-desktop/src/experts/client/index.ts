@@ -1703,7 +1703,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
       const candidate = snapshot.teams.find(item => item.id === team.id)
       const capabilities = registry.getSnapshot()
       const health = candidate && expertCapabilityHealth(teamCapabilityBindings(candidate, catalog.experts), capabilities.catalog, capabilities.loading, { skills: capabilities.skillsLoaded, mcpServers: capabilities.mcpLoaded })
-      if (!candidate || snapshot.revision !== catalog.revision || candidate.members.some(member => !catalog.enabled.includes(member.expertSlug) || !catalog.experts.some(expert => expert.slug === member.expertSlug && !expert.conflict)) || health?.state === 'blocked' || health?.state === 'unknown')
+      if (!candidate || !isTeamRecalled(candidate, catalog.enabled, snapshot.recalledTeams) || snapshot.revision !== catalog.revision || candidate.members.some(member => !catalog.experts.some(expert => expert.slug === member.expertSlug && !expert.conflict)) || health?.state === 'blocked' || health?.state === 'unknown')
         throw new Error(teamText(getActive(), '专家团成员或必需能力尚未就绪，请先在设置中修复。'))
       team = localizeTeam(candidate, getActive())
     } catch (cause) {
@@ -1790,7 +1790,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     const teamsRemote = remote as TeamRemote
     let snapshot = teamState(teamsRemote) ?? await refreshTeams(teamsRemote)
     let current = snapshot.teams.find(item => item.id === team.id) ?? team
-    if (!isTeamRecalled(current, snapshot.enabledExperts)) {
+    if (!isTeamRecalled(current, snapshot.enabledExperts, snapshot.recalledTeams)) {
       const next = await unwrap(teamsRemote.recallTeam(current.id, snapshot.revision))
       snapshot = acceptTeamSnapshot(teamsRemote, next)
       current = snapshot.teams.find(item => item.id === team.id) ?? current
@@ -2023,7 +2023,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           const snapshot = cached ?? await refreshTeams(teamRemote)
           if (cached) void refreshTeams(teamRemote).catch((error: unknown) => console.warn('[clawclaw-experts] 专家团刷新失败：', error))
           teamCache = snapshot.teams
-            .filter(team => isTeamRecalled(team, snapshot.enabledExperts))
+            .filter(team => isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams))
             .map(team => localizeTeam(team, active))
           return teamCache.filter(team => `${team.name}`.toLowerCase().includes(String(request.query ?? '').toLowerCase())).map(team => ({ name: `${team.name} · ${teamText(active, '专家团')}`, hint: team.id, section: teamText(active, '专家团') }))
         },
@@ -2040,7 +2040,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           serialize: async id => {
             const [snapshot, catalog] = await Promise.all([refreshTeams(teamRemote), unwrap(teamRemote.getCatalog())])
             teamCache = snapshot.teams
-              .filter(team => isTeamRecalled(team, snapshot.enabledExperts))
+              .filter(team => isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams))
               .map(team => localizeTeam(team, active))
             const team = teamCache.find(team => team.id === id)
             const legacy = snapshot.teams.find(candidate => candidate.id === id)

@@ -3,6 +3,7 @@ import { createTeamLibrary } from '../src/experts/team-library.ts'
 import type { AgencySettings, ExpertSettingsStore } from '../src/experts/expert-library.ts'
 import type { ExpertPluginTeamDefinition } from '../src/experts/expert-plugin-package.ts'
 import type { DesktopMcpView } from '../src/mcp-contract.ts'
+import { agencySettingsFromLegacyDocument, readAgencySettings } from '../src/experts/settings-compat.ts'
 
 const definition: ExpertPluginTeamDefinition = {
   id: 'plugin-team:research-pack',
@@ -29,7 +30,7 @@ function fixture(initial: AgencySettings = { enabled: [] }, connector?: {
   toggle(serverName: string, enabled: boolean): Promise<DesktopMcpView>
   test(serverName: string): Promise<DesktopMcpView>
   install(connectorId: string, values: Readonly<Record<string, string>>): Promise<DesktopMcpView>
-}) {
+}, teamDefinitions: readonly ExpertPluginTeamDefinition[] = [definition]) {
   let state = structuredClone(initial)
   let revision = 4
   const store: ExpertSettingsStore = {
@@ -44,7 +45,7 @@ function fixture(initial: AgencySettings = { enabled: [] }, connector?: {
       revision++
     },
   }
-  const library = createTeamLibrary(async () => ({ experts, enabled: state.enabled, revision }), store, () => 'zh', async () => [definition], connector === undefined ? undefined : () => ({
+  const library = createTeamLibrary(async () => ({ experts, enabled: state.enabled, revision }), store, () => 'zh', async () => teamDefinitions, connector === undefined ? undefined : () => ({
     read: async () => connector.view,
     toggle: connector.toggle,
     test: connector.test,
@@ -54,6 +55,16 @@ function fixture(initial: AgencySettings = { enabled: [] }, connector?: {
 }
 
 describe('unified team library', () => {
+  it('reads recall records from live configuration and legacy imports without inferring old records', () => {
+    let recalled = [definition.id]
+    const config = { enabled: { get: () => experts.map(expert => expert.slug) }, recalledTeams: { get: () => recalled } }
+    expect(readAgencySettings(config).recalledTeams).toEqual([definition.id])
+    recalled = []
+    expect(readAgencySettings(config).recalledTeams).toEqual([])
+    expect(readAgencySettings({ enabled: experts.map(expert => expert.slug) }).recalledTeams).toEqual([])
+    expect(agencySettingsFromLegacyDocument({ 'clawclaw-experts': { enabled: [], recalledTeams: [definition.id] } })?.recalledTeams).toEqual([definition.id])
+  })
+
   it('projects packaged teams into the single team catalog', async () => {
     const { library } = fixture()
     const snapshot = await library.snapshot()
@@ -66,19 +77,21 @@ describe('unified team library', () => {
     expect(team?.members).toHaveLength(2)
   })
 
-  it('does not persist an independent team enablement state', async () => {
+  it('starts old settings without any implicitly recalled teams', async () => {
     const { library, state } = fixture()
     const snapshot = await library.snapshot()
     expect(snapshot).not.toHaveProperty('enabledTeams')
+    expect(snapshot.recalledTeams).toEqual([])
     expect(library).not.toHaveProperty('setEnabled')
     expect(state().enabled).toEqual([])
   })
 
-  it('exposes expert readiness without duplicating it as team state', async () => {
+  it('does not recall a team when all of its experts are individually enabled', async () => {
     const { library } = fixture({ enabled: ['research-pack--lead', 'research-pack--analyst'] })
     const snapshot = await library.snapshot()
     expect(snapshot.enabledExperts).toEqual(['research-pack--lead', 'research-pack--analyst'])
     expect(snapshot).not.toHaveProperty('enabledTeams')
+    expect(snapshot.recalledTeams).toEqual([])
   })
 
   it('recalls a team by enabling all of its experts in one revision', async () => {
@@ -86,7 +99,40 @@ describe('unified team library', () => {
     const snapshot = await library.recall(definition.id, 4)
     expect(state().enabled).toEqual(['research-pack--lead', 'research-pack--analyst'])
     expect(snapshot.enabledExperts).toEqual(['research-pack--lead', 'research-pack--analyst'])
+    expect(state().recalledTeams).toEqual([definition.id])
+    expect(snapshot.recalledTeams).toEqual([definition.id])
     expect(snapshot.revision).toBe(5)
+  })
+
+  it('records an explicit recall even with all members enabled, survives restart and is idempotent', async () => {
+    const { library, state } = fixture({ enabled: experts.map(expert => expert.slug) })
+    expect((await library.recall(definition.id, 4)).revision).toBe(5)
+    expect(state().recalledTeams).toEqual([definition.id])
+    expect((await library.recall(definition.id, 5)).revision).toBe(5)
+    const restarted = fixture(state())
+    expect((await restarted.library.snapshot()).recalledTeams).toEqual([definition.id])
+  })
+
+  it('does not implicitly recall another team with identical members', async () => {
+    const other = { ...definition, id: 'plugin-team:other', packageName: 'other' }
+    const { library } = fixture({ enabled: [] }, undefined, [definition, other])
+    const snapshot = await library.recall(definition.id, 4)
+    expect(snapshot.enabledExperts).toEqual(experts.map(expert => expert.slug))
+    expect(snapshot.recalledTeams).toEqual([definition.id])
+    expect(snapshot.teams.some(team => team.id === other.id)).toBe(true)
+  })
+
+  it('removes a deleted custom team recall record while keeping its members enabled', async () => {
+    const { library, state } = fixture()
+    const team = (await library.snapshot()).teams.find(team => team.id === definition.id)!
+    const { id: _id, builtin: _builtin, runtime: _runtime, skills: _skills, connectors: _connectors, connectorStates: _connectorStates, provenance: _provenance, ...input } = team
+    const saved = await library.save({ ...input, name: 'Temporary team' }, 4)
+    const custom = saved.teams.find(team => !team.builtin)!
+    await library.recall(custom.id, saved.revision)
+    const removed = await library.remove(custom.id, 6)
+    expect(removed.recalledTeams).toEqual([])
+    expect(state().recalledTeams).toEqual([])
+    expect(removed.enabledExperts).toEqual(experts.map(expert => expert.slug))
   })
 
   it('projects and controls declared Connector dependencies through the Host lifecycle', async () => {

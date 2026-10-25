@@ -25,6 +25,7 @@ function sameSnapshot(current: TeamSnapshot, next: TeamSnapshot): boolean {
   return current.revision === next.revision
     && JSON.stringify(current.teams) === JSON.stringify(next.teams)
     && JSON.stringify(current.enabledExperts) === JSON.stringify(next.enabledExperts)
+    && JSON.stringify(current.recalledTeams ?? []) === JSON.stringify(next.recalledTeams ?? [])
     && JSON.stringify(current.engine ?? null) === JSON.stringify(next.engine ?? null)
     && JSON.stringify(current.nativeMembers ?? null) === JSON.stringify(next.nativeMembers ?? null)
 }

@@ -178,7 +178,7 @@ export function TeamsPanel(props: {
             ? { ...current, enabledExperts: [...catalog.enabled], revision: catalog.revision } : current);
     }), [props.remote]);
     React.useEffect(() => {
-        const available = snapshot?.teams.filter(team => !teamIssue(team, rawExperts, snapshot.enabledExperts, healthFor(team, rawExperts))).length ?? 0;
+        const available = snapshot?.teams.filter(team => isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams) && !teamIssue(team, rawExperts, snapshot.enabledExperts, healthFor(team, rawExperts))).length ?? 0;
         props.onSummary?.({ total: snapshot?.teams.length ?? 0, enabled: available });
     }, [snapshot, rawExperts, props.onSummary, healthFor]);
     const [query, setQuery] = React.useState('');
@@ -301,7 +301,7 @@ export function TeamsPanel(props: {
         (!status || (() => {
             const issue = teamRepairIssue(team, experts, healthFor(team, rawExperts));
             const repair = issue !== undefined && issue !== '能力检查中';
-            const recalled = isTeamRecalled(team, snapshot.enabledExperts);
+            const recalled = isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams);
             return status === 'available' ? recalled && !issue : status === 'recall' ? !recalled && !issue : repair;
         })()) &&
         `${team.name} ${team.description} ${team.goal} ${team.deliveryRequirements} ${team.tags.join(' ')} ${team.examples.join(' ')} ${team.members.map(member => experts.find(expert => expert.slug === member.expertSlug)?.name ?? '').join(' ')}`
@@ -359,7 +359,7 @@ export function TeamsPanel(props: {
             const repairIssue = teamRepairIssue(team, experts, healthFor(team, rawExperts));
             const memberCount = team.members.length;
             const validMembers = team.members.every(member => experts.some(expert => expert.slug === member.expertSlug && !expert.conflict));
-            const recalled = isTeamRecalled(team, snapshot!.enabledExperts);
+            const recalled = isTeamRecalled(team, snapshot!.enabledExperts, snapshot!.recalledTeams);
             return (<LibraryCard key={team.id} testId="team-card" name={team.name} avatar={<div className="aag-team-avatar">
                   <TeamAvatars team={team} experts={experts}/>
                 </div>} metadata={<>{tx("{0} 位专家", [memberCount])}{team.tags.slice(0, 2).map(tag => <span key={tag} className="aag-source-badge">{tag}</span>)}{repairIssue ? <> · {tx(repairIssue === '能力检查中' ? repairIssue : "需修复")}</> : null}</>} description={repairIssue
@@ -385,7 +385,7 @@ export function TeamsPanel(props: {
                 setFilter('all');
             }}>{tx("清除筛选")}</Button>
         </div>)}
-      {details && (<TeamDetails team={details} experts={experts} health={healthFor(details, rawExperts)} close={() => setDetails(null)} onSelect={props.onSelectTeam === undefined || teamIssue(details, experts, snapshot!.enabledExperts, healthFor(details, rawExperts)) !== undefined ? undefined : (example) => { void Promise.resolve(props.onSelectTeam?.(details, example)).then(selected => { if (selected) setDetails(null) }) }} onManageConnectors={props.onOpenConnectors} onEdit={!details.builtin
+      {details && (<TeamDetails team={details} experts={experts} health={healthFor(details, rawExperts)} close={() => setDetails(null)} onSelect={props.onSelectTeam === undefined || !isTeamRecalled(details, snapshot!.enabledExperts, snapshot!.recalledTeams) || teamIssue(details, experts, snapshot!.enabledExperts, healthFor(details, rawExperts)) !== undefined ? undefined : (example) => { void Promise.resolve(props.onSelectTeam?.(details, example)).then(selected => { if (selected) setDetails(null) }) }} onManageConnectors={props.onOpenConnectors} onEdit={!details.builtin
                 ? () => {
                     setEditor({
                         value: teamInput(details),
