@@ -15,6 +15,32 @@ describe('Desktop shortcut drag interaction', () => {
     document.body.replaceChildren()
   })
 
+  it('orders available entries like the Settings menu while preserving pinned order', () => {
+    const settingsSnapshot = { value: { items: ['desktop-automations', 'settings:clawclaw-experts'] } }
+    const targets: readonly ShortcutTarget[] = [
+      { id: 'plugins', targetId: 'plugins', label: 'Plugins', kind: 'panel' },
+      { id: 'desktop-automations', targetId: 'desktop-automations', label: 'Automations', kind: 'panel' },
+      { id: 'settings:desktop', targetId: 'desktop', label: 'Desktop', kind: 'settings', order: 50 },
+      { id: 'settings:models', targetId: 'models', label: 'Models', kind: 'settings', order: 10 },
+      { id: 'settings:general', targetId: 'general', label: 'General', kind: 'settings', order: 0 },
+      { id: 'settings:clawclaw-experts', targetId: 'clawclaw-experts', label: 'Experts', kind: 'settings', order: 20 },
+    ]
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    roots.push(root)
+    act(() => {
+      root.render(createElement(ShortcutSettingsRow, {
+        t: (key: string) => key,
+        shortcutSettings: { getSnapshot: () => settingsSnapshot, subscribe: () => () => {}, set: vi.fn() },
+        shortcutTargets: { getSnapshot: () => targets, subscribe: () => () => {} },
+      } as never))
+    })
+    const labels = (selector: string) => [...container.querySelectorAll(`${selector} > span`)].map(node => node.textContent)
+    expect(labels('.dshShortcutGroup:first-child .dshShortcutRow')).toEqual(['General', 'Models', 'Desktop', 'Plugins'])
+    expect(labels('.dshShortcutSelectedRow')).toEqual(['Automations', 'Experts'])
+  })
+
   it('uses the whole row and persists a drop at the hovered row half', () => {
     const items = ['plugins', 'desktop-automations', 'settings:clawclaw-experts']
     const settingsSnapshot = { value: { items } }

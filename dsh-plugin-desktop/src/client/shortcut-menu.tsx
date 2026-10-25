@@ -110,6 +110,8 @@ export function ShortcutSettingsRow({ t, shortcutSettings, shortcutTargets }: Sh
   const settings = useScope(shortcutSettings)
   const targets = useTargets(shortcutTargets)
   const items = normalizeShortcutItems(settings?.items, targets)
+  const available = targets.filter(item => !items.includes(item.id))
+    .sort((a, b) => settingsMenuOrder(a, targets) - settingsMenuOrder(b, targets))
   const save = (next: readonly string[]): void => { void shortcutSettings.set('items', next) }
   const definitions = useMemo(() => new Map(targets.map(item => [item.id, item])), [targets])
   const [drag, setDrag] = useState<ShortcutDragState | null>(null)
@@ -162,7 +164,7 @@ export function ShortcutSettingsRow({ t, shortcutSettings, shortcutTargets }: Sh
   return <section className="dshShortcutSettings">
     <header><h3>{t('title')}</h3><p>{t('intro')}</p></header>
     <div className="dshShortcutGroups">
-      <div className="dshShortcutGroup"><h4>{t('available')}</h4>{targets.filter(item => !items.includes(item.id)).map(item => <div className="dshShortcutRow" key={item.id}><ShortcutIcon target={item} /><span>{item.label}</span><IconButton label={`${t('add')}: ${item.label}`} disabled={items.length >= MAX_SHORTCUTS} onClick={() => { save([...items, item.id]) }}><Plus size={14} /></IconButton></div>)}</div>
+      <div className="dshShortcutGroup"><h4>{t('available')}</h4>{available.map(item => <div className="dshShortcutRow" key={item.id}><ShortcutIcon target={item} /><span>{item.label}</span><IconButton label={`${t('add')}: ${item.label}`} disabled={items.length >= MAX_SHORTCUTS} onClick={() => { save([...items, item.id]) }}><Plus size={14} /></IconButton></div>)}</div>
       <div className="dshShortcutGroup"><h4>{t('selected')}</h4>{items.map(id => {
         const item = definitions.get(id)!
         const placement = drag?.over?.id === id ? drag.over.half : undefined
