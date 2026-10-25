@@ -518,7 +518,7 @@ export const CAPABILITY_PICKER_CSS = `
 .aag-capability-nav button{width:100%;padding:8px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}.aag-capability-nav button:hover,.aag-capability-nav button.active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .aag-capability-content{display:flex;min-width:0;min-height:0;flex-direction:column;overflow:hidden}
 .aag-capability-results{display:flex;flex:1;min-width:0;min-height:0;max-height:none;flex-direction:column;padding:2px 2px 2px 10px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}.aag-capability-results>.agt-compact{min-width:0}.aag-capability-results .agt-compact-list{max-width:100%;overflow-x:hidden}
-.aag-capability-footer{flex:none;margin-left:10px;padding:8px 4px 2px;border-top:1px solid var(--dsw-alias-border-l2)}.aag-capability-footer button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:36px;padding:6px 12px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-brand-primary);font:inherit;font-size:13px;cursor:pointer}.aag-capability-footer button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-footer button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}.aag-capability-footer button>span{margin-left:auto}
+.aag-capability-footer{flex:none;margin-left:10px;padding:8px 4px 2px;border-top:1px solid var(--dsw-alias-border-l2)}.aag-capability-footer button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:36px;padding:6px 12px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-brand-primary);font:inherit;font-size:13px;cursor:pointer}.aag-capability-footer button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-footer button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
 .aag-capability-search{padding:4px 4px 6px;flex:none}.aag-capability-search input{box-sizing:border-box;width:100%;min-height:38px;padding:7px 11px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit}.aag-capability-search input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
 .aag-capability-summary{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 8px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}.aag-capability-summary span{min-width:0}.aag-capability-summary span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
 .aag-capability-list{display:flex;min-width:0;flex-direction:column}.aag-capability-list>button{display:flex;align-items:flex-start;flex-direction:column;gap:2px;width:100%;min-width:0;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}.aag-capability-list>button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-list small{display:flex;min-width:0;align-items:center;gap:7px;overflow:hidden;max-width:100%;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}
@@ -1003,10 +1003,12 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
       capabilityContent
       ),
       props.onManage && (mode === 'experts' || mode === 'teams') ? React.createElement('footer', { className: 'aag-capability-footer' },
-        React.createElement('button', { type: 'button', onClick: () => { close(); props.onManage?.(mode) } },
+        React.createElement('button', { type: 'button', onClick: () => {
+          try { props.onManage?.(mode); close() }
+          catch (cause) { setInsertError(cause instanceof Error ? cause.message : String(cause)) }
+        } },
           React.createElement(mode === 'experts' ? Bot : UsersRound, { size: 16, 'aria-hidden': true }),
-          props.getActive() === 'zh' ? (mode === 'experts' ? '管理专家' : '管理专家团') : (mode === 'experts' ? 'Manage experts' : 'Manage teams'),
-          React.createElement('span', { 'aria-hidden': true }, '→'))) : null)
+          props.getActive() === 'zh' ? (mode === 'experts' ? '管理专家' : '管理专家团') : (mode === 'experts' ? 'Manage experts' : 'Manage teams'))) : null)
       )
       )
     : null
@@ -1602,7 +1604,26 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
         t: props.mcpT, api: props.mcpApi, embedded: true, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
       })))))
 }
-export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation', 'sidebarRight', 'layout']
+/** applyExperts is called by Desktop directly; its exported inject list is not installed by that call. */
+export function installExpertManagementNavigation(ctx, renderSettingsPanel, installButton) {
+  ctx.inject(['layout'], (scope) => {
+    let managementTarget = { view: 'experts' as 'experts' | 'teams', request: 0 }
+    const managementListeners = new Set<() => void>()
+    const subscribeManagement = (listener: () => void) => { managementListeners.add(listener); return () => { managementListeners.delete(listener) } }
+    scope.slots.inject('main', () => scope.slots.register({ name: 'main', key: 'clawclaw-expert-management', locale: NS }, (props) => {
+      const target = React.useSyncExternalStore(subscribeManagement, () => managementTarget)
+      return React.createElement('main', { className: 'dshShortcutPage' }, renderSettingsPanel({ ...props, initialView: target.view, key: target.request,
+        close: () => scope.layout.selectPanel(null) }))
+    }))
+    installButton(scope, (view: 'experts' | 'teams') => {
+      managementTarget = { view, request: managementTarget.request + 1 }
+      for (const listener of managementListeners) listener()
+      scope.layout.selectPanel('clawclaw-expert-management')
+    })
+  })
+}
+
+export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation', 'sidebarRight']
 const SKILL_REFERENCE_SOURCE = 'clawclaw-experts:skills'
 
 export async function apply(ctx: ClientContext): Promise<() => void> {
@@ -2004,28 +2025,15 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     renderSettingsPanel,
   ))
 
-  // A dedicated route also works when the user has unpinned the library shortcut.
-  let managementTarget = { view: 'experts' as 'experts' | 'teams', request: 0 }
-  const managementListeners = new Set<() => void>()
-  const subscribeManagement = (listener: () => void) => { managementListeners.add(listener); return () => { managementListeners.delete(listener) } }
-  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'clawclaw-expert-management', locale: NS }, (props) => {
-    const target = React.useSyncExternalStore(subscribeManagement, () => managementTarget)
-    return React.createElement('main', { className: 'dshShortcutPage' }, renderSettingsPanel({ ...props, initialView: target.view, key: target.request,
-      close: () => ctx.layout.selectPanel(null) }))
-  }))
-  const openManagement = (view: 'experts' | 'teams') => {
-    managementTarget = { view, request: managementTarget.request + 1 }
-    for (const listener of managementListeners) listener()
-    ctx.layout.selectPanel('clawclaw-expert-management')
-  }
-
-  ctx.slots.inject('conversation.input.left', () => ctx.slots.register(
-    {
-      name: 'conversation.input.left', id: 'clawclaw-experts', order: 0, locale: NS,
-      ...({ inject: bindExpertInsertion } as Record<string, unknown>),
-    },
-    (props) => React.createElement(AgentsButton, { ...props, remote, getActive, onEnabledChange: updateEnabledForMentions, onManage: openManagement }),
-  ))
+  installExpertManagementNavigation(ctx, renderSettingsPanel, (scope, openManagement) => {
+    scope.slots.inject('conversation.input.left', () => scope.slots.register(
+      {
+        name: 'conversation.input.left', id: 'clawclaw-experts', order: 0, locale: NS,
+        ...({ inject: bindExpertInsertion } as Record<string, unknown>),
+      },
+      (props) => React.createElement(AgentsButton, { ...props, remote, getActive, onEnabledChange: updateEnabledForMentions, onManage: openManagement }),
+    ))
+  })
 
   const registerInputTriggerSources = (active: 'zh' | 'en'): (() => void) => {
     const disposers: Array<() => void> = []

@@ -2,8 +2,9 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
 import { acceptCatalog } from '../src/experts/client/catalog.ts'
-import { AgentsButton, ExpertCardsSettings } from '../src/experts/client/index.ts'
+import { AgentsButton, ExpertCardsSettings, installExpertManagementNavigation } from '../src/experts/client/index.ts'
 import { acceptTeamSnapshot } from '../src/experts/client/team-cache.ts'
 import { TeamLocaleContext } from '../src/experts/client/team-locale.ts'
 import { isDeletableTeam, TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
@@ -38,6 +39,48 @@ afterEach(async () => {
 })
 
 describe('expert team live UI state', () => {
+  it('navigates both management tabs through a real Cordis layout injection when Desktop calls Experts directly', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    const context = new Context()
+    const panels = new Map<string, React.ComponentType<Record<string, unknown>>>()
+    const selectPanel = vi.fn((id: string | null) => {
+      if (id !== null && !panels.has(id)) throw new Error('Panel is not registered')
+    })
+    context.provide('slots', {
+      inject: (_name: string, install: () => unknown) => install(),
+      register: (options: { key: string }, component: React.ComponentType<Record<string, unknown>>) => {
+        panels.set(options.key, component)
+        return () => { panels.delete(options.key) }
+      },
+    })
+    const layoutFiber = context.plugin({ apply(provider: Context) { provider.provide('layout', { selectPanel }) } })
+    await layoutFiber
+    let navigate!: (view: 'experts' | 'teams') => void
+    const fiber = context.plugin({ inject: ['slots'], apply(scope: Context) {
+      // Desktop's parent scope does not inject layout on behalf of applyExperts.
+      expect(() => scope.layout).toThrow('without inject')
+      installExpertManagementNavigation(scope, (props: { initialView: string; close(): void }) => React.createElement('button', {
+        'data-management-tab': props.initialView, onClick: props.close,
+      }, 'Return'), (_scope: Context, open: typeof navigate) => { navigate = open })
+    } })
+    await fiber
+    try {
+      const host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+      await act(async () => root!.render(React.createElement(panels.get('clawclaw-expert-management')!)))
+      for (const view of ['teams', 'experts', 'teams'] as const) {
+        await act(async () => { navigate(view) })
+        expect(selectPanel).toHaveBeenLastCalledWith('clawclaw-expert-management')
+        expect(host.querySelector('[data-management-tab]')?.getAttribute('data-management-tab')).toBe(view)
+      }
+      await act(async () => host.querySelector<HTMLButtonElement>('button')!.click())
+      expect(selectPanel).toHaveBeenLastCalledWith(null)
+    } finally {
+      await act(async () => root?.unmount()); root = undefined
+      await fiber.dispose()
+      await layoutFiber.dispose()
+    }
+  })
+
   it.each([false, true])('offers fixed management links in both capability menus with populated=%s', async (populated) => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const remote = {
@@ -59,6 +102,8 @@ describe('expert team live UI state', () => {
     expect(footer.parentElement).toBe(results.parentElement)
     expect(results.contains(footer)).toBe(false)
     expect(footer.textContent).toContain('管理专家')
+    expect(footer.textContent).not.toContain('→')
+    expect(footer.querySelector('button > span')).toBeNull()
     await act(async () => footer.querySelector('button')!.click())
     expect(onManage).toHaveBeenLastCalledWith('experts')
     expect(host.querySelector('.aag-menu')).toBeNull()
