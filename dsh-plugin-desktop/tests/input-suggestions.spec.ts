@@ -5,6 +5,7 @@ import type { GenerateOptions, StreamChunk, ConfigureCall, ReasoningEffortId } f
 import { apply, generateInputSuggestion, inputSuggestionCallControls, HostInputSuggestions, InputSuggestionsSchema, suggestionContext, type HostSuggestionSnapshot } from '../src/input-suggestions.ts'
 import { registerDesktopJsonApi } from '../src/desktop-json-api.ts'
 import { suggestionText } from '../src/input-suggestions-contract.ts'
+import { AUTOMATIC_ASSIST_TIMEOUT_MS } from '../src/input-assistance-contract.ts'
 vi.mock('../src/desktop-json-api.ts', () => ({ registerDesktopJsonApi: vi.fn() }))
 
 function deferred<T>() {
@@ -26,6 +27,23 @@ function host() {
 afterEach(() => vi.useRealTimers())
 
 describe('Host input suggestions', () => {
+  it('restores a still-valid completed suggestion across composer remounts without another model call', async () => {
+    const h = host(); const first = h.controller.request(request)
+    await Promise.resolve(); h.pending.resolve('请补充回归测试。')
+    expect((await first).text).toBe('请补充回归测试。')
+    expect(await h.controller.request({ ...request, requestId: 'remounted' })).toEqual({ requestId: 'remounted', endSeq: request.endSeq, text: '请补充回归测试。' })
+    expect(h.generate).toHaveBeenCalledOnce()
+    h.invalidate()
+    expect((await h.controller.request({ ...request, requestId: 'changed-context' })).text).toBe('')
+    h.controller.dispose()
+  })
+  it('keeps a slow configured model alive beyond the former three-second cutoff', async () => {
+    vi.useFakeTimers(); const h = host(); const result = h.controller.request(request)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(h.generate.mock.calls[0]?.[1].aborted).toBe(false)
+    h.pending.resolve('请补充回归测试。')
+    expect((await result).text).toBe('请补充回归测试。'); h.controller.dispose()
+  })
   it('accepts only fixed diagnostic codes and never logs client-supplied text', async () => {
     const info = vi.fn()
     const ctx = { settings: { register: () => ({ get: () => ({ enabled: true }), watch: () => () => {} }) },
@@ -45,7 +63,7 @@ describe('Host input suggestions', () => {
     const result = controller.request(request)
     await Promise.resolve()
     if (outcome === 'empty') h.pending.resolve('')
-    if (outcome === 'timeout') await vi.advanceTimersByTimeAsync(3000)
+    if (outcome === 'timeout') await vi.advanceTimersByTimeAsync(AUTOMATIC_ASSIST_TIMEOUT_MS)
     expect((await result).text).toBe('')
     expect(trace.mock.calls.map(call => call[0])).toEqual(['request', 'model-start', outcome === 'empty' ? 'empty-or-invalid-result' : outcome])
     expect(JSON.stringify(trace.mock.calls)).not.toContain('SENSITIVE_PROVIDER_ERROR')
@@ -90,7 +108,7 @@ describe('Host input suggestions', () => {
     vi.useFakeTimers()
     const h = host()
     const result = h.controller.request(request)
-    await vi.advanceTimersByTimeAsync(3000)
+    await vi.advanceTimersByTimeAsync(AUTOMATIC_ASSIST_TIMEOUT_MS)
     expect((await result).text).toBe('')
     expect(h.generate.mock.calls[0]?.[1].aborted).toBe(true)
     await h.controller.request({ sessionId: 'b', requestId: 'b', endSeq: 20 })
@@ -182,6 +200,17 @@ describe('existing LLM adapter one-shot call', () => {
     const ctx = { llm: { prepareCall } } as unknown as Pick<Context, 'llm'>
     return { ctx, stream, prepareCall }
   }
+  it.each([
+    ['{"suggestion":"请继续检查这个问题。"}', '请继续检查这个问题。'],
+    ['{"text":"Add a regression test."}', 'Add a regression test.'],
+    ['"请继续检查\\n这个问题。"', '请继续检查 这个问题。'],
+    ['{"suggestion":"First","text":"Second"}', ''],
+    ['["First", "Second"]', ''],
+    ['{"suggestion":"- First\\n- Second"}', ''],
+  ])('decodes one unambiguous candidate from a model response: %s', async (raw, expected) => {
+    const m = model([{ type: 'text-delta', index: 0, text: raw }, { type: 'finish', reason: { kind: 'stop' } }])
+    expect(await generateInputSuggestion(m.ctx, snapshot, new AbortController().signal)).toBe(expected)
+  })
   it('uses the configured route, minimum supported reasoning, no tools, and identity-free untrusted transcript', async () => {
     const m = model([{ type: 'reasoning-delta', index: 0, text: 'hidden' },
       { type: 'text-delta', index: 1, text: '"Add a regression test."' }, { type: 'finish', reason: { kind: 'stop' } }])

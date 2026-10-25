@@ -4,7 +4,7 @@ import type { ConfigureCall, GenerateOptions, StreamChunk } from '@deepseek-ai/d
 import { HostDraftAssistance, applyDraftAssistance, draftAssistanceInject, generateDraftAssistance, parseDraftAssistRequest } from '../src/input-assistance.ts'
 import { registerDesktopJsonApi } from '../src/desktop-json-api.ts'
 import { exclusiveInputCall } from '../src/input-assistance-call.ts'
-import { continuationText, optimizationValue, type DraftAssistRequest, type DraftAssistResult } from '../src/input-assistance-contract.ts'
+import { AUTOMATIC_ASSIST_TIMEOUT_MS, continuationText, optimizationValue, type DraftAssistRequest, type DraftAssistResult } from '../src/input-assistance-contract.ts'
 vi.mock('../src/desktop-json-api.ts', () => ({ registerDesktopJsonApi: vi.fn() }))
 
 const request: DraftAssistRequest = { kind: 'continuation', sessionId: 'session:a', requestId: 'r1', draft: 'Please help me', draftRev: 2 }
@@ -30,6 +30,16 @@ describe('strict assistance contracts', () => {
 })
 
 describe('Host cancellation and shared physical concurrency', () => {
+  it('records only whitelisted edit-gate diagnostics and rejects arbitrary client text', async () => {
+    const info = vi.fn()
+    const ctx = { logger: { info }, settings: { register: () => ({ get: () => ({ enabled: true }), watch: () => () => {} }) },
+      on: () => {}, effect: () => {} } as unknown as Context
+    applyDraftAssistance(ctx, 'continuation')
+    const api = vi.mocked(registerDesktopJsonApi).mock.calls.at(-1)![1]
+    await expect(api.action({ diagnostic: 'edit-caret', draftRev: 17, draft: 'PRIVATE' })).resolves.toEqual({ recorded: true })
+    await expect(api.action({ diagnostic: 'PRIVATE', draftRev: 17 })).rejects.toThrow('Invalid continuation diagnostic')
+    expect(info).toHaveBeenCalledExactlyOnceWith('input-continuation: client-edit-caret draftRev=17')
+  })
   function harness() {
     let enabled = true; let valid = true
     const pending = deferred<Pick<DraftAssistResult, 'text' | 'notes'>>()
@@ -50,7 +60,7 @@ describe('Host cancellation and shared physical concurrency', () => {
   it.each(['continuation', 'optimization'] as const)('bounds %s deadlines even when the provider ignores abort', async kind => {
     vi.useFakeTimers(); const h = harness()
     const result = h.controller.request({ ...request, kind })
-    await vi.advanceTimersByTimeAsync(kind === 'optimization' ? 20_000 : 3000)
+    await vi.advanceTimersByTimeAsync(kind === 'optimization' ? 20_000 : AUTOMATIC_ASSIST_TIMEOUT_MS)
     expect((await result).text).toBe('')
     await h.controller.request({ ...request, requestId: 'r2' })
     expect(h.generate).toHaveBeenCalledOnce()
@@ -90,11 +100,15 @@ describe('one-shot model calls', () => {
     expect(options.system).toContain('untrusted DATA')
     expect(m.prepareCall.mock.calls[0]![0]).toEqual(snapshot.route)
   })
+  it.each(['{"continuation":" write tests."}', '{"text":" write tests."}'])('accepts one structured continuation while preserving its join whitespace', async raw => {
+    const m = model(raw)
+    expect(await generateDraftAssistance(m.ctx, request, snapshot, new AbortController().signal)).toEqual({ text: ' write tests.', notes: [] })
+  })
   it('continues a fresh session before its first reply using the configured default, with an explicit service dependency', async () => {
     const m = model('" write tests."')
     const agent = { id: request.sessionId, status: 'idle', inbox: { nextTurn: [], nextStep: [] }, options: {},
       session: { surface: { contentGeneration: 0, nodes: [] }, requestHeader: () => undefined } }
-    const ctx = { ...m.ctx, settings: { register: () => ({ get: () => ({ enabled: true }), watch: () => () => {} }) },
+    const ctx = { ...m.ctx, logger: { info: vi.fn() }, settings: { register: () => ({ get: () => ({ enabled: true }), watch: () => () => {} }) },
       agents: { get: () => agent }, sessionProjections: { snapshot: () => ({ values: { modelSelection: { next: null } } }) },
       agentDefaultModel: { currentSelection: () => snapshot.route },
       sessionQuery: { observeSession: async () => ({ events: [], [Symbol.dispose]: () => {} }) },

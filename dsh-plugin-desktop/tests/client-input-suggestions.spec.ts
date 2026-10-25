@@ -12,6 +12,7 @@ import { applyInputSuggestions, createSuggestionRuntime, immediateSuggestionSett
 import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { InputSuggestionsSettings, SuggestionResult } from '../src/input-suggestions-contract.ts'
 import { createDraftAssistanceRuntime, DraftOptimizationButton } from '../src/client/input-assistance.tsx'
+import { AUTOMATIC_ASSIST_CLIENT_TIMEOUT_MS } from '../src/input-assistance-contract.ts'
 
 const EMPTY: InputState = { draft: '', draftRev: 1, attachmentIds: [], occurrences: [], phase: 'plain', queue: [] }
 function snapshot(overrides: Partial<SuggestionSnapshot> = {}): SuggestionSnapshot {
@@ -151,7 +152,7 @@ describe('suggestion state and keyboard adoption', () => {
   })
   it('abandons timeout and clears timers on plugin teardown', async () => {
     const h = harness(); h.state.update(snapshot(), true)
-    await vi.advanceTimersByTimeAsync(3500); await h.complete()
+    await vi.advanceTimersByTimeAsync(500 + AUTOMATIC_ASSIST_CLIENT_TIMEOUT_MS); await h.complete()
     expect(h.state.text).toBe('')
     h.state.dispose(); expect(vi.getTimerCount()).toBe(0)
     const other = harness(); other.state.update(snapshot(), true); other.state.dispose()
@@ -190,6 +191,20 @@ function runtimeFixture(api: SuggestionTransport, changed = () => {}, visible = 
 }
 
 describe('public composer integration', () => {
+  it('waits for Host-confirmed enabling before consuming an existing-history opportunity', async () => {
+    const api = { generate: vi.fn(async (_s: string, requestId: string, endSeq: number) => ({ requestId, endSeq, text: '请补充回归测试。' })), cancel: vi.fn() }
+    const f = runtimeFixture(api); f.session.set({ ...f.session.getSnapshot(), running: false }); f.preference.set({ value: { enabled: false } })
+    f.events.set({ ...f.events.getSnapshot(), entries: [{ type: 'event', event: { type: 'turn/end', seq: 15, data: { reason: { kind: 'completed' } } } }] })
+    const pending = deferred<boolean>()
+    const view = immediateSuggestionSettings({ ...f.preference, set: () => pending.promise } as unknown as ConfigForm<InputSuggestionsSettings>)
+    const runtime = createSuggestionRuntime(f.ctx, 'a' as SessionId, view, () => {}, api)!
+    const stop = runtime.start(); const write = view.set('enabled', true)
+    expect(view.getSnapshot().value?.enabled).toBe(true)
+    await vi.advanceTimersByTimeAsync(1000); expect(api.generate).not.toHaveBeenCalled()
+    f.preference.set({ value: { enabled: true } }); pending.resolve(true); await write
+    await vi.advanceTimersByTimeAsync(500); expect(api.generate).toHaveBeenCalledOnce()
+    stop()
+  })
   it('shows the default-enabled optimization action with automatic features off, previews and replaces through the public composer', async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const f = runtimeFixture({ generate: vi.fn(), cancel: vi.fn() })
@@ -213,12 +228,18 @@ describe('public composer integration', () => {
         inputActions: actions } as unknown as Parameters<typeof SuggestionComposer>[0])))
       const button = [...container.querySelectorAll('button')].find(item => item.textContent === '优化草稿')!
       expect(button).toBeDefined(); expect(button.disabled).toBe(true); expect(fetcher).not.toHaveBeenCalled()
+      expect(button.getAttribute('aria-label')).toBe('优化草稿')
+      expect(button.querySelector('svg')).not.toBeNull()
+      expect(button.querySelector('.dshAiOptimizeTriggerLabel')).not.toBeNull()
       await act(async () => f.input.set({ ...EMPTY, draft: '给这个功能加测试', draftRev: 2 }))
       expect(button.disabled).toBe(false)
       await act(async () => button.click())
       expect(document.querySelector('[role="dialog"]')?.textContent).toContain('请为这个功能补充回归测试。')
+      expect(document.querySelector('[role="dialog"]')?.classList.contains('dshAiOptimizeDialog')).toBe(true)
+      expect(document.querySelectorAll('.dshAiOptimizePreview > .dshAiOptimizePane')).toHaveLength(2)
       expect(actions.insertText).not.toHaveBeenCalled()
       const replace = [...document.querySelectorAll('button')].find(item => item.textContent === '替换草稿')!
+      expect(replace.querySelector('svg')).not.toBeNull()
       await act(async () => replace.click())
       expect(actions.insertText).toHaveBeenCalledExactlyOnceWith('请为这个功能补充回归测试。', { start: 0, end: '给这个功能加测试'.length, draftRev: 2 })
     } finally { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals() }
@@ -231,7 +252,8 @@ describe('public composer integration', () => {
     const originalRangeBounds = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect')
     Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect(20, 20, 0, 22) })
     vi.spyOn(container, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 200))
-    const actions = { captureInsertion: () => ({ start: f.input.getSnapshot().draft.length, end: f.input.getSnapshot().draft.length, draftRev: f.input.getSnapshot().draftRev }),
+    let caretReady = true
+    const actions = { captureInsertion: () => ({ start: caretReady ? f.input.getSnapshot().draft.length : 0, end: caretReady ? f.input.getSnapshot().draft.length : 0, draftRev: f.input.getSnapshot().draftRev }),
       insertText: vi.fn(() => true) }
     const api = { generate: vi.fn(async (request: { requestId: string; draftRev: number }) => ({ requestId: request.requestId, draftRev: request.draftRev, text: ' regression tests.', notes: [] })), cancel: vi.fn() }
     const root = new CordisContext(); let stop: (() => void) | undefined; let runtime: ReturnType<typeof createDraftAssistanceRuntime>
@@ -247,8 +269,14 @@ describe('public composer integration', () => {
       } })
       editor.focus(); editor.textContent = 'Please help me with'
       document.getSelection()!.collapse(editor.firstChild, editor.textContent.length)
+      caretReady = false
       f.input.set({ ...EMPTY, draft: editor.textContent, draftRev: 2 })
-      await vi.advanceTimersByTimeAsync(800)
+      // Content publishes before the editor's caret reconciliation finishes.
+      document.dispatchEvent(new Event('selectionchange'))
+      await vi.advanceTimersByTimeAsync(1)
+      expect(api.generate).not.toHaveBeenCalled()
+      caretReady = true
+      await vi.advanceTimersByTimeAsync(832)
       expect(api.generate).toHaveBeenCalledOnce(); expect(runtime!.state.text).toBe(' regression tests.')
       Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect() })
       const invisible = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })

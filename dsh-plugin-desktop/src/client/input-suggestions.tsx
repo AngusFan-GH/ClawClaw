@@ -13,6 +13,8 @@ import { emptySuggestionInput, InputSuggestionState, type SuggestionSnapshot, ty
 import { registerEntryProjection } from './shortcut-presentation.tsx'
 import { CONTINUATION_ENTRY, OPTIMIZATION_ENTRY } from '../input-assistance-contract.ts'
 import { DraftAssistanceProvider, DraftOptimizationButton } from './input-assistance.tsx'
+import { installInputAssistanceStyles } from './input-assistance-styles.ts'
+import { inputSettingEnabled, trackConfirmedInputSetting } from './input-assistance-settings.ts'
 
 /** The runtime reads this service directly; Cordis forbids undeclared access. */
 export const INPUT_SUGGESTIONS_INJECT = ['conversation'] as const
@@ -65,7 +67,7 @@ export function createSuggestionRuntime(ctx: Context, sessionId: SessionId, sett
   let endSeq = -1
   let opportunity = false
   let historyOpportunity = true
-  let wasEnabled = settings.getSnapshot().value?.enabled === true
+  let wasEnabled = inputSettingEnabled(settings)
   let lastRevision = binding.eventSource.getSnapshot().revision
   let mounted = false
   let composing = false
@@ -78,7 +80,7 @@ export function createSuggestionRuntime(ctx: Context, sessionId: SessionId, sett
     const session = binding.session.getSnapshot()
     return {
       sessionId, context: JSON.stringify([sessionId, contextVersion, model.getSnapshot()]), endSeq,
-      enabled: settings.getSnapshot().value?.enabled === true,
+      enabled: inputSettingEnabled(settings),
       visible: document.visibilityState === 'visible' && mounted && visible(),
       idle: !session.running && !session.removed && session.openState === 'open' && session.pendingSubmissions.length === 0,
       menu: menu.getSnapshot().open || composing || Date.now() < compositionUntil,
@@ -94,7 +96,7 @@ export function createSuggestionRuntime(ctx: Context, sessionId: SessionId, sett
       opportunity = false
     }
     const window = binding.eventSource.getSnapshot()
-    const enabled = settings.getSnapshot().value?.enabled === true
+    const enabled = inputSettingEnabled(settings)
     if (enabled && !wasEnabled) historyOpportunity = true
     wasEnabled = enabled
     if (window.revision !== lastRevision) {
@@ -265,7 +267,7 @@ export function immediateSuggestionSettings(source: ConfigForm<InputSuggestionsS
   let previousOptimistic: boolean | undefined
   const listeners = new Set<() => void>()
   const notify = (): void => { listeners.forEach(listener => listener()) }
-  return {
+  return trackConfirmedInputSetting({
     getSnapshot: () => {
       const current = source.getSnapshot()
       if (cached === undefined || previous !== current || previousOptimistic !== optimistic) {
@@ -286,10 +288,11 @@ export function immediateSuggestionSettings(source: ConfigForm<InputSuggestionsS
       finally { if (generation === write) { optimistic = undefined; notify() } }
     },
     mutate: (...args) => source.mutate(...args), unset: field => source.unset(field),
-  }
+  }, source)
 }
 
 export function applyInputSuggestions(ctx: Context): void {
+  ctx.effect(() => installInputAssistanceStyles(), 'desktop: input assistance styles')
   const settings = immediateSuggestionSettings(ctx.configForms.get<InputSuggestionsSettings>(INPUT_SUGGESTIONS_ENTRY))
   const continuationSettings = immediateSuggestionSettings(ctx.configForms.get<InputSuggestionsSettings>(CONTINUATION_ENTRY))
   const optimizationSettings = immediateSuggestionSettings(ctx.configForms.get<InputSuggestionsSettings>(OPTIMIZATION_ENTRY))

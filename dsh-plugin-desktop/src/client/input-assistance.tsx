@@ -7,9 +7,14 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { ASSISTANCE_PATH, type DraftAssistResult } from '../input-assistance-contract.ts'
+import { Button, Modal, IconCheckOutlineRegular, IconCloseOutlineRegular, IconRefreshOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+// @ts-expect-error package subpath has no declaration file
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.mjs'
+// @ts-expect-error package subpath has no declaration file
+import FileText from 'lucide-react/dist/esm/icons/file-text.mjs'
+import { ASSISTANCE_PATH, type DraftAssistResult, type ContinuationDiagnostic } from '../input-assistance-contract.ts'
 import { DraftAssistanceState, type AssistTransport } from './input-assistance-state.ts'
+import { inputSettingEnabled } from './input-assistance-settings.ts'
 
 type EnabledForm = ConfigForm<{ enabled: boolean }>
 const AssistanceContext = createContext<{ state: DraftAssistanceState; sync(): void; language: string; optimizationEnabled: boolean } | undefined>(undefined)
@@ -20,9 +25,13 @@ const transport: AssistTransport = {
     if (!response.ok) throw new Error('Draft assistance unavailable')
     return await response.json() as DraftAssistResult
   },
-  cancel: request => {
+  cancel: (request, reason) => {
     void fetch(`${ASSISTANCE_PATH}/${request.kind}/action`, { method: 'POST', keepalive: true,
-      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: request.requestId }) }).catch(() => undefined)
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: request.requestId, reason, draftRev: request.draftRev }) }).catch(() => undefined)
+  },
+  report: (diagnostic, draftRev) => {
+    void fetch(`${ASSISTANCE_PATH}/continuation/action`, { method: 'POST', keepalive: true,
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ diagnostic, draftRev }) }).catch(() => undefined)
   },
 }
 
@@ -74,13 +83,19 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
   let composing = false; let mounted = false; let compositionUntil = 0
   let compositionTimer: ReturnType<typeof setTimeout> | undefined
   let compositionRevision = -1
+  let editFrame: number | undefined
+  let diagnosticTimer: ReturnType<typeof setTimeout> | undefined
+  let diagnostic: ContinuationDiagnostic = 'edit-unavailable'
   let inputRevision = input.state.getSnapshot().draftRev
   let contextVersion = 0
   let events = binding.eventSource.getSnapshot().revision
   const state = new DraftAssistanceState({
-    cancel: request => api.cancel(request),
+    cancel: (request, reason) => api.cancel(request, reason),
     generate: async (request, signal) => { sync(); signal.throwIfAborted(); const result = await api.generate(request, signal); sync(); return result },
-  }, changed)
+  }, () => {
+    if (state.phase === 'idle' && state.text !== '') api.report?.(position() === undefined ? 'result-unpositioned' : 'result-shown', input.state.getSnapshot().draftRev)
+    changed()
+  })
   const atEnd = (): boolean => {
     const selection = document.getSelection()
     if (root.current === null || !root.current.contains(document.activeElement) || document.activeElement?.closest('[contenteditable="true"]') === null
@@ -92,12 +107,18 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
   const sync = (): void => {
     if (events !== binding.eventSource.getSnapshot().revision) { events = binding.eventSource.getSnapshot().revision; contextVersion++ }
     const session = binding.session.getSnapshot()
-    state.update({ sessionId, context: JSON.stringify([sessionId, contextVersion, model.getSnapshot(), connection.generation.getSnapshot()]),
-      input: input.state.getSnapshot(), continuationEnabled: continuation?.getSnapshot().value?.enabled === true,
-      optimizationEnabled: optimization?.getSnapshot().value?.enabled === true, atEnd: atEnd(),
+    const snapshot = { sessionId, context: JSON.stringify([sessionId, contextVersion, model.getSnapshot(), connection.generation.getSnapshot()]),
+      input: input.state.getSnapshot(), continuationEnabled: inputSettingEnabled(continuation),
+      optimizationEnabled: inputSettingEnabled(optimization), atEnd: atEnd(),
       available: mounted && !blocked() && document.visibilityState === 'visible' && !composing && Date.now() >= compositionUntil
         && !menu.getSnapshot().open && !session.running && !session.removed && session.openState === 'open'
-        && session.pendingSubmissions.length === 0 && (root.current?.checkVisibility?.({ checkVisibilityCSS: true, checkOpacity: true }) ?? true) })
+        && session.pendingSubmissions.length === 0 && (root.current?.checkVisibility?.({ checkVisibilityCSS: true, checkOpacity: true }) ?? true) }
+    diagnostic = !snapshot.continuationEnabled ? 'edit-disabled' : !snapshot.available ? 'edit-unavailable'
+      : !snapshot.atEnd ? 'edit-caret' : snapshot.input.phase !== 'plain' || snapshot.input.claim !== undefined
+        || snapshot.input.attachmentIds.length > 0 || snapshot.input.occurrences.length > 0 || snapshot.input.queue.length > 0
+        || snapshot.input.draft.length > 4000 ? 'edit-content' : snapshot.input.draft.replace(/\s/gu, '').length < 6 ? 'edit-short'
+      : state.phase !== 'idle' ? 'edit-optimization' : 'edit-eligible'
+    state.update(snapshot, false)
   }
   const position = () => {
     if (!atEnd()) return undefined
@@ -111,13 +132,24 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
   }
   const start = (): (() => void) => {
     mounted = true
+    const settledEdit = (revision: number) => {
+      if (editFrame !== undefined) cancelAnimationFrame(editFrame)
+      editFrame = requestAnimationFrame(() => {
+        editFrame = undefined; sync(); state.edited(revision)
+        clearTimeout(diagnosticTimer)
+        diagnosticTimer = setTimeout(() => {
+          sync()
+          if (mounted && input.state.getSnapshot().draftRev === revision) api.report?.(diagnostic, revision)
+        }, 800)
+      })
+    }
     const inputChanged = () => {
       const revision = input.state.getSnapshot().draftRev
       const edited = revision !== inputRevision; inputRevision = revision
       sync()
       // The public editor publishes its new revision before the browser finishes
-      // reconciling the caret. Observe the settled selection after this edit.
-      if (edited) queueMicrotask(() => { sync(); state.edited(revision) })
+      // reconciling the caret. Wait for its frame before reserving this revision.
+      if (edited) settledEdit(revision)
     }
     const stops = [input.state.subscribe(inputChanged), binding.session.subscribe(sync), binding.eventSource.subscribe(sync), model.subscribe(sync),
       menu.subscribe(sync), connection.generation.subscribe(sync)]
@@ -134,7 +166,7 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
       compositionTimer = setTimeout(() => {
         sync()
         const revision = input.state.getSnapshot().draftRev
-        if (revision !== compositionRevision) state.edited(revision)
+        if (revision !== compositionRevision) settledEdit(revision)
       }, 10)
       sync()
     }
@@ -160,6 +192,8 @@ export function createDraftAssistanceRuntime(ctx: Context, sessionId: SessionId,
     sync()
     return () => {
       mounted = false; clearTimeout(compositionTimer); stops.forEach(stop => stop()); state.dispose()
+      clearTimeout(diagnosticTimer)
+      if (editFrame !== undefined) cancelAnimationFrame(editFrame)
       target?.removeEventListener('keydown', key, true)
       target?.removeEventListener('beforeinput', interact, true); target?.removeEventListener('paste', interact, true); target?.removeEventListener('drop', interact, true)
       target?.removeEventListener('compositionstart', compositionStart, true); target?.removeEventListener('compositionend', compositionEnd, true)
@@ -180,21 +214,23 @@ export function DraftOptimizationButton({ inputActions, useInput }: PropsRuntime
   const label = zh ? '优化草稿' : 'Optimize draft'
   const limited = input.occurrences.length > 0 || input.phase !== 'plain' || input.claim !== undefined
   return <>
-    <button type="button" title={limited ? (zh ? '为保留引用和命令，此草稿暂不支持优化' : 'References and commands cannot be replaced') : label}
+    <Button variant="toolbar" size="sm" className="dshAiOptimizeTrigger" aria-label={label}
+      icon={<Sparkles size={14} aria-hidden="true" />} title={limited ? (zh ? '为保留引用和命令，此草稿暂不支持优化' : 'References and commands cannot be replaced') : label}
       disabled={limited || !state.optimizationAvailable || state.phase !== 'idle'}
-      style={{ border: 0, borderRadius: 6, background: 'transparent', color: 'var(--dsw-alias-label-secondary)', padding: '4px 8px', cursor: 'pointer', fontSize: 12 }}
-      onClick={() => { sync(); state.optimize() }}>{label}</button>
+      onClick={() => { sync(); state.optimize() }}><span className="dshAiOptimizeTriggerLabel">{label}</span></Button>
     <Modal open={state.phase !== 'idle'} onClose={() => state.close()} title={label} closeLabel={zh ? '关闭' : 'Close'}
-      footer={<><button type="button" onClick={() => state.close()}>{zh ? '取消' : 'Cancel'}</button>
-        {state.phase === 'preview' && <button type="button" onClick={() => { sync(); state.replace(inputActions) }}>{zh ? '替换草稿' : 'Replace draft'}</button>}
-        {(state.phase === 'error' || state.phase === 'empty') && <button type="button" onClick={() => { sync(); state.optimize() }}>{zh ? '重试' : 'Retry'}</button>}</>}>
-      {state.phase === 'generating' && <p>{zh ? '正在优化草稿…' : 'Optimizing draft…'}</p>}
-      {state.phase === 'empty' && <p>{zh ? '未生成可用的修改，已保留原草稿。' : 'No usable changes. Your original draft is preserved.'}</p>}
-      {state.phase === 'error' && <p role="alert">{zh ? '优化失败或超时，请重试。' : 'Optimization failed or timed out. Please retry.'}</p>}
-      {state.phase === 'preview' && <div style={{ display: 'grid', gap: 16 }}>
-        <section><h3>{zh ? '原文' : 'Original'}</h3><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{state.original}</pre></section>
-        <section><h3>{zh ? '优化后' : 'Optimized'}</h3><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{state.text}</pre></section>
-        {state.notes.length > 0 && <section><h3>{zh ? '待补充信息' : 'Missing information'}</h3><ul>{state.notes.map((note, i) => <li key={i}>{note}</li>)}</ul></section>}
+      className="dshAiOptimizeDialog" contentClassName="dshAiOptimizeDialogContent"
+      description={zh ? '整理表达与结构，保留原意和约束。确认替换前，原草稿保持不变。' : 'Improve clarity and structure while preserving meaning and constraints. Your draft stays unchanged until you replace it.'}
+      footer={<div className="dshAiOptimizeActions"><Button variant="outline" icon={<IconCloseOutlineRegular />} onClick={() => state.close()}>{zh ? '取消' : 'Cancel'}</Button>
+        {state.phase === 'preview' && <Button variant="primary" icon={<IconCheckOutlineRegular />} onClick={() => { sync(); state.replace(inputActions) }}>{zh ? '替换草稿' : 'Replace draft'}</Button>}
+        {(state.phase === 'error' || state.phase === 'empty') && <Button variant="primary" icon={<IconRefreshOutlineRegular />} onClick={() => { sync(); state.optimize() }}>{zh ? '重试' : 'Retry'}</Button>}</div>}>
+      {state.phase === 'generating' && <div className="dshAiOptimizeStatus" role="status" aria-live="polite"><IconRefreshOutlineRegular className="dshAiOptimizeSpinner" size={24} /><p>{zh ? '正在优化草稿…' : 'Optimizing draft…'}</p></div>}
+      {state.phase === 'empty' && <div className="dshAiOptimizeStatus" role="status"><Sparkles size={24} aria-hidden="true" /><p>{zh ? '未生成可用的修改，已保留原草稿。' : 'No usable changes. Your original draft is preserved.'}</p></div>}
+      {state.phase === 'error' && <div className="dshAiOptimizeStatus" role="alert"><p>{zh ? '优化失败或超时，请重试。' : 'Optimization failed or timed out. Please retry.'}</p></div>}
+      {state.phase === 'preview' && <div className="dshAiOptimizePreview">
+        <section className="dshAiOptimizePane"><h3><FileText size={14} aria-hidden="true" />{zh ? '原文' : 'Original'}</h3><pre>{state.original}</pre></section>
+        <section className="dshAiOptimizePane" data-result><h3><Sparkles size={14} aria-hidden="true" />{zh ? '优化后' : 'Optimized'}</h3><pre>{state.text}</pre></section>
+        {state.notes.length > 0 && <section className="dshAiOptimizeNotes"><h3>{zh ? '待补充信息' : 'Missing information'}</h3><ul>{state.notes.map((note, i) => <li key={i}>{note}</li>)}</ul></section>}
       </div>}
     </Modal>
   </>

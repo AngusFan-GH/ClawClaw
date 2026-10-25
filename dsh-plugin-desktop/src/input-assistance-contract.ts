@@ -1,6 +1,14 @@
 export const CONTINUATION_ENTRY = 'desktop-ai-continuation'
 export const OPTIMIZATION_ENTRY = 'desktop-ai-draft-optimization'
 export const ASSISTANCE_PATH = '/api/desktop/input-assistance'
+// Reasoning and gateway routes can spend the original three-second budget
+// before producing visible text. Keep a bounded call and a transport margin.
+export const AUTOMATIC_ASSIST_TIMEOUT_MS = 10_000
+export const AUTOMATIC_ASSIST_CLIENT_TIMEOUT_MS = 11_000
+export const CONTINUATION_DIAGNOSTICS = ['edit-eligible', 'edit-disabled', 'edit-unavailable', 'edit-caret', 'edit-content', 'edit-short', 'edit-optimization', 'result-shown', 'result-unpositioned'] as const
+export type ContinuationDiagnostic = typeof CONTINUATION_DIAGNOSTICS[number]
+export const ASSIST_CANCELLATIONS = ['draft-edited', 'context-changed', 'unavailable', 'caret-moved', 'disabled', 'content-changed', 'interaction', 'optimization-started', 'closed', 'disposed', 'timeout'] as const
+export type AssistCancellation = typeof ASSIST_CANCELLATIONS[number]
 export type DraftAssistKind = 'continuation' | 'optimization'
 export interface DraftAssistRequest {
   kind: DraftAssistKind

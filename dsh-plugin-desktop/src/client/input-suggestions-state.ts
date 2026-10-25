@@ -1,5 +1,6 @@
 import type { InputActions, InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { suggestionText, type SuggestionResult, type SuggestionClientDiagnostic } from '../input-suggestions-contract.ts'
+import { AUTOMATIC_ASSIST_CLIENT_TIMEOUT_MS } from '../input-assistance-contract.ts'
 
 export interface SuggestionSnapshot {
   sessionId: string
@@ -73,7 +74,7 @@ export class InputSuggestionState {
     const active: NonNullable<InputSuggestionState['active']> = { id: this.id(), abort: new AbortController() }
     this.active = active
     const revision = this.revision
-    const timeout = setTimeout(() => { if (this.active === active) this.cancel() }, 3000)
+    const timeout = setTimeout(() => { if (this.active === active) this.cancel() }, AUTOMATIC_ASSIST_CLIENT_TIMEOUT_MS)
     active.timeout = timeout
     try {
       const result = await this.transport.generate(snapshot.sessionId, active.id, snapshot.endSeq, active.abort.signal)
