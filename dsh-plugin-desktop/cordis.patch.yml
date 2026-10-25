@@ -18,6 +18,10 @@
       name: dsh-plugin-desktop/shortcut-menu
     - id: desktop-input-suggestions
       name: dsh-plugin-desktop/input-suggestions
+    - id: desktop-ai-continuation
+      name: dsh-plugin-desktop/ai-continuation
+    - id: desktop-ai-draft-optimization
+      name: dsh-plugin-desktop/ai-draft-optimization
     - id: desktop-plugin-registry-probe
       name: dsh-plugin-desktop/plugin-registry-probe
     - id: desktop-reminders

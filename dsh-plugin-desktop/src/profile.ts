@@ -114,6 +114,8 @@ const DESKTOP_EXPERTS_ROW_ID = 'clawclaw-experts'
 const DESKTOP_EXPERTS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/experts`
 const DESKTOP_EDITABLE_PROFILE_ENTRIES = [
   { id: INPUT_SUGGESTIONS_ENTRY, name: `${DESKTOP_PACKAGE_NAME}/input-suggestions` },
+  { id: 'desktop-ai-continuation', name: `${DESKTOP_PACKAGE_NAME}/ai-continuation` },
+  { id: 'desktop-ai-draft-optimization', name: `${DESKTOP_PACKAGE_NAME}/ai-draft-optimization` },
   { id: DESKTOP_SHORTCUTS_ROW_ID, name: DESKTOP_SHORTCUTS_PACKAGE },
   { id: DESKTOP_CRON_TASKS_ROW_ID, name: DESKTOP_CRON_TASKS_PACKAGE },
   { id: DESKTOP_SKILLS_ROW_ID, name: DESKTOP_SKILLS_PACKAGE },
@@ -847,46 +849,51 @@ function loadDesktopMachinePatches(home: string): PatchOptions[] {
  */
 function migrateRetiredInputEntries(document: ReturnType<typeof parseDocument>, patches: unknown[]): boolean {
   let changed = false
-  let inheritedEnabled: boolean | undefined
-  let legacyDisabled = false
-  let currentConfig: Record<string, unknown> = {}
-  let currentConfigPath: Array<string | number> | undefined
-  const inspect = (value: unknown, path: Array<string | number>, inserted: boolean): void => {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return
-    const row = value as Record<string, unknown>
-    if (row.id === INPUT_SUGGESTIONS_ENTRY && (row.name === undefined || row.name === `${DESKTOP_PACKAGE_NAME}/input-suggestions`)
-      && row.config !== null && typeof row.config === 'object' && !Array.isArray(row.config)) {
-      currentConfig = row.config as Record<string, unknown>
-      currentConfigPath = [...path, 'config']
+  for (const [legacyId, targetId, targetName] of [
+    ['desktop-ai-input-suggestions', INPUT_SUGGESTIONS_ENTRY, `${DESKTOP_PACKAGE_NAME}/input-suggestions`],
+    ['desktop-ai-input-continuations', 'desktop-ai-continuation', `${DESKTOP_PACKAGE_NAME}/ai-continuation`],
+  ] as const) {
+    let inheritedEnabled: boolean | undefined
+    let legacyDisabled = false
+    let currentConfig: Record<string, unknown> = {}
+    let currentConfigPath: Array<string | number> | undefined
+    const inspect = (value: unknown, path: Array<string | number>, inserted: boolean): void => {
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) return
+      const row = value as Record<string, unknown>
+      if (row.id === targetId && (row.name === undefined || row.name === targetName)
+        && row.config !== null && typeof row.config === 'object' && !Array.isArray(row.config)) {
+        currentConfig = row.config as Record<string, unknown>
+        currentConfigPath = [...path, 'config']
+      }
+      if (row.id !== legacyId) return
+      const retiredName = RETIRED_INPUT_ENTRIES.get(legacyId)
+      if (retiredName === undefined || (row.name !== retiredName && (inserted || row.name !== undefined))) return
+      if (row.disabled !== undefined) legacyDisabled = row.disabled !== false
+      if (row.config !== null && typeof row.config === 'object'
+        && !Array.isArray(row.config) && typeof (row.config as Record<string, unknown>).enabled === 'boolean') {
+        inheritedEnabled = (row.config as { enabled: boolean }).enabled
+      }
+      // Retain the old row and all its settings for inspection/rollback. Never
+      // resolve removed package exports, or reinterpret continuation as suggestions.
+      if (row.disabled !== true) { document.setIn([...path, 'disabled'], true); changed = true }
     }
-    if (typeof row.id !== 'string') return
-    const retiredName = RETIRED_INPUT_ENTRIES.get(row.id)
-    if (retiredName === undefined || (row.name !== retiredName && (inserted || row.name !== undefined))) return
-    if (row.id === 'desktop-ai-input-suggestions' && row.disabled !== undefined) legacyDisabled = row.disabled !== false
-    if (row.id === 'desktop-ai-input-suggestions' && row.config !== null && typeof row.config === 'object'
-      && !Array.isArray(row.config) && typeof (row.config as Record<string, unknown>).enabled === 'boolean') {
-      inheritedEnabled = (row.config as { enabled: boolean }).enabled
+    patches.forEach((patch, index) => {
+      if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) return
+      inspect(patch, [index], false)
+      const insert = (patch as { insert?: unknown }).insert
+      if (Array.isArray(insert)) insert.forEach((row, rowIndex) => inspect(row, [index, 'insert', rowIndex], true))
+    })
+    if (inheritedEnabled !== undefined && !Object.hasOwn(currentConfig, 'enabled') && isSeq(document.contents)) {
+      if (currentConfigPath !== undefined) {
+        document.setIn([...currentConfigPath, 'enabled'], inheritedEnabled && !legacyDisabled)
+      } else {
+        document.contents.items.push(document.createNode({
+          id: targetId, name: targetName,
+          config: { enabled: inheritedEnabled && !legacyDisabled },
+        }) as never)
+      }
+      changed = true
     }
-    // Retain the old row and all its settings for inspection/rollback. Never
-    // resolve removed package exports, or reinterpret continuation as suggestions.
-    if (row.disabled !== true) { document.setIn([...path, 'disabled'], true); changed = true }
-  }
-  patches.forEach((patch, index) => {
-    if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) return
-    inspect(patch, [index], false)
-    const insert = (patch as { insert?: unknown }).insert
-    if (Array.isArray(insert)) insert.forEach((row, rowIndex) => inspect(row, [index, 'insert', rowIndex], true))
-  })
-  if (inheritedEnabled !== undefined && !Object.hasOwn(currentConfig, 'enabled') && isSeq(document.contents)) {
-    if (currentConfigPath !== undefined) {
-      document.setIn([...currentConfigPath, 'enabled'], inheritedEnabled && !legacyDisabled)
-    } else {
-      document.contents.items.push(document.createNode({
-        id: INPUT_SUGGESTIONS_ENTRY, name: `${DESKTOP_PACKAGE_NAME}/input-suggestions`,
-        config: { enabled: inheritedEnabled && !legacyDisabled },
-      }) as never)
-    }
-    changed = true
   }
   return changed
 }

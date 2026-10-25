@@ -7,6 +7,7 @@ import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-credentials'
 import z from '@deepseek-ai/schemastery'
+import { exclusiveInputCall } from './input-assistance-call.ts'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
 import { INPUT_SUGGESTIONS_NAMESPACE, INPUT_SUGGESTIONS_PATH, SUGGESTION_CLIENT_DIAGNOSTICS, suggestionText,
   type InputSuggestionsSettings, type SuggestionRequest, type SuggestionResult } from './input-suggestions-contract.ts'
@@ -214,9 +215,9 @@ export function apply(ctx: Context): void {
       const agent = ctx.agents.get(SessionId(request.sessionId))
       return agent !== undefined && idle(agent) && snapshot.identity === identity(agent)
     },
-    generate: (snapshot, signal) => generateInputSuggestion(ctx, snapshot, signal,
+    generate: async (snapshot, signal) => await exclusiveInputCall(ctx.llm, signal, () => generateInputSuggestion(ctx, snapshot, signal,
       reason => { ctx.logger.info(`input-suggestions: ${reason} endSeq=${snapshot.endSeq}`) },
-      maxTokens => { ctx.logger.info(`input-suggestions: output-budget=${maxTokens} endSeq=${snapshot.endSeq}`) }),
+      maxTokens => { ctx.logger.info(`input-suggestions: output-budget=${maxTokens} endSeq=${snapshot.endSeq}`) })) ?? '',
   })
   ctx.effect(() => settings.watch(() => { controller.cancel() }), 'desktop: suggestion setting cancellation')
   ctx.on('session/event', (session, event) => {

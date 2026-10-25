@@ -11,6 +11,8 @@ import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { INPUT_SUGGESTIONS_ENTRY, INPUT_SUGGESTIONS_PATH, type InputSuggestionsSettings, type SuggestionResult } from '../input-suggestions-contract.ts'
 import { emptySuggestionInput, InputSuggestionState, type SuggestionSnapshot, type SuggestionTransport } from './input-suggestions-state.ts'
 import { registerEntryProjection } from './shortcut-presentation.tsx'
+import { CONTINUATION_ENTRY, OPTIMIZATION_ENTRY } from '../input-assistance-contract.ts'
+import { DraftAssistanceProvider, DraftOptimizationButton } from './input-assistance.tsx'
 
 /** The runtime reads this service directly; Cordis forbids undeclared access. */
 export const INPUT_SUGGESTIONS_INJECT = ['conversation'] as const
@@ -62,6 +64,8 @@ export function createSuggestionRuntime(ctx: Context, sessionId: SessionId, sett
   let contextVersion = 0
   let endSeq = -1
   let opportunity = false
+  let historyOpportunity = true
+  let wasEnabled = settings.getSnapshot().value?.enabled === true
   let lastRevision = binding.eventSource.getSnapshot().revision
   let mounted = false
   let composing = false
@@ -90,9 +94,12 @@ export function createSuggestionRuntime(ctx: Context, sessionId: SessionId, sett
       opportunity = false
     }
     const window = binding.eventSource.getSnapshot()
+    const enabled = settings.getSnapshot().value?.enabled === true
+    if (enabled && !wasEnabled) historyOpportunity = true
+    wasEnabled = enabled
     if (window.revision !== lastRevision) {
       lastRevision = window.revision
-      if (window.change.kind === 'replace') { contextVersion++; opportunity = false; endSeq = -1 }
+      if (window.change.kind === 'replace') { contextVersion++; opportunity = false; endSeq = -1; historyOpportunity = true }
       if (window.change.kind === 'settle-assistant') contextVersion++
       if (window.change.kind === 'append') for (const entry of window.change.entries) {
         if (entry.type !== 'event') continue
@@ -107,6 +114,13 @@ export function createSuggestionRuntime(ctx: Context, sessionId: SessionId, sett
           opportunity = true
           completed = true
         }
+      }
+    }
+    if (historyOpportunity && enabled) {
+      historyOpportunity = false
+      const end = (window.entries ?? []).findLast(entry => entry.type === 'event' && entry.event.type === 'turn/end')
+      if (end?.type === 'event' && end.event.type === 'turn/end' && end.event.data.reason.kind === 'completed') {
+        endSeq = end.event.seq; opportunity = true
       }
     }
     const next = snapshot()
@@ -164,16 +178,18 @@ type ComposerProps = PropsRuntime<'conversation.composer.bar'> & Record<string, 
   sectionComponent: ComponentType<Record<string, unknown>>
   suggestionContext: Context
   suggestionSettings: ConfigForm<InputSuggestionsSettings>
+  continuationSettings?: ConfigForm<InputSuggestionsSettings>
+  optimizationSettings?: ConfigForm<InputSuggestionsSettings>
 }
 
 /** Forward every upstream seat untouched. Only documented owner placeholder copy is supplied. */
 export function SuggestionComposer(props: ComposerProps): JSX.Element {
-  const { sectionComponent: Composer, suggestionContext, suggestionSettings, ...original } = props
+  const { sectionComponent: Composer, suggestionContext, suggestionSettings, continuationSettings, optimizationSettings, ...original } = props
   if (props.sessionId === undefined || props.inputActions === undefined) return <Composer {...original} />
   return <LiveSuggestionComposer key={props.sessionId} {...props} />
 }
 
-function LiveSuggestionComposer({ sectionComponent: Composer, suggestionContext: ctx, suggestionSettings: settings, ...props }: ComposerProps): JSX.Element {
+function LiveSuggestionComposer({ sectionComponent: Composer, suggestionContext: ctx, suggestionSettings: settings, continuationSettings, optimizationSettings, ...props }: ComposerProps): JSX.Element {
   const root = useRef<HTMLDivElement>(null)
   const blocked = props.disabled === true || props.blocked !== undefined || props.workspacePickerOpen === true
   const blockedRef = useRef(blocked)
@@ -182,17 +198,24 @@ function LiveSuggestionComposer({ sectionComponent: Composer, suggestionContext:
   const [text, setText] = useState('')
   useEffect(() => {
     const runtime = createSuggestionRuntime(ctx, props.sessionId!, settings, () => { setText(runtime?.state.text ?? '') }, transport,
-      () => !blockedRef.current && (root.current?.checkVisibility?.({ checkVisibilityCSS: true, checkOpacity: true }) ?? true))
+      () => !blockedRef.current && root.current?.dataset.aiOptimizing !== 'true'
+        && (root.current?.checkVisibility?.({ checkVisibilityCSS: true, checkOpacity: true }) ?? true))
     runtimeRef.current = runtime
     const stop = runtime?.start()
     const observer = typeof IntersectionObserver === 'undefined' ? undefined : new IntersectionObserver(() => runtime?.sync())
     if (root.current !== null) observer?.observe(root.current)
-    return () => { observer?.disconnect(); runtimeRef.current = undefined; stop?.() }
+    const target = root.current
+    const sync = () => runtime?.sync()
+    target?.addEventListener('desktop-assist-change', sync)
+    return () => { target?.removeEventListener('desktop-assist-change', sync); observer?.disconnect(); runtimeRef.current = undefined; stop?.() }
   }, [ctx, props.sessionId, props.inputActions, settings])
   useEffect(() => runtimeRef.current?.sync(), [blocked])
   // React capture is scoped to this public composer slot, ahead of the upstream
   // editor's native keymap. There is no window/document key listener or editor handle.
-  return <div ref={root} style={{ width: '100%', minWidth: 0 }}
+  return <DraftAssistanceProvider ctx={ctx} sessionId={props.sessionId!} actions={props.inputActions!}
+    root={root} blocked={blocked} {...(continuationSettings === undefined ? {} : { continuation: continuationSettings })}
+    {...(optimizationSettings === undefined ? {} : { optimization: optimizationSettings })}>
+    <div ref={root} style={{ width: '100%', minWidth: 0 }}
     onCompositionStartCapture={() => runtimeRef.current?.composition(true)}
     onCompositionEndCapture={() => runtimeRef.current?.composition(false)}
     onBeforeInputCapture={() => runtimeRef.current?.interacting()}
@@ -207,13 +230,14 @@ function LiveSuggestionComposer({ sectionComponent: Composer, suggestionContext:
       }
     }}>
     <Composer {...props} {...(text === '' || blocked ? {} : { placeholder: text })} />
-  </div>
+  </div></DraftAssistanceProvider>
 }
 
 const zh = { title: 'AI 输入建议', description: '基于当前对话调用已配置的模型，生成下一步请求建议。按 Tab 或 Enter 采纳后可编辑或发送。' }
 const en: Record<keyof typeof zh, string> = { title: 'AI input suggestions', description: 'Uses your configured model and current conversation to suggest a next request. Press Tab or Enter to adopt, then edit or send.' }
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'desktop.input-suggestions': keyof typeof zh }
+  interface LocaleNamespaceMap { 'desktop.continuation': keyof typeof zh }
 }
 
 export function SuggestionSettings({ settings, t }: { settings: ConfigForm<InputSuggestionsSettings>; t: (key: keyof typeof zh) => string }): JSX.Element {
@@ -267,18 +291,30 @@ export function immediateSuggestionSettings(source: ConfigForm<InputSuggestionsS
 
 export function applyInputSuggestions(ctx: Context): void {
   const settings = immediateSuggestionSettings(ctx.configForms.get<InputSuggestionsSettings>(INPUT_SUGGESTIONS_ENTRY))
+  const continuationSettings = immediateSuggestionSettings(ctx.configForms.get<InputSuggestionsSettings>(CONTINUATION_ENTRY))
+  const optimizationSettings = immediateSuggestionSettings(ctx.configForms.get<InputSuggestionsSettings>(OPTIMIZATION_ENTRY))
   ctx.effect(() => ctx.locale.register('desktop.input-suggestions', { zh, en }), 'desktop: input suggestions locale')
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item', id: INPUT_SUGGESTIONS_ENTRY, order: 36, locale: 'desktop.input-suggestions',
     inject: () => ({ settings }),
   }, SuggestionSettings))
+  ctx.effect(() => ctx.locale.register('desktop.continuation', {
+    zh: { title: '输入时 AI 续写', description: '输入至少六个字并停顿后，生成灰色续写；Tab 采纳，Enter 仅发送原草稿。功能调用已配置的模型。' },
+    en: { title: 'AI continuation', description: 'After typing at least six characters and pausing, show a gray continuation. Tab accepts; Enter sends only your draft. Uses your configured model.' },
+  }), 'desktop: continuation locale')
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item', id: CONTINUATION_ENTRY, order: 37, locale: 'desktop.continuation', inject: () => ({ settings: continuationSettings }),
+  }, SuggestionSettings))
+  ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+    name: 'conversation.input.left', id: OPTIMIZATION_ENTRY, order: 31,
+  }, DraftOptimizationButton))
   ctx.effect(() => {
     let source: StoredEntry | undefined
     let dispose: (() => void) | undefined
     let updating = false
     const reconcile = (): void => {
       if (updating) return
-      const next = settings.getSnapshot().value?.enabled === true
+      const next = [settings, continuationSettings, optimizationSettings].some(form => form.getSnapshot().value?.enabled === true)
         ? ctx.slots.entries('conversation.composer.bar').filter(entry => entry.component !== SuggestionComposer)
           .sort((a, b) => (a.options.priority ?? 0) - (b.options.priority ?? 0))[0]
         : undefined
@@ -289,12 +325,14 @@ export function applyInputSuggestions(ctx: Context): void {
         source = next
         dispose = next === undefined ? undefined : registerEntryProjection(ctx, next,
           { name: 'conversation.composer.bar', priority: -100 }, SuggestionComposer,
-          () => ({ suggestionContext: ctx, suggestionSettings: settings }))
+          () => ({ suggestionContext: ctx, suggestionSettings: settings, continuationSettings, optimizationSettings }))
       } finally { updating = false }
     }
     const stop = ctx.slots.subscribe('conversation.composer.bar', reconcile)
     const stopSettings = settings.subscribe(reconcile)
+    const stopContinuation = continuationSettings.subscribe(reconcile)
+    const stopOptimization = optimizationSettings.subscribe(reconcile)
     reconcile()
-    return () => { stop(); stopSettings(); dispose?.() }
+    return () => { stop(); stopSettings(); stopContinuation(); stopOptimization(); dispose?.() }
   }, 'desktop: public composer suggestion presentation')
 }

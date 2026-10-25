@@ -677,6 +677,31 @@ virtualStoreDirMaxLength: 60
     expect(composeEntries([again.patches]).find(row => row.id === 'desktop-input-suggestions')?.config).toEqual({ enabled: true })
   })
 
+  it.each(['desktop-ai-continuation', 'desktop-ai-draft-optimization'] as const)('upgrades arch insertions for %s without duplicates or losing explicit settings', id => {
+    const home = temporaryHome(); const profileDir = ensureDesktopProfile(home)
+    const path = join(profileDir, 'cordis.patch.yml')
+    const name = `dsh-plugin-desktop/${id.slice('desktop-'.length)}`
+    writeFileSync(path, JSON.stringify([{ insert: [{ id, name, config: { enabled: true, custom: 'retain' } }] }]))
+    const first = prepareDesktopProfile(undefined, home, 'win32'); const saved = readFileSync(path, 'utf8')
+    const second = prepareDesktopProfile(undefined, home, 'win32')
+    for (const prepared of [first, second]) {
+      const entries = composeEntries([prepared.patches]).filter(row => row.id === id)
+      expect(entries).toHaveLength(1); expect(entries[0]?.config).toEqual({ enabled: true, custom: 'retain' })
+    }
+    expect(readFileSync(path, 'utf8')).toBe(saved)
+  })
+
+  it('migrates the retired plural continuation preference independently from suggestions', () => {
+    const home = temporaryHome(); const profileDir = ensureDesktopProfile(home)
+    writeFileSync(join(profileDir, 'cordis.patch.yml'), JSON.stringify([{ insert: [{
+      id: 'desktop-ai-input-continuations', name: 'dsh-plugin-desktop/ai-input-continuations', config: { enabled: true },
+    }] }]))
+    const entries = composeEntries([prepareDesktopProfile(undefined, home, 'win32').patches])
+    expect(entries.filter(row => row.id === 'desktop-ai-continuation')).toHaveLength(1)
+    expect(entries.find(row => row.id === 'desktop-ai-continuation')?.config).toEqual({ enabled: true })
+    expect((entries.find(row => row.id === 'desktop-input-suggestions')?.config as { enabled?: boolean } | undefined)?.enabled).not.toBe(true)
+  })
+
   it.each([false, true])('keeps an already persisted input suggestions insertion unique and preserves enabled=%s across restarts', enabled => {
     const home = temporaryHome()
     const profileDir = ensureDesktopProfile(home)

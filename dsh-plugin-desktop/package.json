@@ -84,6 +84,14 @@
       "types": "./lib/types/input-suggestions.d.ts",
       "default": "./lib/input-suggestions.js"
     },
+    "./ai-continuation": {
+      "types": "./lib/types/ai-continuation.d.ts",
+      "default": "./lib/ai-continuation.js"
+    },
+    "./ai-draft-optimization": {
+      "types": "./lib/types/ai-draft-optimization.d.ts",
+      "default": "./lib/ai-draft-optimization.js"
+    },
     "./plugin-registry-probe": {
       "types": "./lib/types/plugin-registry-probe.d.ts",
       "default": "./lib/plugin-registry-probe.js"

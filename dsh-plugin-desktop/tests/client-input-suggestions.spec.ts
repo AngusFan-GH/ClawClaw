@@ -11,6 +11,7 @@ import { InputSuggestionState, type SuggestionSnapshot, type SuggestionTransport
 import { applyInputSuggestions, createSuggestionRuntime, immediateSuggestionSettings, SuggestionComposer, SuggestionSettings, INPUT_SUGGESTIONS_INJECT } from '../src/client/input-suggestions.tsx'
 import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { InputSuggestionsSettings, SuggestionResult } from '../src/input-suggestions-contract.ts'
+import { createDraftAssistanceRuntime } from '../src/client/input-assistance.tsx'
 
 const EMPTY: InputState = { draft: '', draftRev: 1, attachmentIds: [], occurrences: [], phase: 'plain', queue: [] }
 function snapshot(overrides: Partial<SuggestionSnapshot> = {}): SuggestionSnapshot {
@@ -167,14 +168,14 @@ function store<T>(value: T) {
 function runtimeFixture(api: SuggestionTransport, changed = () => {}, visible = () => true) {
   const input = store(EMPTY)
   const session = store({ running: true, removed: false, openState: 'open', pendingSubmissions: [] })
-  const events = store({ revision: 0, change: { kind: 'append', entries: [] } } as { revision: number; change: { kind: string; entries: unknown[] } })
+  const events = store({ revision: 0, entries: [], change: { kind: 'append', entries: [] } } as { revision: number; entries?: unknown[]; change: { kind: string; entries: unknown[] } })
   const menu = store({ open: false })
   const model = store<unknown>({ next: { provider: 'p', model: 'm' } })
   const generation = store<unknown>({ id: 1 })
   const preference = store({ value: { enabled: true } })
   const remoteListeners = new Map<string, () => void>()
   const settings = { ...preference } as unknown as ConfigForm<InputSuggestionsSettings>
-  const ctx = { get: (name: string) => ({
+  const ctx = { locale: { getSnapshot: () => ({ active: 'zh' }), subscribe: () => () => {} }, get: (name: string) => ({
     sessions: { binding: () => ({ ctx: {}, session: { ...session, projections: { faceOf: () => model } }, eventSource: events }) },
     connection: { generation }, remote: { $on: (event: string, listener: () => void) => { remoteListeners.set(event, listener); return () => { remoteListeners.delete(event) } } },
   })[name], conversation: { input: { for: () => ({ state: input }) } }, inputTriggers: { sessionOf: () => ({ menu }) } } as unknown as Context
@@ -189,6 +190,71 @@ function runtimeFixture(api: SuggestionTransport, changed = () => {}, visible = 
 }
 
 describe('public composer integration', () => {
+  it('initializes draft assistance with real Cordis services and adopts a continuation through the scoped DOM capture', async () => {
+    const f = runtimeFixture({ generate: vi.fn(), cancel: vi.fn() })
+    f.session.set({ ...f.session.getSnapshot(), running: false })
+    const container = document.createElement('div'); const editor = document.createElement('div')
+    editor.setAttribute('contenteditable', 'true'); editor.tabIndex = 0; container.append(editor); document.body.append(container)
+    const originalRangeBounds = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect')
+    Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect(20, 20, 0, 22) })
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 200))
+    const actions = { captureInsertion: () => ({ start: f.input.getSnapshot().draft.length, end: f.input.getSnapshot().draft.length, draftRev: f.input.getSnapshot().draftRev }),
+      insertText: vi.fn(() => true) }
+    const api = { generate: vi.fn(async (request: { requestId: string; draftRev: number }) => ({ requestId: request.requestId, draftRev: request.draftRev, text: ' regression tests.', notes: [] })), cancel: vi.fn() }
+    const root = new CordisContext(); let stop: (() => void) | undefined; let runtime: ReturnType<typeof createDraftAssistanceRuntime>
+    try {
+      await root.plugin({ name: 'assist-test-services', apply(scope: Context) {
+        scope.provide('conversation', f.ctx.conversation); scope.provide('inputTriggers', f.ctx.inputTriggers)
+        for (const name of ['sessions', 'connection', 'remote']) scope.provide(name, f.ctx.get(name) as never)
+      } })
+      await root.plugin({ name: 'assist-test-consumer', inject: [...INPUT_SUGGESTIONS_INJECT, 'inputTriggers'], apply(scope: Context) {
+        runtime = createDraftAssistanceRuntime(scope, 'a' as SessionId, actions as unknown as InputActions,
+          { current: container }, () => false, f.settings, f.settings, () => {}, api)
+        stop = runtime?.start()
+      } })
+      editor.focus(); editor.textContent = 'Please help me with'
+      document.getSelection()!.collapse(editor.firstChild, editor.textContent.length)
+      f.input.set({ ...EMPTY, draft: editor.textContent, draftRev: 2 })
+      await vi.advanceTimersByTimeAsync(800)
+      expect(api.generate).toHaveBeenCalledOnce(); expect(runtime!.state.text).toBe(' regression tests.')
+      Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect() })
+      const invisible = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      editor.dispatchEvent(invisible); expect(invisible.defaultPrevented).toBe(false); expect(actions.insertText).not.toHaveBeenCalled()
+      Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect(20, 20, 0, 22) })
+      const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      editor.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(true); expect(actions.insertText).toHaveBeenCalledOnce()
+      editor.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+      editor.textContent = '请帮助我为这个功能编写'
+      document.getSelection()!.collapse(editor.firstChild, editor.textContent.length)
+      f.input.set({ ...EMPTY, draft: editor.textContent, draftRev: 3 })
+      editor.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }))
+      await vi.advanceTimersByTimeAsync(9); expect(api.generate).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(3001)
+      expect(api.generate).toHaveBeenCalledTimes(2)
+      expect(runtime!.state.text).toBe(' regression tests.')
+    } finally {
+      stop?.(); await root.fiber.dispose(); container.remove(); document.getSelection()?.removeAllRanges()
+      if (originalRangeBounds) Object.defineProperty(Range.prototype, 'getBoundingClientRect', originalRangeBounds)
+      else Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect')
+    }
+    expect(f.input.size).toBe(0); expect(f.remoteListeners.size).toBe(0)
+  })
+  it.each(['mount', 'enable', 'history-replace'] as const)('suggests from an existing completed conversation on %s without a new reply', async trigger => {
+    const api = { generate: vi.fn(async (_s: string, requestId: string, endSeq: number) => ({ text: 'Add regression coverage.', requestId, endSeq })), cancel: vi.fn() }
+    const f = runtimeFixture(api)
+    f.session.set({ ...f.session.getSnapshot(), running: false })
+    const entries = [{ type: 'event', event: { type: 'turn/end', seq: 15, data: { reason: { kind: 'completed' } } } }]
+    if (trigger !== 'history-replace') f.events.set({ ...f.events.getSnapshot(), entries })
+    if (trigger === 'enable') f.preference.set({ value: { enabled: false } })
+    const stop = f.runtime.start()
+    if (trigger === 'enable') { await vi.advanceTimersByTimeAsync(600); expect(api.generate).not.toHaveBeenCalled(); f.preference.set({ value: { enabled: true } }) }
+    if (trigger === 'history-replace') f.events.set({ revision: 1, entries, change: { kind: 'replace', entries: [] } })
+    await vi.advanceTimersByTimeAsync(500)
+    expect(api.generate).toHaveBeenCalledOnce(); expect(f.runtime.state.text).toBe('Add regression coverage.')
+    f.runtime.sync(); await vi.advanceTimersByTimeAsync(1000); expect(api.generate).toHaveBeenCalledOnce()
+    stop()
+  })
   it('initializes and generates inside a real Cordis plugin with declared services', async () => {
     const api = { generate: vi.fn(async (_s: string, requestId: string, endSeq: number) => ({ text: '补充一项回归测试。', requestId, endSeq })), cancel: vi.fn(), report: vi.fn() }
     const f = runtimeFixture(api)
@@ -373,7 +439,7 @@ describe('public composer integration', () => {
     } })
     const Composer = () => null
     const retire = register({ name: 'conversation.composer.bar', locale: 'conversation', inject: () => ({ existing: 'untouched' }),
-      children: { 'conversation.input.overlay': { kind: 'list', scope: 'session' } } }, Composer)
+      children: { 'conversation.input.overlay': { kind: 'list', scope: 'session' }, 'conversation.input.left': { kind: 'list', scope: 'session' } } }, Composer)
     register({ name: 'conversation.input.overlay', id: 'selection-quote' })
     const settings = store({ value: { enabled: false } })
     const ctx = {

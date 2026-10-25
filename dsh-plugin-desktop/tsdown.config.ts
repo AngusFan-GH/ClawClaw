@@ -75,6 +75,8 @@ export default defineConfig([
       reminders: 'src/reminders.ts',
       'shortcut-menu': 'src/shortcut-menu.ts',
       'input-suggestions': 'src/input-suggestions.ts',
+      'ai-continuation': 'src/ai-continuation.ts',
+      'ai-draft-optimization': 'src/ai-draft-optimization.ts',
       'plugin-registry-probe': 'src/plugin-registry-probe.ts',
       'default-workspace': 'src/default-workspace.ts',
       'git-graph': 'src/git-graph.ts',
