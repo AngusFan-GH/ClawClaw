@@ -3,7 +3,7 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { acceptCatalog } from '../src/experts/client/catalog.ts'
-import { ExpertCardsSettings } from '../src/experts/client/index.ts'
+import { AgentsButton, ExpertCardsSettings } from '../src/experts/client/index.ts'
 import { acceptTeamSnapshot } from '../src/experts/client/team-cache.ts'
 import { TeamLocaleContext } from '../src/experts/client/team-locale.ts'
 import { isDeletableTeam, TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
@@ -38,6 +38,40 @@ afterEach(async () => {
 })
 
 describe('expert team live UI state', () => {
+  it.each([false, true])('offers fixed management links in both capability menus with populated=%s', async (populated) => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    const remote = {
+      getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert], enabled: populated ? [expert.slug] : [], revision: 1 } })),
+      getTeams: vi.fn(async () => ({ ok: true, value: { teams: [], enabledExperts: [], recalledTeams: [], revision: 1 } })),
+      setEnabled: vi.fn(), recallTeam: vi.fn(),
+    } as unknown as TeamRemote
+    const onManage = vi.fn()
+    const host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await act(async () => root!.render(React.createElement(AgentsButton, {
+      remote, getActive: () => 'zh', t: ((key: string) => (customZh as Record<string, string>)[key] ?? key) as never,
+      capabilityRegistry: { subscribe: () => () => {}, getSnapshot: () => pluginCapabilitySnapshot } as never,
+      skillsApi: { read: async () => [] } as never, onManage,
+    } as unknown as React.ComponentProps<typeof AgentsButton>)))
+    await act(async () => host.querySelector<HTMLButtonElement>('.aag-btn')!.click())
+    expect(host.querySelector('.aag-discovery-row') !== null).toBe(populated)
+    const results = host.querySelector('.aag-capability-results')!
+    const footer = host.querySelector('.aag-capability-footer')!
+    expect(footer.parentElement).toBe(results.parentElement)
+    expect(results.contains(footer)).toBe(false)
+    expect(footer.textContent).toContain('管理专家')
+    await act(async () => footer.querySelector('button')!.click())
+    expect(onManage).toHaveBeenLastCalledWith('experts')
+    expect(host.querySelector('.aag-menu')).toBeNull()
+    await act(async () => host.querySelector<HTMLButtonElement>('.aag-btn')!.click())
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>('.aag-capability-nav button')].find(button => button.textContent === '专家团')!.click())
+    expect(host.querySelector('.aag-capability-footer')?.textContent).toContain('管理专家团')
+    await act(async () => host.querySelector<HTMLButtonElement>('.aag-capability-footer button')!.click())
+    expect(onManage).toHaveBeenLastCalledWith('teams')
+    expect(host.querySelector('.aag-menu')).toBeNull()
+    expect(remote.recallTeam).not.toHaveBeenCalled()
+    expect((remote as unknown as { setEnabled: ReturnType<typeof vi.fn> }).setEnabled).not.toHaveBeenCalled()
+  })
+
   it('does not infer recall from enabled members and only shows explicitly recalled overlapping teams', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const team = { ...structuredClone(BUILTIN_TEAMS[0]!), members: [{ expertSlug: expert.slug, duty: 'Review', instructions: 'Inspect evidence.' }] }

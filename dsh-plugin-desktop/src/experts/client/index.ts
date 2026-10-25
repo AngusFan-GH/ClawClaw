@@ -516,7 +516,9 @@ export const CAPABILITY_PICKER_CSS = `
 .aag-capability-picker{display:grid;grid-template-columns:112px minmax(0,1fr);height:348px;min-height:0}
 .aag-capability-nav{display:flex;min-width:0;flex-direction:column;gap:2px;padding:6px 10px 6px 2px;border-right:1px solid var(--dsw-alias-border-l2)}
 .aag-capability-nav button{width:100%;padding:8px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}.aag-capability-nav button:hover,.aag-capability-nav button.active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.aag-capability-results{display:flex;min-width:0;min-height:0;flex-direction:column;padding:2px 2px 2px 10px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}.aag-capability-results>.agt-compact{min-width:0}.aag-capability-results .agt-compact-list{max-width:100%;overflow-x:hidden}
+.aag-capability-content{display:flex;min-width:0;min-height:0;flex-direction:column;overflow:hidden}
+.aag-capability-results{display:flex;flex:1;min-width:0;min-height:0;max-height:none;flex-direction:column;padding:2px 2px 2px 10px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}.aag-capability-results>.agt-compact{min-width:0}.aag-capability-results .agt-compact-list{max-width:100%;overflow-x:hidden}
+.aag-capability-footer{flex:none;margin-left:10px;padding:8px 4px 2px;border-top:1px solid var(--dsw-alias-border-l2)}.aag-capability-footer button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:36px;padding:6px 12px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-brand-primary);font:inherit;font-size:13px;cursor:pointer}.aag-capability-footer button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-footer button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}.aag-capability-footer button>span{margin-left:auto}
 .aag-capability-search{padding:4px 4px 6px;flex:none}.aag-capability-search input{box-sizing:border-box;width:100%;min-height:38px;padding:7px 11px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit}.aag-capability-search input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
 .aag-capability-summary{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 8px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}.aag-capability-summary span{min-width:0}.aag-capability-summary span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
 .aag-capability-list{display:flex;min-width:0;flex-direction:column}.aag-capability-list>button{display:flex;align-items:flex-start;flex-direction:column;gap:2px;width:100%;min-width:0;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}.aag-capability-list>button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-list small{display:flex;min-width:0;align-items:center;gap:7px;overflow:hidden;max-width:100%;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}
@@ -767,6 +769,7 @@ export function insertSelectedExpert(
 }
 
 type ButtonProps = PropsLocale<'agency'> & {
+  readonly onManage?: (view: 'experts' | 'teams') => void
   readonly remote: AgencyAgentsRemoteApi
   readonly onEnabledChange?: (enabled: ReadonlySet<string>) => void
   /** 由 session slot 的 inject 回调注入，永远绑定当前编辑器所属会话。 */
@@ -994,10 +997,16 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
       React.createElement('div', { className: 'aag-capability-picker' },
         React.createElement('nav', { className: 'aag-capability-nav', 'aria-label': props.getActive() === 'zh' ? '能力分类' : 'Capability categories' },
           [['experts', props.getActive() === 'zh' ? '专家' : 'Experts'], ['teams', props.getActive() === 'zh' ? '专家团' : 'Teams'], ['skills', props.getActive() === 'zh' ? '技能' : 'Skills'], ['mcp', props.getActive() === 'zh' ? '连接器' : 'Connectors']].map(([value, label]) => React.createElement('button', { type: 'button', key: value, className: mode === value ? 'active' : undefined, onClick: () => { setMode(value as typeof mode); setCapabilityQuery('') } }, label))),
+        React.createElement('div', { className: 'aag-capability-content' },
         React.createElement('div', { className: 'aag-capability-results' },
       capabilityError === null ? null : React.createElement('div', { className: 'aag-error', role: 'alert' }, capabilityError),
       capabilityContent
-      )
+      ),
+      props.onManage && (mode === 'experts' || mode === 'teams') ? React.createElement('footer', { className: 'aag-capability-footer' },
+        React.createElement('button', { type: 'button', onClick: () => { close(); props.onManage?.(mode) } },
+          React.createElement(mode === 'experts' ? Bot : UsersRound, { size: 16, 'aria-hidden': true }),
+          props.getActive() === 'zh' ? (mode === 'experts' ? '管理专家' : '管理专家团') : (mode === 'experts' ? 'Manage experts' : 'Manage teams'),
+          React.createElement('span', { 'aria-hidden': true }, '→'))) : null)
       )
       )
     : null
@@ -1509,6 +1518,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
 }
 
 export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCardsSettings> & {
+  initialView?: 'experts' | 'teams'
   skillsApi: ReturnType<typeof createDesktopSkillsApi>
   mcpApi: ReturnType<typeof createDesktopMcpApi>
   skillsT: (key: string, params?: Record<string, unknown>) => string
@@ -1520,7 +1530,7 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
   onCreatedTeam?(team: ExpertTeam, experts: readonly ExpertView[]): void
 }) {
   const tx = (key: string) => teamText(props.getActive(), key)
-  const [view, setView] = React.useState<'experts' | 'teams' | 'skills' | 'mcp'>('experts')
+  const [view, setView] = React.useState<'experts' | 'teams' | 'skills' | 'mcp'>(props.initialView ?? 'experts')
   const [settingsCapabilityRegistry, setSettingsCapabilityRegistry] = React.useState(props.capabilityRegistry)
   const expertCatalog = React.useSyncExternalStore(
     listener => subscribeCatalog(props.remote, listener),
@@ -1592,7 +1602,7 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
         t: props.mcpT, api: props.mcpApi, embedded: true, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
       })))))
 }
-export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation', 'sidebarRight']
+export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation', 'sidebarRight', 'layout']
 const SKILL_REFERENCE_SOURCE = 'clawclaw-experts:skills'
 
 export async function apply(ctx: ClientContext): Promise<() => void> {
@@ -1937,13 +1947,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   }
   ctx.effect(() => stopCreationWatch, 'clawclaw-experts: creation result watch')
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register(
-    // label 是 thunk：nav 行每渲染读一次，locale 切换后自动跟随。
-    {
-      name: 'settings.section', id: 'clawclaw-experts', order: 16, label: () => t('settings.nav'), locale: NS,
-      ...({ icon: 'expert' } as Record<string, unknown>),
-    },
-    (props) => {
+  const renderSettingsPanel = (props) => {
       const sessions = ctx.sessions as unknown as { list?: { getSnapshot(): { ids: readonly string[]; byId: Record<string, { retainedBy?: { mainView?: number } }> } } }
       const list = sessions.list?.getSnapshot()
       const initialSessionId = list?.ids.find(id => (list.byId[id]?.retainedBy?.mainView ?? 0) > 0)
@@ -1992,15 +1996,35 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           if (selected) props.close()
           return selected
         } })
-    },
+    }
+  ctx.slots.inject('settings.section', () => ctx.slots.register(
+    // label 是 thunk：nav 行每渲染读一次，locale 切换后自动跟随。
+    { name: 'settings.section', id: 'clawclaw-experts', order: 16, label: () => t('settings.nav'), locale: NS,
+      ...({ icon: 'expert' } as Record<string, unknown>) },
+    renderSettingsPanel,
   ))
+
+  // A dedicated route also works when the user has unpinned the library shortcut.
+  let managementTarget = { view: 'experts' as 'experts' | 'teams', request: 0 }
+  const managementListeners = new Set<() => void>()
+  const subscribeManagement = (listener: () => void) => { managementListeners.add(listener); return () => { managementListeners.delete(listener) } }
+  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'clawclaw-expert-management', locale: NS }, (props) => {
+    const target = React.useSyncExternalStore(subscribeManagement, () => managementTarget)
+    return React.createElement('main', { className: 'dshShortcutPage' }, renderSettingsPanel({ ...props, initialView: target.view, key: target.request,
+      close: () => ctx.layout.selectPanel(null) }))
+  }))
+  const openManagement = (view: 'experts' | 'teams') => {
+    managementTarget = { view, request: managementTarget.request + 1 }
+    for (const listener of managementListeners) listener()
+    ctx.layout.selectPanel('clawclaw-expert-management')
+  }
 
   ctx.slots.inject('conversation.input.left', () => ctx.slots.register(
     {
       name: 'conversation.input.left', id: 'clawclaw-experts', order: 0, locale: NS,
       ...({ inject: bindExpertInsertion } as Record<string, unknown>),
     },
-    (props) => React.createElement(AgentsButton, { ...props, remote, getActive, onEnabledChange: updateEnabledForMentions }),
+    (props) => React.createElement(AgentsButton, { ...props, remote, getActive, onEnabledChange: updateEnabledForMentions, onManage: openManagement }),
   ))
 
   const registerInputTriggerSources = (active: 'zh' | 'en'): (() => void) => {
