@@ -21531,6 +21531,25 @@ var require_minimal2 = __commonJS({
   }
 });
 
+// node_modules/https-proxy-agent/dist/index.js
+var require_dist2 = __commonJS({
+  "node_modules/https-proxy-agent/dist/index.js"(exports, module) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    var agent_1 = __importDefault(require_agent());
+    function createHttpsProxyAgent(opts) {
+      return new agent_1.default(opts);
+    }
+    (function(createHttpsProxyAgent2) {
+      createHttpsProxyAgent2.HttpsProxyAgent = agent_1.default;
+      createHttpsProxyAgent2.prototype = agent_1.default.prototype;
+    })(createHttpsProxyAgent || (createHttpsProxyAgent = {}));
+    module.exports = createHttpsProxyAgent;
+  }
+});
+
 // ../../node_modules/.pnpm/react@18.3.1/node_modules/react/cjs/react.production.min.js
 var require_react_production_min = __commonJS({
   "../../node_modules/.pnpm/react@18.3.1/node_modules/react/cjs/react.production.min.js"(exports) {
@@ -150735,7 +150754,7 @@ function cardActionId(action) {
 }
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/plugin-src/host/channels/feishu/production.mjs
-var import_https_proxy_agent2 = __toESM(require_dist(), 1);
+var import_https_proxy_agent2 = __toESM(require_dist2(), 1);
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/plugin-src/host/channels/feishu/connection-supervisor.mjs
 var DEFAULT_RETRY_DELAYS_MS3 = Object.freeze([250, 1e3, 3e3, 5e3, 1e4, 3e4]);

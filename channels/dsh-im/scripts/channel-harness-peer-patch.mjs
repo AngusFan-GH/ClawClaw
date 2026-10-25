@@ -17,3 +17,18 @@ export const channelHarnessPeerPatch = {
     }))
   },
 }
+
+/**
+ * The pinned IM package imports its development-only proxy agent from its host
+ * channel source.  With pnpm's isolated linker that lookup can otherwise walk
+ * to an incompatible root copy, so resolve it to this adapter's pinned v5.
+ */
+export const channelHttpsProxyAgentPatch = {
+  name: 'clawclaw-channel-https-proxy-agent',
+  setup(build) {
+    build.onResolve({ filter: /^https-proxy-agent$/ }, ({ importer }) => {
+      if (!/[/\\]plugin-src[/\\]host[/\\]channels[/\\]feishu[/\\]production\.mjs$/.test(importer)) return
+      return { path: fileURLToPath(new URL('../node_modules/https-proxy-agent/dist/index.js', import.meta.url)) }
+    })
+  },
+}

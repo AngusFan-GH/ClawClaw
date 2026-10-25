@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { channelDirectoryPickerPatch } from './channel-directory-picker-patch.mjs'
-import { channelHarnessPeerPatch } from './channel-harness-peer-patch.mjs'
+import { channelHarnessPeerPatch, channelHttpsProxyAgentPatch } from './channel-harness-peer-patch.mjs'
 import { channelSessionArchivePatch } from './channel-session-archive-patch.mjs'
 import { larkSdkHandshakePatch } from '../node_modules/@xmanrui/dsh-im/plugin-src/host/lark-sdk-handshake-patch.mjs'
 
@@ -37,7 +37,7 @@ await build({
     'undici',
     'undici/*',
   ],
-  plugins: [larkSdkHandshakePatch, channelSessionArchivePatch, channelHarnessPeerPatch],
+  plugins: [larkSdkHandshakePatch, channelSessionArchivePatch, channelHarnessPeerPatch, channelHttpsProxyAgentPatch],
   banner: {
     js: [
       "import { createRequire as __clawCreateRequire } from 'node:module';",
