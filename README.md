@@ -8,7 +8,7 @@
 
 ## 当前状态
 
-当前源码版本为 **0.2.15**（开发中，未封板），固定 DSH 源码和运行时版本为 **0.2.1-rc.2**。稳定版安装包由项目自己的[更新源](https://clawclaw.xzinfra.com:9528/updates/dsh/stable/release.json)发布；原 DSH Desktop 官网的安装包不属于本项目。
+当前源码版本为 **0.2.16**（开发中，未封板），固定 DSH 源码和运行时版本为 **0.2.1-rc.2**。稳定版安装包由项目自己的[更新源](https://clawclaw.xzinfra.com:9528/updates/dsh/stable/release.json)发布；原 DSH Desktop 官网的安装包不属于本项目。
 
 - **桌面运行**：原生窗口、托盘、隔离 Host 进程、三种窗口模式、终端和恢复工具。
 - **工作区**：内置受保护的默认工作区，支持浏览目录、输入路径、新建文件夹和系统目录选择器。
