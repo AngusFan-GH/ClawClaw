@@ -21,3 +21,6 @@ dsh-community-market/lib/
 /release/
 /staged/
 /artifacts/
+
+# Local documents and generated publication assets
+/deliverables/
