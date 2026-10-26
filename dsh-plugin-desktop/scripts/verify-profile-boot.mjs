@@ -41,6 +41,13 @@ const BROWSER_ACCESS = Object.freeze({
   setOrdinaryBrowserEnabled(enabled) { ordinaryBrowserEnabled = enabled },
 })
 const home = mkdtempSync(join(tmpdir(), 'dsh-desktop-profile-'))
+// Exercise the opt-in bundled market through admission and the renderer graph,
+// not only its client factory with mocked services.
+function prepareSmokeProfile() {
+  return prepareDesktopProfile(undefined, home, 'win32', undefined, undefined, {
+    requested: 'dsh-market', effective: 'dsh-market', legacyDefaulted: false,
+  })
+}
 const previousDshHome = process.env.DSH_HOME
 process.env.DSH_HOME = home
 let ctx
@@ -58,7 +65,7 @@ try {
     '  default: minimal',
     '',
   ].join('\n'))
-  let prepared = prepareDesktopProfile(undefined, home, 'win32')
+  let prepared = prepareSmokeProfile()
   // A legacy shared fallback must never decide admission for the new installed runtime.
   const staleSettings = join(home, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-settings')
   mkdirSync(staleSettings, { recursive: true })
@@ -67,7 +74,7 @@ try {
     peerDependencies: { '@deepseek-ai/dsh-session': '0.1.7-rc.2' },
   }))
   await importLegacyDesktopSetupWizardSettings(prepared.profile.patchPath)
-  prepared = prepareDesktopProfile(undefined, home, 'win32')
+  prepared = prepareSmokeProfile()
   const hostServicePluginDir = join(
     prepared.profile.dir,
     'node_modules',
@@ -229,7 +236,7 @@ try {
       const profileContext = desktopHarnessProfileContext(prepared, host.desktopPnpmBootstrap)
       host.provide('profileContext', {
         ...profileContext,
-        overlays: [hostServicePatch, ...profileContext.overlays],
+        get overlays() { return [hostServicePatch, ...profileContext.overlays] },
       })
       await host.plugin(DesktopProfileService, {
         current: {
@@ -267,6 +274,15 @@ try {
   await ctx.loader.await()
   if (![...ctx.loader.entries()].some(entry => entry.options.id === incompatibleName && entry.options.disabled === true)) {
     throw new Error('Desktop package metadata adapter bypassed incompatible third-party admission')
+  }
+
+  const marketRow = [...ctx.loader.entries()].find(entry => entry.options.id === 'dsh-market')
+  if (marketRow?.options.disabled === true || marketRow?.fiber?.state !== 2) {
+    throw new Error('selected bundled market did not pass compatibility admission and activate')
+  }
+  const marketBundle = (await ctx.pluginManager.listBundles()).find(bundle => bundle.name === 'dshmarket')
+  if (marketBundle === undefined || marketBundle.error !== undefined) {
+    throw new Error(`bundled market inventory reports an error: ${marketBundle?.error ?? 'missing bundle'}`)
   }
 
   if (ctx.get('desktopPnpm') === undefined) {
@@ -507,10 +523,17 @@ try {
   if (bootMatch?.[1] === undefined) {
     throw new Error('assembled Web root is missing window.__DSH_BOOT__')
   }
+  const marketResponse = await fetch(new URL('/dsh-market/status', expectedUrl), {
+    headers: { [BROWSER_ACCESS.rendererHeader.name]: BROWSER_ACCESS.rendererHeader.value, Cookie: cookie },
+  })
+  if (marketResponse.status !== 200 || (await marketResponse.json()).version !== '1.38.1') {
+    throw new Error('selected bundled market did not serve its status route')
+  }
   const graph = JSON.parse(bootMatch[1])
   const ids = new Set(graph.entries.map(entry => entry.id))
   for (const id of [
     'dsh-plugin-desktop',
+    'dshmarket',
     '@deepseek-ai/dsh-client-ui-layout',
     '@deepseek-ai/dsh-client-ui-conversation',
     '@deepseek-ai/dsh-client-ui-sidebar',
@@ -546,7 +569,7 @@ try {
       writeFileSync(corePath, JSON.stringify(document))
     }
     restartGuard = true
-    prepared = prepareDesktopProfile(undefined, home, 'win32')
+    prepared = prepareSmokeProfile()
     ctx = await boot(BIN_NAME, prepared.rootConfig, [hostServicePatch, ...prepared.patches], prepareHost, prepared.bareModuleBaseUrl)
     const afterRestart = await ctx.desktopCronTasksController.read()
     assert.deepEqual(JSON.parse(JSON.stringify(afterRestart.jobs)), JSON.parse(savedJobs), 'restart changed task identity, Session or result history')
@@ -580,7 +603,7 @@ try {
   writeFileSync(prepared.profile.patchPath, readFileSync(prepared.profile.patchPath, 'utf8')
     + `\n- id: desktop-cron-tasks\n  config:\n    jobs: ${JSON.stringify(legacyJobs)}\n`)
   for (let repeat = 0; repeat < 2; repeat++) {
-    prepared = prepareDesktopProfile(undefined, home, 'win32')
+    prepared = prepareSmokeProfile()
     ctx = await boot(BIN_NAME, prepared.rootConfig, [hostServicePatch, ...prepared.patches], prepareHost, prepared.bareModuleBaseUrl)
     const imported = await ctx.desktopCronTasksController.read()
     assert.equal(imported.jobs.length, legacyJobs.length)

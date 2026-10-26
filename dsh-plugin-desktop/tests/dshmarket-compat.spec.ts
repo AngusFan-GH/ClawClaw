@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import { evaluatePluginCompatibility, getDshRuntimeVersion } from '@deepseek-ai/dsh-app-boot'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -140,6 +141,15 @@ async function invokeUpdate(route: MarketRoute): Promise<{ status: number; body:
 }
 
 describe('dsh-market Desktop install compatibility', () => {
+  it('admits the patched bundled market on the pinned DSH runtime without exemptions', () => {
+    const require = createRequire(import.meta.url)
+    const manifest = JSON.parse(readFileSync(require.resolve('dshmarket/package.json'), 'utf8')) as object
+    expect(getDshRuntimeVersion()).toBe('0.2.1-rc.2')
+    expect(evaluatePluginCompatibility(manifest)).toBeUndefined()
+    // The patch qualifies the current runtime only; it must not blanket-exempt future releases.
+    expect(evaluatePluginCompatibility(manifest, {}, '0.3.0')).toMatchObject({ exempted: false })
+  })
+
   it('offers the host-provided market update when the Profile omits dshmarket', async () => {
     for (const name of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy']) {
       vi.stubEnv(name, '')

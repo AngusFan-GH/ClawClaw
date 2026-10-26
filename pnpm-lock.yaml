@@ -712,7 +712,7 @@ patchedDependencies:
   '@vscode/ripgrep@1.18.0': 67f076c2d8595fd98ac91b25333faca041fd6c23918c63517d01070a6dde1cea
   app-builder-lib@26.15.7: f6237929e62a3dae05899382493cf2fe4dfac6870ee7b2d06c430e5aa6a51d43
   dsh-free-search@0.8.10: 44503ef5b7863292da620f5e42b8eb7ea28fa20e029a14212916acf48b70a04b
-  dshmarket@1.38.1: 5d431487c633bdba7a79e97da131692d5f150b4718b112ac8f4ed61cd290626a
+  dshmarket@1.38.1: 41902975b5547e1b74200d3327e09c20580389758f3e60d0c73a4a00db4bfc97
   fs-ext@2.1.1: 88a60ddb01d524c3faa06827b37828637388cbe18441138fa10fa24a46b9803c
   open@11.0.1: 383484d0b84b1bb856145936155333d024f1dfc5d6eaf86104b2a00bac8e8612
   pnpm@11.8.0: fd9a44ac5e63d7c4a34590e2301123fecab80e7c694d74e2606d480a45de232a
@@ -1602,7 +1602,7 @@ importers:
         version: 0.8.10(patch_hash=44503ef5b7863292da620f5e42b8eb7ea28fa20e029a14212916acf48b70a04b)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-client-ui-commands@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-client-ui-commands-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-client-ui-plugin-manager@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-client-ui-plugin-manager-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-client-ui-renderer@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-client-ui-renderer-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-settings-0.2.1-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(d30f5b65a0f23779ec938621a113f6de))(@deepseek-ai/dsh-tools@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tools-0.2.1-rc.2.tgz(dc241a4c1c1137034a3010b158e4bde4))(@deepseek-ai/schemastery@3.18.5)(react@18.3.1)
       dshmarket:
         specifier: 1.38.1
-        version: 1.38.1(patch_hash=5d431487c633bdba7a79e97da131692d5f150b4718b112ac8f4ed61cd290626a)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-settings-0.2.1-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(d30f5b65a0f23779ec938621a113f6de))(@deepseek-ai/schemastery@3.18.5)
+        version: 1.38.1(patch_hash=41902975b5547e1b74200d3327e09c20580389758f3e60d0c73a4a00db4bfc97)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-settings-0.2.1-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(d30f5b65a0f23779ec938621a113f6de))(@deepseek-ai/schemastery@3.18.5)
       fs-ext:
         specifier: 2.1.1
         version: 2.1.1(patch_hash=88a60ddb01d524c3faa06827b37828637388cbe18441138fa10fa24a46b9803c)
@@ -16739,7 +16739,7 @@ snapshots:
       '@deepseek-ai/schemastery': 3.18.5
       react: 18.3.1
 
-  dshmarket@1.38.1(patch_hash=5d431487c633bdba7a79e97da131692d5f150b4718b112ac8f4ed61cd290626a)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-settings-0.2.1-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(d30f5b65a0f23779ec938621a113f6de))(@deepseek-ai/schemastery@3.18.5):
+  dshmarket@1.38.1(patch_hash=41902975b5547e1b74200d3327e09c20580389758f3e60d0c73a4a00db4bfc97)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-settings-0.2.1-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(d30f5b65a0f23779ec938621a113f6de))(@deepseek-ai/schemastery@3.18.5):
     dependencies:
       '@deepseek-ai/cordis': 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)
       js-yaml: 4.3.2

@@ -56,17 +56,21 @@ export function applyMarketIntegration(ctx: ClientContext): void {
     'dsh-plugin-desktop: market integration dictionaries',
   )
   ctx.inject(['market'], (scope: ClientContext) => {
-    scope.effect(() => {
+    scope.slots.inject('plugins.item', () => {
+      const unregister = scope.slots.register({
+        name: 'plugins.item',
+        id: 'desktop-marketplace',
+        order: 0,
+        label: () => scope.locale.bind(DESKTOP_MARKET_INTEGRATION_LOCALE_NAMESPACE)('label'),
+        locale: DESKTOP_MARKET_INTEGRATION_LOCALE_NAMESPACE,
+        inject: () => ({ market: scope.market }),
+      }, PluginMarketplace)
+      // Keep the Settings fallback until the Plugins page can host the market.
       scope.market.setSettingsVisible(false)
-      return () => { scope.market.setSettingsVisible(true) }
-    }, 'dsh-plugin-desktop: move market out of Settings')
-    scope.slots.inject('plugins.item', () => scope.slots.register({
-      name: 'plugins.item',
-      id: 'desktop-marketplace',
-      order: 0,
-      label: () => scope.locale.bind(DESKTOP_MARKET_INTEGRATION_LOCALE_NAMESPACE)('label'),
-      locale: DESKTOP_MARKET_INTEGRATION_LOCALE_NAMESPACE,
-      inject: () => ({ market: scope.market }),
-    }, PluginMarketplace))
+      return () => {
+        unregister()
+        scope.market.setSettingsVisible(true)
+      }
+    })
   })
 }

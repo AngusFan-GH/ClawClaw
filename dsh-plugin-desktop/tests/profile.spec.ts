@@ -17,6 +17,7 @@ import {
   composeEntries,
   initProfile,
   PROFILE_TEMPLATES,
+  readProfilePatches,
 } from '@deepseek-ai/dsh-app-boot'
 import { retainAsarModuleResolver } from '../src/asar-module-resolver-state.ts'
 import {
@@ -24,6 +25,7 @@ import {
   desktopShellModeFromSettings,
   desktopStartupSettingsFromSettings,
   desktopBundleList,
+  desktopHarnessProfileContext,
   ensureDesktopProfile,
   healDesktopProfileModuleFallback,
   prepareDesktopProfile,
@@ -1018,6 +1020,34 @@ virtualStoreDirMaxLength: 60
       name: DESKTOP_MARKET_IDENTITIES.dshMarket.packageName,
     }])
     expect(rows.some(row => row.id === 'community-market')).toBe(false)
+  })
+
+  it.each(['disabled', 'dsh-market'] as const)('retains market selection %s across Profile reloads and bundle changes', provider => {
+    const home = temporaryHome()
+    const prepared = prepareDesktopProfile(undefined, home, 'darwin', 'desktop', undefined, {
+      requested: provider, effective: provider, legacyDefaulted: false,
+    })
+    const context = desktopHarnessProfileContext(prepared, {
+      activeProfileName: 'desktop', activeProfileDir: prepared.profile.dir, homeDir: home,
+      appExecutable: process.execPath, pnpmBinPath: join(home, 'pnpm.mjs'), electronVersion: '44.0.0',
+      nodeBinDir: join(home, 'bin'), nodeShimPath: join(home, 'bin/node'),
+      clearEnvironmentPath: join(home, 'clear-env.mjs'), dshBootstrapPath: join(home, 'desktop-cli.js'),
+    })
+    const marketRows = () => composeEntries([readProfilePatches('desktop-test', context)])
+      .filter(row => row.id === DESKTOP_MARKET_IDENTITIES.dshMarket.rowId)
+    expect(marketRows()).toEqual(provider === 'disabled' ? [] : [{ id: 'dsh-market', name: 'dshmarket' }])
+
+    const manifestPath = join(prepared.profile.dir, 'package.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      dsh: { profile: { bundles: string[] } }
+    }
+    manifest.dsh.profile.bundles.push('dshmarket')
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    expect(marketRows()).toEqual([{ id: 'dsh-market', name: 'dshmarket', disabled: provider === 'disabled' }])
+
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(name => name !== 'dshmarket')
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    expect(marketRows()).toEqual(provider === 'disabled' ? [] : [{ id: 'dsh-market', name: 'dshmarket' }])
   })
 
   it('keeps the newer Desktop dshmarket when a Profile copy is older', () => {

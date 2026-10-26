@@ -296,7 +296,7 @@ export interface PreparedDesktopProfile {
   bareModuleBaseUrl: string
   /** Complete ordered patch list for this desktop generation. */
   patches: PatchOptions[]
-  /** Launcher-owned patches reapplied after ConfigEditor rebuilds disk layers. */
+  /** Launcher-owned patches recomputed when ConfigEditor rebuilds disk layers. */
   overlays: PatchOptions[]
   /** Optional Client UI entries skipped because this profile cannot resolve them. */
   skippedOptionalEntries: SkippedOptionalEntry[]
@@ -1373,10 +1373,23 @@ export function prepareDesktopProfile(
     rootConfig,
     bareModuleBaseUrl,
     patches: structuredClone(patches),
-    overlays: structuredClone([
-      ...desktopPatches,
-      ...patches.slice(diskLayerPatchCount),
-    ]),
+    get overlays() {
+      // The provider may be injected without being a persisted Profile bundle.
+      // Reloads rebuild disk layers, so retain it here until a bundle install
+      // supplies the same row; inserting it twice would duplicate Loader ids.
+      const manifest = readProfileManifest(BIN_NAME, profileDir)
+      const declaredBundles = (manifest.dsh?.profile as { bundles?: unknown } | undefined)?.bundles
+      const marketIsDeclared = Array.isArray(declaredBundles)
+        && declaredBundles.includes(DESKTOP_MARKET_IDENTITIES.dshMarket.packageName)
+      const marketReloadPatches: PatchOptions[] = marketIsDeclared
+        ? [{ id: DESKTOP_MARKET_IDENTITIES.dshMarket.rowId, disabled: effectiveMarket === 'disabled' }]
+        : providerPatches
+      return structuredClone([
+        ...desktopPatches,
+        ...marketReloadPatches,
+        ...patches.slice(diskLayerPatchCount),
+      ])
+    },
     skippedOptionalEntries,
     mode,
     port,
@@ -1401,7 +1414,7 @@ export function desktopHarnessProfileContext(prepared: PreparedDesktopProfile, b
     cwd: process.cwd(),
     home: prepared.homeDir,
     startedBundles: prepared.profile.layers.map(layer => layer.packageName),
-    overlays: prepared.overlays,
+    get overlays() { return prepared.overlays },
     telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED,
     packageManager: {
       command: bootstrap.appExecutable,
