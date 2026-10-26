@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-desktop",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "ClawClaw desktop agent application",
   "license": "MIT",
   "publishConfig": {
