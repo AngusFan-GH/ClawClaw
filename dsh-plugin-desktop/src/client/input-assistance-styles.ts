@@ -1,12 +1,27 @@
 export const INPUT_ASSISTANCE_CSS = `
 /* Generated inline content participates in the real paragraph's wrapping,
    auto-height and scrollport, while remaining outside editor text/history. */
+/* Lexical leaves a freshly mounted/cleared root childless until its first
+   edit. Render there too; continuations always have a paragraph already. */
+[data-claw-ai-suggestion] [contenteditable="true"]:empty::after,
+[data-claw-ai-suggestion] [contenteditable="true"] > p:last-child::after {
+  content:var(--dsh-ai-suggestion-text);
+  content:var(--dsh-ai-suggestion-text) / "";
+}
 .dshAiContinuationScope[data-claw-ai-continuation] [contenteditable="true"]:focus > p:last-child::after {
   content:var(--dsh-ai-continuation-text);
   content:var(--dsh-ai-continuation-text) / "";
+}
+[data-claw-ai-suggestion] [contenteditable="true"]:empty::after,
+[data-claw-ai-suggestion] [contenteditable="true"] > p:last-child::after,
+.dshAiContinuationScope[data-claw-ai-continuation] [contenteditable="true"]:focus > p:last-child::after {
   font:inherit; line-height:inherit; white-space:inherit; overflow-wrap:inherit; word-break:inherit;
   color:var(--dsw-alias-label-caption); pointer-events:none; user-select:none;
 }
+/* The generated suggestion replaces only the visual placeholder. Hide the
+   empty paragraph's terminal break so it does not add a blank first line. */
+[data-claw-ai-suggestion] [data-composer-placeholder],
+[data-claw-ai-suggestion] [contenteditable="true"] > p:only-child > br:only-child { display:none; }
 button.dshAiOptimizeTrigger { flex:none; white-space:nowrap; color:var(--dsw-alias-label-secondary); }
 .dshAiOptimizeTriggerLabel { display:var(--dsh-composer-model-text-display,inline); }
 .dshAiOptimizeTrigger svg { width:14px; height:14px; flex:none; }

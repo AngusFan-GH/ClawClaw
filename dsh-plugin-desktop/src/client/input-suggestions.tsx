@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PropsRuntime, StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
@@ -15,6 +15,7 @@ import { CONTINUATION_ENTRY, OPTIMIZATION_ENTRY } from '../input-assistance-cont
 import { DraftAssistanceProvider, DraftOptimizationButton } from './input-assistance.tsx'
 import { installInputAssistanceStyles } from './input-assistance-styles.ts'
 import { inputSettingEnabled, trackConfirmedInputSetting } from './input-assistance-settings.ts'
+import { continuationCssText } from './input-continuation-presentation.ts'
 
 /** The runtime reads this service directly; Cordis forbids undeclared access. */
 export const INPUT_SUGGESTIONS_INJECT = ['conversation'] as const
@@ -184,7 +185,7 @@ type ComposerProps = PropsRuntime<'conversation.composer.bar'> & Record<string, 
   optimizationSettings?: ConfigForm<InputSuggestionsSettings>
 }
 
-/** Forward every upstream seat untouched. Only documented owner placeholder copy is supplied. */
+/** Preserve upstream seats; preview suggestions using the continuation's inline presentation. */
 export function SuggestionComposer(props: ComposerProps): JSX.Element {
   const { sectionComponent: Composer, suggestionContext, suggestionSettings, continuationSettings, optimizationSettings, ...original } = props
   if (props.sessionId === undefined || props.inputActions === undefined) return <Composer {...original} />
@@ -212,12 +213,16 @@ function LiveSuggestionComposer({ sectionComponent: Composer, suggestionContext:
     return () => { target?.removeEventListener('desktop-assist-change', sync); observer?.disconnect(); runtimeRef.current = undefined; stop?.() }
   }, [ctx, props.sessionId, props.inputActions, settings])
   useEffect(() => runtimeRef.current?.sync(), [blocked])
+  const suggestion = blocked ? '' : text
   // React capture is scoped to this public composer slot, ahead of the upstream
   // editor's native keymap. There is no window/document key listener or editor handle.
   return <DraftAssistanceProvider ctx={ctx} sessionId={props.sessionId!} actions={props.inputActions!}
     root={root} blocked={blocked} {...(continuationSettings === undefined ? {} : { continuation: continuationSettings })}
     {...(optimizationSettings === undefined ? {} : { optimization: optimizationSettings })}>
-    <div ref={root} style={{ width: '100%', minWidth: 0 }}
+    <div ref={root} data-claw-ai-suggestion={suggestion !== '' || undefined}
+    style={{ width: '100%', minWidth: 0,
+      ...(suggestion === '' ? {} : { '--dsh-ai-suggestion-text': continuationCssText(suggestion) }),
+    } as CSSProperties}
     onCompositionStartCapture={() => runtimeRef.current?.composition(true)}
     onCompositionEndCapture={() => runtimeRef.current?.composition(false)}
     onBeforeInputCapture={() => runtimeRef.current?.interacting()}
