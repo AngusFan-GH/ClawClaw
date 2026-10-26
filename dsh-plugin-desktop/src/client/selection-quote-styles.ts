@@ -29,14 +29,14 @@ export function installSelectionQuoteStyles(): void {
   justify-content: center;
   gap: 6px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--dsh-control-radius);
   color: inherit;
   background: transparent;
   cursor: pointer;
   font: inherit;
   letter-spacing: 0;
 }
-.clawSelectionQuoteToolbar button { min-height: 30px; padding: 5px 9px; font-size: 12px; }
+.clawSelectionQuoteToolbar button { min-height: 32px; padding: 5px 10px; font-size: 12px; }
 .clawSelectionQuoteToolbar button:hover,
 .clawSelectionQuoteCard button:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); }
 .clawSelectionQuoteToolbar button:focus-visible,

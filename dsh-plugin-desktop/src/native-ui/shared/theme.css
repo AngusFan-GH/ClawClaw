@@ -15,6 +15,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-destructive: var(--destructive);
@@ -30,8 +31,9 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #1677ff;
+  --primary: #1668dc;
   --primary-foreground: #fff;
+  --primary-hover: #1b6fde;
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -40,7 +42,7 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: #0958d9;
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -53,6 +55,7 @@
   --popover-foreground: oklch(0.985 0 0);
   --primary: #1668dc;
   --primary-foreground: #fff;
+  --primary-hover: #1b6fde;
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -103,3 +106,7 @@
 }
 .dshNativeFrame ~ .dshNativeContent { padding-top: calc(36px + var(--spacing) * 5); }
 button, a, input, textarea, select { -webkit-app-region: no-drag; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="button"], [data-slot="input"], [data-slot="switch"] { transition: none; }
+}

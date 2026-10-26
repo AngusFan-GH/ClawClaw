@@ -233,7 +233,7 @@ export function DraftOptimizationButton({ inputActions, useInput }: PropsRuntime
   const label = zh ? '优化草稿' : 'Optimize draft'
   const limited = input.occurrences.length > 0 || input.phase !== 'plain' || input.claim !== undefined
   return <>
-    <Button variant="ghost" size="sm" className="dshAiOptimizeTrigger" aria-label={label}
+    <Button variant="ghost" size="sm" className="dshComposerAction dshAiOptimizeTrigger" aria-label={label}
       icon={<Sparkles size={14} aria-hidden="true" />} title={limited ? (zh ? '为保留引用和命令，此草稿暂不支持优化' : 'References and commands cannot be replaced') : label}
       disabled={limited || !state.optimizationAvailable || state.phase !== 'idle'}
       onClick={() => { sync(); state.optimize() }}><span className="dshAiOptimizeTriggerLabel">{label}</span></Button>

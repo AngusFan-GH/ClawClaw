@@ -1,9 +1,10 @@
 /** Connector cards share the Skill library's spacing, typography and theme tokens. */
 export const MCP_CARD_CSS = `
-.dshMcpPage .dshMcpInstalledList,.dshMcpPage .dshMcpCatalogGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:18px}
+.dshMcpPage{max-width:var(--dsh-page-width)}
+.dshMcpPage .dshMcpInstalledList,.dshMcpPage .dshMcpCatalogGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:var(--dsh-space-4)}
 .dshMcpPage .dshMcpEmpty{grid-column:1/-1}
-.dshMcpPage .dshMcpServerCard,.dshMcpPage .dshMcpCatalogCard{display:flex;box-sizing:border-box;min-width:0;min-height:224px;flex-direction:column;gap:14px;padding:24px;border:1px solid var(--dsw-alias-border-l1);border-radius:20px;background:var(--dsw-alias-bg-layer-1);box-shadow:0 4px 20px color-mix(in srgb,var(--dsw-alias-label-primary) 3%,transparent);transition:border-color .16s ease,box-shadow .16s ease}
-.dshMcpPage .dshMcpServerCard:hover,.dshMcpPage .dshMcpCatalogCard:hover{border-color:var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);box-shadow:0 6px 24px color-mix(in srgb,var(--dsw-alias-label-primary) 6%,transparent)}
+.dshMcpPage .dshMcpServerCard,.dshMcpPage .dshMcpCatalogCard{display:flex;box-sizing:border-box;min-width:0;min-height:224px;flex-direction:column;gap:14px;padding:20px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsh-card-radius);background:var(--dsw-alias-bg-layer-1);box-shadow:var(--dsh-card-shadow);transition:border-color .16s ease,box-shadow .16s ease}
+.dshMcpPage .dshMcpServerCard:hover,.dshMcpPage .dshMcpCatalogCard:hover{border-color:var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);box-shadow:var(--dsh-card-hover-shadow)}
 .dshMcpPage .dshMcpServerMain,.dshMcpPage .dshMcpCatalogCard .dshIntegrationsMcpHeader{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;gap:12px}
 .dshMcpPage .dshMcpGlyph{width:52px;height:52px;border:0;border-radius:15px;background:color-mix(in srgb,var(--dsh-color-primary) 12%,var(--dsw-alias-bg-layer-1));color:var(--dsh-color-accent)}
 .dshMcpPage .dshMcpGlyph>svg{width:26px;height:26px}
@@ -12,8 +13,8 @@ export const MCP_CARD_CSS = `
 .dshMcpConnectorIcon .dshSkillsCategoryIcon>svg{width:26px;height:26px}
 .dshMcpPage .dshMcpIdentity{gap:5px}
 .dshMcpPage .dshMcpServerTitle{align-items:flex-start;flex-wrap:wrap;gap:6px}
-.dshMcpPage .dshMcpIdentity .dshIntegrationsRowTitle{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow-wrap:anywhere;font-size:16px;font-weight:600;line-height:23px}
-.dshMcpPage .dshMcpTransport{align-self:center;font-size:10px;line-height:17px}
+.dshMcpPage .dshMcpIdentity .dshIntegrationsRowTitle{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow-wrap:anywhere;font-size:15px;font-weight:600;line-height:22px}
+.dshMcpPage .dshMcpTransport{align-self:center;font-size:11px;line-height:17px}
 .dshMcpCategory,.dshMcpServerId{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:17px;overflow-wrap:anywhere}
 .dshMcpPage .dshMcpEndpoint{font-size:11px;line-height:17px}
 .dshMcpPage .dshMcpServerStatus{grid-column:1/-1;justify-content:space-between;min-width:0;gap:8px;padding-top:4px}
@@ -27,7 +28,7 @@ export const MCP_CARD_CSS = `
 .dshMcpPage .dshMcpCatalogCard{min-height:260px;align-self:stretch}
 .dshMcpPage .dshMcpCatalogCard .dshIntegrationsMcpHeader{grid-template-columns:52px minmax(0,1fr) auto}
 .dshMcpPage .dshMcpCatalogCard .dshIntegrationsMcpHeader>.dshIntegrationsRowActions{grid-column:3;justify-content:flex-end}
-.dshMcpPage .dshMcpCatalogCard .dshIntegrationsCommand{min-height:34px;border-radius:9px}
+.dshMcpPage .dshMcpCatalogCard .dshIntegrationsCommand{min-height:var(--dsh-control-height);border-radius:var(--dsh-control-radius);font-size:var(--dsh-control-font-size);line-height:20px}
 .dshMcpPage .dshMcpCatalogCard .dshIntegrationsTools{margin:0}
 .dshMcpPage .dshIntegrationsTools span{border-radius:6px;line-height:17px}
 .dshMcpCatalogFooter{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-top:auto;padding-top:12px;border-top:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:17px}
@@ -40,7 +41,7 @@ export const MCP_CARD_CSS = `
  .dshMcpPage .dshMcpServerDetails{flex-direction:row}
 }
 @container(max-width:400px){
- .dshMcpPage .dshMcpServerCard,.dshMcpPage .dshMcpCatalogCard{padding:16px;border-radius:16px}
+ .dshMcpPage .dshMcpServerCard,.dshMcpPage .dshMcpCatalogCard{padding:16px;border-radius:var(--dsh-card-radius)}
  .dshMcpPage .dshMcpServerDetails .dshIntegrationsMeta{flex:1}
  .dshMcpPage .dshMcpServerActions{justify-content:flex-end}
 }

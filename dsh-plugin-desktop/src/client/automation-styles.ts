@@ -1,7 +1,7 @@
 /** Automation surfaces share the host theme and adapt to the panel width. */
 export const AUTOMATION_CSS = `
 .dshAutomationPage{display:flex;flex-direction:column;min-height:0;container-type:inline-size;padding:32px clamp(16px,4vw,56px) 48px}
-.dshAutomationPage>.dshCronTasks{flex:none;max-width:1080px;gap:24px}
+.dshAutomationPage>.dshCronTasks{flex:none;max-width:var(--dsh-page-width);gap:var(--dsh-space-6)}
 .dshCronTasks .dshIntegrationsHeader p{max-width:600px;line-height:1.7}
 .dshCronHeaderDescription{max-width:720px;margin-top:6px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.7;overflow-wrap:anywhere}
 .dshCronHeaderPolicy{display:inline;font-size:inherit}
@@ -18,7 +18,7 @@ export const AUTOMATION_CSS = `
 @container(max-width:520px){.dshCronTasks>.dshIntegrationsHeader{flex-wrap:wrap}.dshCronTasks>.dshIntegrationsHeader>.dshIntegrationsCommand{margin-left:auto}}
 .dshCronTasks .dshCronToolbar{grid-template-columns:minmax(0,1fr) auto auto;gap:12px}
 .dshCronTasks .dshCronList{gap:14px}
-.dshCronTasks .dshCronRow{grid-template-columns:minmax(0,1fr) auto;gap:20px;padding:20px;border-radius:12px;align-items:start}
+.dshCronTasks .dshCronRow{grid-template-columns:minmax(0,1fr) auto;gap:20px;padding:20px;border-radius:var(--dsh-card-radius);align-items:start}
 .dshCronTasks .dshCronRow:focus-within{border-color:var(--dsw-alias-border-l2)}
 .dshCronTasks .dshCronMain{display:flex;flex-direction:column;align-items:stretch;gap:12px;min-width:0;min-height:44px;border-radius:6px}
 .dshCronTasks .dshCronTitle{flex-wrap:wrap;gap:8px 12px;font-size:15px;line-height:1.5}
@@ -43,15 +43,15 @@ export const AUTOMATION_CSS = `
 .dshCronDetailLayout{display:grid;grid-template-columns:minmax(0,280px) minmax(0,1fr);gap:24px;align-items:start}
 .dshCronDetailContent{display:flex;flex-direction:column;gap:28px;min-width:0}
 .dshCronOverview,.dshCronInstructions,.dshCronHistoryPanel{min-width:0}
-.dshCronOverview{padding:18px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}
+.dshCronOverview{padding:18px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsh-card-radius);background:var(--dsw-alias-bg-layer-1)}
 .dshCronOverview h3,.dshCronInstructions h3,.dshCronTasks .dshCronHistoryPanel h3{margin:0;font-size:14px;line-height:1.5;font-weight:600}
 .dshCronTasks .dshCronOverview dl{border:0;margin-top:8px}
 .dshCronTasks .dshCronOverview dl>div{grid-template-columns:minmax(0,1fr);gap:6px;padding:14px 0}
 .dshCronTasks .dshCronOverview dd{font-size:13px;line-height:1.6}
-.dshCronTasks .dshCronDetailPrompt{margin:12px 0 0;padding:18px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);font-size:13px;line-height:1.85;overflow-wrap:anywhere}
+.dshCronTasks .dshCronDetailPrompt{margin:12px 0 0;padding:18px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsh-card-radius);background:var(--dsw-alias-bg-layer-1);font-size:13px;line-height:1.85;overflow-wrap:anywhere}
 .dshCronTasks .dshCronHistoryPanel>header{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;box-sizing:border-box;margin-bottom:12px}
 .dshCronHistoryPanel>header>span{margin-left:auto;font-size:12px;color:var(--dsw-alias-label-secondary)}
-.dshCronTasks .dshCronHistoryPanel ol{gap:0;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;overflow:hidden}
+.dshCronTasks .dshCronHistoryPanel ol{gap:0;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsh-card-radius);overflow:hidden}
 .dshCronTasks .dshCronHistoryPanel li{gap:12px;padding:16px;border-radius:0;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1)}
 .dshCronTasks .dshCronHistoryPanel li:last-child{border-bottom:0}
 .dshCronRunBody{flex:1;min-width:0;overflow-wrap:anywhere}

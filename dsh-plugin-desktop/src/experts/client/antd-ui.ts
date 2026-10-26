@@ -27,6 +27,7 @@ import SelectImport from 'antd/es/select/index.js'
 import type { SwitchProps } from 'antd/es/switch/index.js'
 import SwitchImport from 'antd/es/switch/index.js'
 import React from 'react'
+import { DESKTOP_ACTION_COLORS, DESKTOP_UI_METRICS } from '../../client/desktop-theme.ts'
 
 function unwrap<T>(mod: unknown): T {
   const value = mod as { default?: T }
@@ -36,9 +37,9 @@ function unwrap<T>(mod: unknown): T {
 const TextArea = unwrap<React.ComponentType<TextAreaProps>>(TextAreaImport)
 export const Input = Object.assign(unwrap<React.ComponentType<InputProps>>(InputImport), { TextArea })
 const AntButton = unwrap<React.ComponentType<ButtonProps>>(ButtonImport)
-/** 页面按钮默认圆角。顶部入口可以传入 shape、size 覆盖。 */
+/** Explicit shape/size overrides remain available for compact or icon actions. */
 export function Button(props: ButtonProps): React.ReactElement {
-  return React.createElement(AntButton, { shape: 'round', ...props })
+  return React.createElement(AntButton, props)
 }
 export const ConfigProvider = unwrap<React.ComponentType<ConfigProviderProps>>(ConfigProviderImport)
 export const Drawer = unwrap<React.ComponentType<DrawerProps>>(DrawerImport)
@@ -69,7 +70,21 @@ export function AntdProvider(props: { locale?: Locale; children?: React.ReactNod
     button: { autoInsertSpace: false },
     theme: {
       algorithm: dark ? darkAlgorithm : defaultAlgorithm,
-      components: { Button: { borderRadius: 8 } },
+      token: {
+        controlHeight: DESKTOP_UI_METRICS.controlHeight,
+        borderRadius: DESKTOP_UI_METRICS.controlRadius,
+        borderRadiusLG: DESKTOP_UI_METRICS.dialogRadius,
+        fontSize: DESKTOP_UI_METRICS.controlFontSize,
+        colorPrimary: DESKTOP_ACTION_COLORS.primary,
+        colorPrimaryHover: DESKTOP_ACTION_COLORS.hover,
+        colorPrimaryActive: DESKTOP_ACTION_COLORS.active,
+      },
+      // Component aliases apply after the dark algorithm derives its palette.
+      components: {
+        Button: { colorPrimary: DESKTOP_ACTION_COLORS.primary, colorPrimaryHover: DESKTOP_ACTION_COLORS.hover, colorPrimaryActive: DESKTOP_ACTION_COLORS.active },
+        Switch: { colorPrimary: DESKTOP_ACTION_COLORS.primary, colorPrimaryHover: DESKTOP_ACTION_COLORS.hover },
+        Modal: { borderRadiusLG: DESKTOP_UI_METRICS.dialogRadius },
+      },
     },
   }, props.children))
 }

@@ -1,4 +1,6 @@
-export const INPUT_ASSISTANCE_CSS = `
+import { COMPOSER_ACTION_CSS } from './composer-action-styles.ts'
+
+export const INPUT_ASSISTANCE_CSS = COMPOSER_ACTION_CSS + `
 /* Generated inline content participates in the real paragraph's wrapping,
    auto-height and scrollport, while remaining outside editor text/history. */
 /* Lexical leaves a freshly mounted/cleared root childless until its first
@@ -22,7 +24,7 @@ export const INPUT_ASSISTANCE_CSS = `
    empty paragraph's terminal break so it does not add a blank first line. */
 [data-claw-ai-suggestion] [data-composer-placeholder],
 [data-claw-ai-suggestion] [contenteditable="true"] > p:only-child > br:only-child { display:none; }
-button.dshAiOptimizeTrigger { flex:none; white-space:nowrap; color:var(--dsw-alias-label-secondary); }
+button.dshAiOptimizeTrigger { flex:none; white-space:nowrap; }
 .dshAiOptimizeTriggerLabel { display:var(--dsh-composer-model-text-display,inline); }
 .dshAiOptimizeTrigger svg { width:14px; height:14px; flex:none; }
 @container(max-width:560px) {

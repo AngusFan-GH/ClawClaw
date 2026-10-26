@@ -21,7 +21,7 @@ import { McpCredentialFields, newMcpCredential, prepareMcpCredentials, type McpC
 import { validateMcpEditor, type McpEditorField, type McpEditorIssues } from './mcp-editor-validation.ts'
 import { SkillCategoryIcon } from './SkillCategoryIcon.tsx'
 import { isMcpServerReady } from '../mcp-readiness.ts'
-import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
+import { SettingsTabs, SettingsEmptyState, SettingsButton, SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
 
 export interface McpSettingsSectionInjected {
   readonly api: DesktopMcpApi
@@ -273,22 +273,21 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
     })
   }
 
-  return <><section className={`dshIntegrations dshMcpPage${embedded ? ' dshIntegrationsEmbedded' : ''}`} aria-label={t('title')}>
+  const selectView = (next: 'installed' | 'catalog'): void => { setView(next); setCatalogInstall(undefined); setDraft(undefined); setImportText(undefined) }
+  return <><section className={`dshIntegrations dshMcpPage${embedded ? ' dshIntegrationsEmbedded' : ''}`} aria-label={t('title')} aria-busy={loading || busy !== undefined}>
     {!embedded && <header className="dshIntegrationsHeader"><div><h2>{t('title')}</h2><p>{t('intro')}</p></div></header>}
     {notice !== undefined && !overlayOpen && <div className="dshMcpSaveNotice" role="status">{notice}</div>}
     {error !== undefined && !overlayOpen && <div className="dshIntegrationsError" role="alert">{error}</div>}
-    {loading && servers.length === 0 ? <p className="dshIntegrationsEmpty">{t('loading')}</p> : <div className="dshIntegrationsBody">
-      <div className="dshIntegrationsSegments dshMcpTabs" role="tablist" aria-label={t('mcpViews')}>
-        <button type="button" role="tab" aria-selected={view === 'installed'} onClick={() => { setView('installed'); setCatalogInstall(undefined) }}>{t('installed')}</button>
-        <button type="button" role="tab" aria-selected={view === 'catalog'} onClick={() => { setView('catalog'); setDraft(undefined); setImportText(undefined) }}>{t('connectorCatalog')}</button>
-      </div>
+    {loading && servers.length === 0 ? <SettingsEmptyState loading>{t('loading')}</SettingsEmptyState> : <div className="dshIntegrationsBody">
+      <SettingsTabs id={`${id}-mcp`} label={t('mcpViews')} value={view} onChange={selectView}
+        items={[{ value: 'installed', label: t('installed') }, { value: 'catalog', label: t('connectorCatalog') }]} />
       <div className="dshMcpCatalogToolbar">
         <label className="dshIntegrationsSearch"><Search aria-hidden="true" /><input aria-label={t('searchServers')} value={search} onChange={event => { setSearch(event.target.value) }} placeholder={t('searchServers')} /></label>
-        <div className="dshIntegrationsRowActions"><SettingsIconButton label={t('refresh')} disabled={loading || busy !== undefined} onClick={() => { void load() }}><RefreshCw /></SettingsIconButton>
-          {view === 'installed' && <><button type="button" className="dshIntegrationsCommand" onClick={() => { setError(undefined); setDraft(undefined); setImportText('') }}>{t('importJson')}</button>
-            <button type="button" className="dshIntegrationsCommand dshCronPrimary" onClick={() => { setError(undefined); setImportText(undefined); setEditorIssues({}); setNotice(undefined); setDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('addServer')}</button></>}</div>
+        <div className="dshIntegrationsRowActions"><SettingsIconButton label={t('refresh')} busy={loading} disabled={loading || busy !== undefined} onClick={() => { void load() }}><RefreshCw /></SettingsIconButton>
+          {view === 'installed' && <><SettingsButton type="button" onClick={() => { setError(undefined); setDraft(undefined); setImportText('') }}>{t('importJson')}</SettingsButton>
+            <SettingsButton type="button" variant="primary" onClick={() => { setError(undefined); setImportText(undefined); setEditorIssues({}); setNotice(undefined); setDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('addServer')}</SettingsButton></>}</div>
       </div>
-      {view === 'installed' ? <div className="dshMcpInstalledList">{filteredServers.map(server => {
+      {view === 'installed' ? <div className="dshMcpInstalledList" role="tabpanel" id={`${id}-mcp-panel`} aria-labelledby={`${id}-mcp-installed`} tabIndex={0}>{filteredServers.map(server => {
         const toolsExpanded = expandedServers.has(server.serverName)
         const connector = connectorFor(server)
         return <div className="dshIntegrationsMcp dshMcpServerCard" key={server.serverName}>
@@ -303,8 +302,8 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
           onClick={() => { toggleTools(server.serverName) }}><span>{server.tools.length} {t('tools')}</span><ChevronDown aria-hidden="true" /></button>}
           {server.diagnostic.checkedAt !== undefined && <span>{t('lastChecked').replace('{time}', new Date(server.diagnostic.checkedAt).toLocaleString())}</span>}
           {(expertUsage?.get(server.serverName) ?? 0) > 0 && <span>{t('usedByExperts').replace('{count}', String(expertUsage?.get(server.serverName) ?? 0))}</span>}</div>
-          <div className="dshMcpServerActions">{server.transport !== 'stdio' && server.oauth !== undefined && <button type="button" className="dshIntegrationsCommand"
-            disabled={busy !== undefined} onClick={() => { authorize(server.serverName) }}>{server.diagnostic.code === 'authorization-required' ? t('authorize') : t('reauthorize')}</button>}
+          <div className="dshMcpServerActions">{server.transport !== 'stdio' && server.oauth !== undefined && <SettingsButton type="button"
+            disabled={busy !== undefined} onClick={() => { authorize(server.serverName) }}>{server.diagnostic.code === 'authorization-required' ? t('authorize') : t('reauthorize')}</SettingsButton>}
             <Menu className="dshMcpMore" listClassName="dshMcpMoreMenu" open={openMenuName === server.serverName}
               onClose={() => { setOpenMenuName(undefined) }} align="end" compact portal selection="fill"
               items={[
@@ -330,23 +329,23 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
         {server.tools.length === 0 ? <div className="dshIntegrationsTools"><span>{t('noTools')}</span></div>
           : toolsExpanded && <div className="dshIntegrationsTools">{server.tools.map(tool => <span key={tool.name} title={tool.description}>{tool.name}</span>)}</div>}
       </div>
-      })}{filteredServers.length === 0 && <p className="dshIntegrationsEmpty dshMcpEmpty">{t(servers.length === 0 ? 'noServers' : 'noMatches')}{servers.length > 0 && <button type="button" className="dshIntegrationsCommand" onClick={() => { setSearch('') }}>{t('clearSearch')}</button>}</p>}</div>
-      : <div className="dshMcpCatalogGrid">{filteredCatalog.map(entry => <div className="dshIntegrationsMcp dshMcpCatalogCard" key={entry.id}>
+      })}{filteredServers.length === 0 && <SettingsEmptyState className="dshMcpEmpty" action={servers.length > 0 && <SettingsButton onClick={() => { setSearch('') }}>{t('clearSearch')}</SettingsButton>}>{t(servers.length === 0 ? 'noServers' : 'noMatches')}</SettingsEmptyState>}</div>
+      : <div className="dshMcpCatalogGrid" role="tabpanel" id={`${id}-mcp-panel`} aria-labelledby={`${id}-mcp-catalog`} tabIndex={0}>{filteredCatalog.map(entry => <div className="dshIntegrationsMcp dshMcpCatalogCard" key={entry.id}>
           <div className="dshIntegrationsMcpHeader"><ConnectorGlyph category={entry.category} /><div className="dshMcpIdentity">
             <span className="dshIntegrationsRowTitle">{entry.name}</span><span className="dshMcpCategory">{connectorCategoryLabel(entry.category, t)}</span></div>
-            <div className="dshIntegrationsRowActions"><button type="button" className="dshIntegrationsCommand" disabled={busy !== undefined || entry.installedServerName !== undefined}
+            <div className="dshIntegrationsRowActions"><SettingsButton type="button" disabled={busy !== undefined || entry.installedServerName !== undefined}
               onClick={() => { if (entry.credentials.length === 0) { void run(`mcp-install:${entry.id}`, async () => {
                 const next = await api.install(entry.id); applyServers(next.mcpServers); setCatalog(next.catalog); setView('installed')
-              }) } else { setError(undefined); setDraft(undefined); setImportText(undefined); setCatalogInstall({ entry, values: {} }) } }}>{entry.installedServerName === undefined ? t('installConnector') : t('addedConnector')}</button></div></div>
+              }) } else { setError(undefined); setDraft(undefined); setImportText(undefined); setCatalogInstall({ entry, values: {} }) } }}>{entry.installedServerName === undefined ? t('installConnector') : t('addedConnector')}</SettingsButton></div></div>
           <p className="dshMcpCatalogDescription" title={entry.description}>{entry.description}</p>
           <div className="dshIntegrationsTools">{entry.capabilities.map(capability => <span key={capability}>{capability}</span>)}</div>
           <div className="dshMcpCatalogFooter"><span className="dshMcpCatalogRequirement">{t(entry.credentials.length === 0 ? 'noCredentialsRequired' : 'credentialsRequired')}</span><span className="dshMcpLicense">{entry.license}</span><a className="dshMcpCatalogSource" href={entry.sourceUrl} target="_blank" rel="noreferrer">{t('viewSource')}</a></div>
-        </div>)}{filteredCatalog.length === 0 && <p className="dshIntegrationsEmpty dshMcpEmpty">{t('noCatalogMatches')}</p>}</div>}
+        </div>)}{filteredCatalog.length === 0 && <SettingsEmptyState className="dshMcpEmpty" action={search !== '' && <SettingsButton onClick={() => { setSearch('') }}>{t('clearSearch')}</SettingsButton>}>{t('noCatalogMatches')}</SettingsEmptyState>}</div>}
     </div>}
   </section>
   <Modal open={importText !== undefined} title={t('importJson')} closeLabel={t('cancel')} onClose={closeImport} className="dshMcpDialog" contentClassName="dshMcpDialogContent"
-    footer={<div className="dshMcpDialogFooter"><button type="button" className="dshIntegrationsCommand" disabled={busy !== undefined} onClick={closeImport}>{t('cancel')}</button>
-      <button type="submit" form={`${id}-mcp-import`} className="dshIntegrationsCommand dshCronPrimary" disabled={busy !== undefined}>{t('import')}</button></div>}>
+    footer={<div className="dshMcpDialogFooter"><SettingsButton type="button" disabled={busy !== undefined} onClick={closeImport}>{t('cancel')}</SettingsButton>
+      <SettingsButton type="submit" form={`${id}-mcp-import`} variant="primary" disabled={busy !== undefined}>{t('import')}</SettingsButton></div>}>
     <p className="dshMcpDialogDescription">{t('importDescription')}</p>
     {error !== undefined && <div className="dshIntegrationsError" role="alert">{error}</div>}
     <form id={`${id}-mcp-import`} className="dshIntegrationsEditor dshMcpDialogForm" onSubmit={event => { event.preventDefault(); importServers() }}>
@@ -356,8 +355,8 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
   <Modal open={draft !== undefined} title={draft?.previousName === undefined ? t('addServer') : t('editServer')} closeLabel={t('cancel')} onClose={closeDraft} className="dshMcpDialog dshMcpEditorDialog" contentClassName="dshMcpDialogContent"
     footer={draft === undefined ? undefined : <div className="dshMcpDialogFooter"><label className="dshIntegrationsEnabled"><input type="checkbox" checked={draft.enabled}
       disabled={busy !== undefined} onChange={event => { setDraft({ ...draft, enabled: event.target.checked }) }} />{t('enableAfterSave')}</label><div className="dshIntegrationsRowActions">
-        <button type="button" className="dshIntegrationsCommand" disabled={busy !== undefined} onClick={closeDraft}>{t('cancel')}</button>
-        <button type="submit" form={`${id}-mcp-editor`} className="dshIntegrationsCommand dshCronPrimary" disabled={busy !== undefined}>{busy === 'mcp-save' ? t('savingConnector') : t(draft.enabled ? 'saveAndConnect' : 'save')}</button></div></div>}>
+        <SettingsButton type="button" disabled={busy !== undefined} onClick={closeDraft}>{t('cancel')}</SettingsButton>
+        <SettingsButton type="submit" form={`${id}-mcp-editor`} variant="primary" disabled={busy !== undefined}>{busy === 'mcp-save' ? t('savingConnector') : t(draft.enabled ? 'saveAndConnect' : 'save')}</SettingsButton></div></div>}>
     {draft !== undefined && <>
       {(error !== undefined || Object.keys(editorIssues).length > 0) && <div className="dshIntegrationsError dshMcpErrorSummary" role="alert" ref={editorErrorRef} tabIndex={-1}>
         <strong>{t('reviewFields')}</strong>{error !== undefined && <p>{error}</p>}
@@ -447,8 +446,8 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
   </Modal>
   <Modal open={catalogInstall !== undefined} title={catalogInstall?.entry.name ?? t('installConnector')} closeLabel={t('cancel')} onClose={closeCatalogInstall} className="dshMcpDialog" contentClassName="dshMcpDialogContent"
     footer={catalogInstall === undefined ? undefined : <div className="dshMcpDialogFooter"><span>{catalogInstall.entry.license}</span><div className="dshIntegrationsRowActions">
-      <button type="button" className="dshIntegrationsCommand" disabled={busy !== undefined} onClick={closeCatalogInstall}>{t('cancel')}</button>
-      <button type="submit" form={`${id}-mcp-catalog-install`} className="dshIntegrationsCommand dshCronPrimary" disabled={busy !== undefined}>{t('installConnector')}</button></div></div>}>
+      <SettingsButton type="button" disabled={busy !== undefined} onClick={closeCatalogInstall}>{t('cancel')}</SettingsButton>
+      <SettingsButton type="submit" form={`${id}-mcp-catalog-install`} variant="primary" disabled={busy !== undefined}>{t('installConnector')}</SettingsButton></div></div>}>
     {catalogInstall !== undefined && <><p className="dshMcpDialogDescription">{catalogInstall.entry.description}</p>
       {error !== undefined && <div className="dshIntegrationsError" role="alert">{error}</div>}
       <form id={`${id}-mcp-catalog-install`} className="dshIntegrationsEditor dshMcpDialogForm" onSubmit={installCatalog}>

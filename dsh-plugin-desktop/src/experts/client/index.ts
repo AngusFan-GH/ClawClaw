@@ -1,5 +1,7 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
+import { COMPOSER_ACTION_CSS } from '../../client/composer-action-styles.ts'
 import { DESKTOP_THEME_CSS } from '../../client/desktop-theme.ts'
+import { moveSettingsTabFocus } from '../../client/settings-controls.tsx'
 import { AntdProvider, Button, Drawer, Input } from './antd-ui.js'
 import { antdLocale } from './antd-locale.js'
 import { LibraryCard } from './library-ui.js'
@@ -446,7 +448,7 @@ const MENU_NAME_OVERRIDE = EXPERT_MENU_ITEM_SELECTORS
   .map((selector) => `${selector} span:last-child`)
   .join(',')
 const EXPERT_MENU_NAME_STYLE = 'flex:1 1 auto;max-width:none;min-width:0'
-export const COMPOSER_CSS = '.aag-btn-wrap{position:relative;display:inline-flex;flex:0 0 auto}.aag-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 8px;white-space:nowrap;border:none;border-radius:24px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;font-weight:500;cursor:pointer}.aag-btn:hover,.aag-btn[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.aag-btn:focus-visible{outline:2px solid var(--dsw-alias-label-secondary);outline-offset:2px}.aag-btn>svg{flex:none}@container(max-width:460px){.aag-btn-label{display:none}}.aag-menu{position:absolute;bottom:calc(100% + 4px);left:0;box-sizing:border-box;padding:4px;display:flex;flex-direction:column;gap:0;width:300px;max-width:360px;max-height:calc(100dvh - 24px);overflow-y:auto;border:0;border-radius:20px;background:var(--dsw-specific-menu);backdrop-filter:var(--dsw-menu-backdrop-filter);box-shadow:var(--dsw-elevation-prominent);z-index:10000}.aag-menu[data-placement="below"]{top:calc(100% + 4px);bottom:auto}.aag-menu-title{padding:8px 10px;font-size:12px;line-height:16px;color:var(--dsw-alias-label-tertiary)}.aag-menu-item{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;padding:8px 10px;border:none;border-radius:10px;background:transparent;cursor:pointer;text-align:left;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);box-sizing:border-box}.aag-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-menu-empty{padding:8px 10px;color:var(--dsw-alias-label-secondary);font-size:13px}.aag-menu.aag-discovery{width:560px;max-width:calc(100vw - 24px);overflow:hidden}.aag-capability-picker{display:grid;grid-template-columns:124px minmax(0,1fr);min-height:300px}.aag-capability-nav{display:flex;flex-direction:column;gap:2px;padding:6px 8px 6px 2px;border-right:1px solid var(--dsw-alias-border-l2)}.aag-capability-nav button{width:100%;padding:8px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}.aag-capability-nav button:hover,.aag-capability-nav button.active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.aag-capability-results{min-width:0;max-height:348px;padding:2px 0 2px 8px;overflow:auto}.aag-capability-list{display:flex;flex-direction:column;gap:2px}.aag-capability-list button,.aag-capability-row{display:flex;align-items:flex-start;flex-direction:column;gap:2px;width:100%;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left}.aag-capability-list button{cursor:pointer}.aag-capability-list button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-list small{display:block;overflow:hidden;max-width:100%;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}.aag-capability-row{flex-direction:row;align-items:center;justify-content:space-between}.aag-capability-row>span{min-width:0}.aag-capability-row button{flex:none;border:0;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;line-height:24px;cursor:pointer}.aag-capability-note{padding:10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}@media(max-width:560px){.aag-menu.aag-discovery{width:min(420px,calc(100vw - 24px))}.aag-capability-picker{grid-template-columns:104px minmax(0,1fr)}.aag-capability-nav button{padding:8px}.aag-capability-results{padding-left:4px}}'
+export const COMPOSER_CSS = COMPOSER_ACTION_CSS + '.aag-btn-wrap{position:relative;display:inline-flex;flex:0 0 auto}.aag-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 8px;white-space:nowrap;border:none;border-radius:24px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;font-weight:500;cursor:pointer}.aag-btn:hover,.aag-btn[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.aag-btn:focus-visible{outline:2px solid var(--dsw-alias-label-secondary);outline-offset:2px}.aag-btn>svg{flex:none}@container(max-width:460px){.aag-btn-label{display:none}}.aag-menu{position:absolute;bottom:calc(100% + 4px);left:0;box-sizing:border-box;padding:4px;display:flex;flex-direction:column;gap:0;width:300px;max-width:360px;max-height:calc(100dvh - 24px);overflow-y:auto;border:0;border-radius:20px;background:var(--dsw-specific-menu);backdrop-filter:var(--dsw-menu-backdrop-filter);box-shadow:var(--dsw-elevation-prominent);z-index:10000}.aag-menu[data-placement="below"]{top:calc(100% + 4px);bottom:auto}.aag-menu-title{padding:8px 10px;font-size:12px;line-height:16px;color:var(--dsw-alias-label-tertiary)}.aag-menu-item{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;padding:8px 10px;border:none;border-radius:10px;background:transparent;cursor:pointer;text-align:left;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);box-sizing:border-box}.aag-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-menu-empty{padding:8px 10px;color:var(--dsw-alias-label-secondary);font-size:13px}.aag-menu.aag-discovery{width:560px;max-width:calc(100vw - 24px);overflow:hidden}.aag-capability-picker{display:grid;grid-template-columns:124px minmax(0,1fr);min-height:300px}.aag-capability-nav{display:flex;flex-direction:column;gap:2px;padding:6px 8px 6px 2px;border-right:1px solid var(--dsw-alias-border-l2)}.aag-capability-nav button{width:100%;padding:8px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}.aag-capability-nav button:hover,.aag-capability-nav button.active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.aag-capability-results{min-width:0;max-height:348px;padding:2px 0 2px 8px;overflow:auto}.aag-capability-list{display:flex;flex-direction:column;gap:2px}.aag-capability-list button,.aag-capability-row{display:flex;align-items:flex-start;flex-direction:column;gap:2px;width:100%;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left}.aag-capability-list button{cursor:pointer}.aag-capability-list button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-list small{display:block;overflow:hidden;max-width:100%;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}.aag-capability-row{flex-direction:row;align-items:center;justify-content:space-between}.aag-capability-row>span{min-width:0}.aag-capability-row button{flex:none;border:0;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;line-height:24px;cursor:pointer}.aag-capability-note{padding:10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}@media(max-width:560px){.aag-menu.aag-discovery{width:min(420px,calc(100vw - 24px))}.aag-capability-picker{grid-template-columns:104px minmax(0,1fr)}.aag-capability-nav button{padding:8px}.aag-capability-results{padding-left:4px}}'
 // 设置页版式对齐 dsh-skills-manager：工具栏 + 汇总条 + 分组卡片 + 行内启停按钮。
 export const SETTINGS_CSS = `
 .aag-section{box-sizing:border-box;display:flex;min-width:0;max-width:760px;width:100%;margin:0 auto;flex-direction:column;gap:16px;padding:0 0 32px;color:var(--dsw-alias-label-primary)}
@@ -468,7 +470,7 @@ export const CARD_SETTINGS_CSS = `
 .aag-section{container-type:inline-size}
 .aag-toolbar{display:flex;align-items:flex-start;gap:12px;min-height:36px;padding:0}
 .aag-title-row{display:flex;flex:1;align-items:center;gap:8px 12px;min-width:0;flex-wrap:wrap}
-.aag-title{font-size:24px;line-height:32px;font-weight:600;letter-spacing:-.4px;white-space:nowrap}
+.aag-title{font-size:var(--dsh-page-title-size);line-height:30px;font-weight:600;letter-spacing:-.4px;white-space:nowrap}
 .aag-header-stat{display:inline-flex;align-items:baseline;gap:5px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;white-space:nowrap}
 .aag-header-stat strong{color:var(--dsw-alias-label-primary);font-weight:500}
 .aag-card-action:focus-visible{outline:2px solid var(--dsw-alias-label-secondary);outline-offset:2px}
@@ -484,8 +486,8 @@ export const CARD_SETTINGS_CSS = `
 .aag-search-wrap>.aag-search input::placeholder{color:var(--dsw-alias-label-dimmed)}
 .aag-expert-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:12px;margin-top:2px}
 .aag-expert-window{position:relative;margin-top:2px;overflow-anchor:none}.aag-expert-window>.aag-expert-grid{position:absolute;right:0;left:0;margin-top:0}
-.aag-expert-card{display:grid;box-sizing:border-box;min-width:0;min-height:196px;overflow:hidden;grid-template-rows:minmax(151px,1fr) 44px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}.aag-expert-window .aag-expert-card{height:196px;min-height:0;grid-template-rows:minmax(0,1fr) 44px}
-.aag-expert-card:hover{border-color:var(--dsw-alias-border-l3);box-shadow:0 6px 18px color-mix(in srgb,var(--dsw-alias-label-primary) 6%,transparent)}
+.aag-expert-card{display:grid;box-sizing:border-box;min-width:0;min-height:196px;overflow:hidden;grid-template-rows:minmax(151px,1fr) 44px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsh-card-radius);background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}.aag-expert-window .aag-expert-card{height:196px;min-height:0;grid-template-rows:minmax(0,1fr) 44px}
+.aag-expert-card:hover{border-color:var(--dsw-alias-border-l3);box-shadow:var(--dsh-card-hover-shadow)}
 .aag-card-body{position:relative;display:grid;min-width:0;grid-template-columns:42px minmax(0,1fr);column-gap:10px;row-gap:8px;padding:12px}.aag-card-open{position:absolute;z-index:1;inset:0;border:0;background:transparent;cursor:pointer}.aag-card-open:focus-visible{outline:2px solid var(--dsh-color-primary);outline-offset:-3px;border-radius:7px}.aag-card-body>*:not(.aag-card-open):not(.aag-switch){position:relative;pointer-events:none}.aag-card-body>.aag-switch{z-index:2;pointer-events:auto}
 .aag-expert-avatar{display:block;width:42px;height:42px;border:0;border-radius:10px;background:var(--dsw-alias-bg-layer-3);object-fit:cover;object-position:center 20%}
 .aag-card-identity{display:flex;min-width:0;overflow:hidden;flex-direction:column;padding-right:42px}
@@ -1019,7 +1021,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     if (next instanceof Element && (event.currentTarget.contains(next) || next.closest('.ant-modal, .ant-drawer, .ant-select-dropdown, .ant-dropdown'))) return
     if (next instanceof Node && !event.currentTarget.contains(next)) close()
   } },
-    React.createElement('span', { ref: triggerRef }, React.createElement('button', { type: 'button', className: 'aag-btn', title: props.getActive() === 'zh' ? '选择能力' : 'Choose capabilities', 'aria-label': props.getActive() === 'zh' ? '选择能力' : 'Choose capabilities', 'aria-expanded': open, 'aria-haspopup': 'dialog', 'aria-controls': open ? menuId : undefined, onMouseDown: keepComposerFocus, onClick }, expertIcon(), React.createElement('span', { className: 'aag-btn-label' }, props.getActive() === 'zh' ? '能力' : 'Capabilities'))),
+    React.createElement('span', { ref: triggerRef }, React.createElement('button', { type: 'button', className: 'aag-btn dshComposerAction', title: props.getActive() === 'zh' ? '选择能力' : 'Choose capabilities', 'aria-label': props.getActive() === 'zh' ? '选择能力' : 'Choose capabilities', 'aria-expanded': open, 'aria-haspopup': 'dialog', 'aria-controls': open ? menuId : undefined, onMouseDown: keepComposerFocus, onClick }, expertIcon(), React.createElement('span', { className: 'aag-btn-label' }, props.getActive() === 'zh' ? '能力' : 'Capabilities'))),
     menu))
 }
 
@@ -1559,7 +1561,7 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
     { value: 'mcp' as const, icon: PlugZap, label: props.mcpT('nav') },
   ]
   const navigation = React.createElement('div', { className: 'aag-library-tabs', role: 'tablist', 'aria-label': tx('专家库类型') },
-    tabs.map((tab, index) => React.createElement('button', {
+    tabs.map(tab => React.createElement('button', {
       key: tab.value,
       id: `aag-library-tab-${tab.value}`,
       type: 'button',
@@ -1569,18 +1571,7 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
       'aria-controls': `aag-library-panel-${tab.value}`,
       tabIndex: view === tab.value ? 0 : -1,
       onClick: () => setView(tab.value),
-      onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
-        let next = index
-        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length
-        else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length
-        else if (event.key === 'Home') next = 0
-        else if (event.key === 'End') next = tabs.length - 1
-        else return
-        event.preventDefault()
-        setView(tabs[next]!.value)
-        const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-        requestAnimationFrame(() => buttons?.[next]?.focus())
-      },
+      onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => { moveSettingsTabFocus(event, tabs.map(item => item.value), view, setView) },
     }, React.createElement('span', { className: 'aag-tab-label' },
       React.createElement(tab.icon, { size: 18, strokeWidth: 1.8, 'aria-hidden': true }),
       React.createElement('span', null, tab.label)))))

@@ -7,7 +7,7 @@ const CSS = `
   display: flex;
   flex-direction: column;
   gap: 24px;
-  width: min(100%, 880px);
+  width: min(100%, var(--dsh-form-width));
   padding: 2px 0 36px;
   color: var(--dsw-alias-label-primary);
 }
@@ -16,7 +16,7 @@ const CSS = `
   margin: 0;
   font-weight: 600;
 }
-.dshDesktopSettingsHeader h2 { font-size: 22px; line-height: 1.35; }
+.dshDesktopSettingsHeader h2 { font-size: var(--dsh-page-title-size); line-height: 1.35; }
 .dshDesktopSettingsGroup h3 { font-size: 16px; line-height: 1.4; }
 .dshDesktopSettingsHeader p,
 .dshDesktopSettingsGroupIntro,
@@ -144,15 +144,15 @@ const CSS = `
 }
 .dshDesktopSettingsButton {
   flex: 0 0 auto;
-  min-height: 32px;
-  padding: 5px 13px;
+  min-height: var(--dsh-control-height);
+  padding: 6px 13px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
+  border-radius: var(--dsh-control-radius);
   background: transparent;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsh-control-font-size);
 }
 .dshDesktopSettingsButton:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
 .dshDesktopSettingsButtonSecondary { color: var(--dsw-alias-label-secondary); }
@@ -354,7 +354,7 @@ const CSS = `
   box-sizing: border-box;
   padding: 20px;
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 14px;
+  border-radius: var(--dsh-dialog-radius);
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: 0 24px 64px color-mix(in srgb, #000 38%, transparent);
 }

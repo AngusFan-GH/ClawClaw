@@ -28,7 +28,7 @@ import { SKILL_CATEGORIES, skillCategory, skillCategoryKey, type SkillCategory }
 import type { DesktopSkillBundleFile } from '../skills-contract.ts'
 import { zh } from './skills-locales.ts'
 import { internalSkillEntry } from '../skill-invocation-policy.ts'
-import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
+import { SettingsTabs, SettingsEmptyState, SettingsButton, SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
 import { requestDesktopDirectory } from './directory-picker.ts'
 import { DirectoryPickerDialog, type DirectoryPickerLocaleKey, type DirectoryPickerServices } from './workspace-directory-flow.tsx'
 
@@ -103,7 +103,6 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
   const section = useRef<HTMLElement>(null)
   const modalBody = useRef<HTMLDivElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
-  const tabs = useRef<Array<HTMLButtonElement | null>>([])
   const modalOpen = detail !== undefined || draft !== undefined || importOpen || purgeTarget !== undefined
   const anyModalOpen = modalOpen || directoryPickerOpen
   const disabled = loading || busy !== undefined
@@ -180,7 +179,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', trapFocus, true)
       if (returnFocus.current?.isConnected) returnFocus.current.focus()
-      else tabs.current[0]?.focus()
+      else section.current?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.focus()
     }
   }, [modalOpen])
   useEffect(() => {
@@ -276,27 +275,23 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
     })
   }
   const catalogActions = <div className="dshIntegrationsRowActions dshSkillsCatalogActions">
-    <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={event => { returnFocus.current = event.currentTarget; setError(undefined); setImportOpen(true) }}><FileUp />{t('importRaw')}</button>
-    <button type="button" className="dshIntegrationsCommand dshCronPrimary" disabled={disabled} onClick={event => { returnFocus.current = event.currentTarget; beginDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('newSkill')}</button>
+    <SettingsButton type="button" disabled={disabled} onClick={event => { returnFocus.current = event.currentTarget; setError(undefined); setImportOpen(true) }}><FileUp />{t('importRaw')}</SettingsButton>
+    <SettingsButton type="button" variant="primary" disabled={disabled} onClick={event => { returnFocus.current = event.currentTarget; beginDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('newSkill')}</SettingsButton>
   </div>
 
   return <>
     <section ref={section} className={`dshIntegrations dshSkillsPage${embedded ? ' dshIntegrationsEmbedded' : ''}`} aria-label={t('title')}>
       {!embedded && <header className="dshIntegrationsHeader"><h2>{t('title')}</h2>{catalogActions}</header>}
-      <div className="dshSkillsTabs" role="tablist" aria-label={t('title')}>
-        {(['library', 'recycle'] as const).map((value, index) => <button key={value} ref={element => { tabs.current[index] = element }} type="button" role="tab" id={`${id}-${value}`} aria-controls={`${id}-panel`} aria-selected={view === value} tabIndex={view === value ? 0 : -1}
-          onClick={() => { setView(value) }} onKeyDown={event => {
-            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-            event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - index
-            setView(next === 0 ? 'library' : 'recycle'); tabs.current[next]?.focus()
-          }}>{t(value === 'library' ? 'library' : 'recycleBin')}<span>{value === 'library' ? skills.length : recycled.length}</span></button>)}
-      </div>
+      <SettingsTabs id={id} label={t('title')} value={view} onChange={setView} items={[
+        { value: 'library', label: <>{t('library')}<span>{skills.length}</span></> },
+        { value: 'recycle', label: <>{t('recycleBin')}<span>{recycled.length}</span></> },
+      ]} />
       {!modalOpen && errorMessage}
       {!modalOpen && refreshPending && <p role="status" className="dshSkillsNote">{t('skillSavedRefreshPending')}</p>}
       <section className="dshSkillsDirectories" data-open={directoriesOpen} aria-label={t('skillLocations')}>
         <header><div><button type="button" className="dshSkillsDirectoryToggle" aria-label={t('skillLocations')} aria-expanded={directoriesOpen} onClick={() => { setDirectoriesOpen(open => !open) }}><IconChevronDownOutlineMedium /><span>{t('skillLocations')}</span><small>{directoryCount}</small></button>
           {directoriesOpen && <p>{t(view === 'library' ? 'directoriesHint' : 'recycleDirectoryHint')}</p>}</div>
-          {view === 'library' && <button type="button" className="dshIntegrationsCommand" disabled={disabled || scanPaths.length >= 32} onClick={event => {
+          {view === 'library' && <SettingsButton type="button" disabled={disabled || scanPaths.length >= 32} onClick={event => {
             if (directoryPicker !== undefined && directoryT !== undefined) {
               returnFocus.current = event.currentTarget
               setDirectoryPickerOpen(true)
@@ -306,7 +301,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
               const path = await requestDesktopDirectory()
               if (path !== null) { await baseApi.addScanPath(path); applyView(await api.readView()); setDirectoriesOpen(true) }
             })
-          }}><FolderPlus aria-hidden="true" />{t('addScanPath')}</button>}</header>
+          }}><FolderPlus aria-hidden="true" />{t('addScanPath')}</SettingsButton>}</header>
         {directoriesOpen && <ul>
           {locations !== undefined && <li><div><span className="dshSkillsDirectoryName">{t(view === 'recycle' ? 'recycleBin' : 'userLibraryPath')}</span><small>{t('directoryManaged')}</small><code title={view === 'recycle' ? locations.recycleBin : locations.userLibrary}>{view === 'recycle' ? locations.recycleBin : locations.userLibrary}</code></div></li>}
           {view === 'library' && locations?.projectLibrary !== undefined && <li><div><span className="dshSkillsDirectoryName">{t('projectSkillDirectory')}</span><small>{t('directoryAutomatic')}</small><code title={locations.projectLibrary}>{locations.projectLibrary}</code></div></li>}
@@ -323,7 +318,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
           <label className="dshIntegrationsSearch"><Search aria-hidden="true" /><input aria-label={t('searchSkills')} value={search} onChange={event => { setSearch(event.target.value) }} placeholder={t('searchSkills')} /></label>
           {view === 'library' && <Menu className="dshSkillsPresetMenu" open={sourceMenuOpen} onClose={() => { setSourceMenuOpen(false) }} compact portal selectedId={sourceFilter}
             items={[{ id: '', label: `${t('allSources')} · ${skills.length}` }, ...sources.map(source => ({ id: source, label: `${sourceLabel(source)} · ${skills.filter(skill => skill.source === source).length}` }))]}
-            onSelect={next => { setSourceFilter(next); setSourceMenuOpen(false) }} anchor={<button type="button" className="dshIntegrationsCommand" disabled={disabled} aria-label={t('filterSource')} aria-haspopup="menu" aria-expanded={sourceMenuOpen} onClick={() => { setSourceMenuOpen(open => !open) }}><span>{t('source')} · {sourceFilter ? sourceLabel(sourceFilter) : t('allSources')}</span><IconChevronDownOutlineMedium /></button>} />}
+            onSelect={next => { setSourceFilter(next); setSourceMenuOpen(false) }} anchor={<SettingsButton type="button" disabled={disabled} aria-label={t('filterSource')} aria-haspopup="menu" aria-expanded={sourceMenuOpen} onClick={() => { setSourceMenuOpen(open => !open) }}><span>{t('source')} · {sourceFilter ? sourceLabel(sourceFilter) : t('allSources')}</span><IconChevronDownOutlineMedium /></SettingsButton>} />}
           {view === 'library' && <Menu className="dshSkillsPresetMenu" open={scopeMenuOpen} onClose={() => { setScopeMenuOpen(false) }} compact portal selectedId={scope}
             items={[{ id: 'global', label: t('scopeGlobal') }, ...(initialSessionId === undefined ? [] : [{ id: `session:${initialSessionId}`, label: t('scopeSession') }]),
               ...(workspaces.length === 0 ? [] : [{ type: 'separator' as const, id: 'workspace-separator' }, { type: 'label' as const, id: 'workspace-label', text: t('scopeWorkspaces') }]),
@@ -331,25 +326,25 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
             onSelect={next => {
               setScopeMenuOpen(false)
               void run('scope', async () => { const nextApi = scopedApi(next, preset); const result = await nextApi.readView(); setScope(next); applyView(result) })
-            }} anchor={<button type="button" className="dshIntegrationsCommand" disabled={disabled} aria-label={t('skillScope')} aria-haspopup="menu" aria-expanded={scopeMenuOpen} onClick={() => { setScopeMenuOpen(open => !open) }}>
+            }} anchor={<SettingsButton type="button" disabled={disabled} aria-label={t('skillScope')} aria-haspopup="menu" aria-expanded={scopeMenuOpen} onClick={() => { setScopeMenuOpen(open => !open) }}>
               <span>{t('scope')} · {scopeLabel}</span><IconChevronDownOutlineMedium />
-            </button>} />}
+            </SettingsButton>} />}
           {view === 'library' && !scope.startsWith('session:') && (presets.length > 0 || effectivePresetLabel !== undefined) && <Menu className="dshSkillsPresetMenu" open={presetMenuOpen} onClose={() => { setPresetMenuOpen(false) }} compact portal selectedId={preset ?? locations?.preset ?? ''}
             items={[{ id: '', label: t('defaultPreset') }, ...presets.map(item => ({ id: item.id, label: item.name }))]}
             onSelect={next => {
               setPresetMenuOpen(false)
               void run('preset', async () => { const selection = next || undefined; const nextApi = api.forPreset(selection); const result = await nextApi.readView(); setPreset(selection); applyView(result) })
-            }} anchor={<button type="button" className="dshIntegrationsCommand" disabled={disabled} aria-label={t('agentPreset')} aria-haspopup="menu" aria-expanded={presetMenuOpen} onClick={() => { setPresetMenuOpen(open => !open) }}>
+            }} anchor={<SettingsButton type="button" disabled={disabled} aria-label={t('agentPreset')} aria-haspopup="menu" aria-expanded={presetMenuOpen} onClick={() => { setPresetMenuOpen(open => !open) }}>
               <span>{t('agentPreset')} · {presets.find(item => item.id === preset)?.name ?? effectivePresetLabel ?? t('defaultPreset')}</span><IconChevronDownOutlineMedium />
-            </button>} />}
-          <SettingsIconButton label={t('refresh')} disabled={disabled} onClick={() => { void load() }}><RefreshCw /></SettingsIconButton>
+            </SettingsButton>} />}
+          <SettingsIconButton label={t('refresh')} busy={loading} disabled={disabled} onClick={() => { void load() }}><RefreshCw /></SettingsIconButton>
           {embedded && catalogActions}
-          {view === 'recycle' && api.purge && <button type="button" className="dshIntegrationsDanger" disabled={disabled || recycled.length === 0} onClick={event => { returnFocus.current = event.currentTarget; setError(undefined); setPurgeTarget([...recycled]) }}><Trash2 />{t('emptyRecycleBin')}</button>}
+          {view === 'recycle' && api.purge && <SettingsButton type="button" variant="danger" disabled={disabled || recycled.length === 0} onClick={event => { returnFocus.current = event.currentTarget; setError(undefined); setPurgeTarget([...recycled]) }}><Trash2 />{t('emptyRecycleBin')}</SettingsButton>}
         </div>
         {view === 'library' && <div className="dshSkillsCategories" role="group" aria-label={t('filterCategory')}>
           {SKILL_CATEGORIES.filter(value => value === 'all' || value === category || skills.some(skill => skillCategory(skill.name) === value)).map(value => <button key={value} type="button" aria-label={t(skillCategoryKey(value))} aria-pressed={category === value} onClick={() => { setCategory(value) }}>{t(skillCategoryKey(value))}<small aria-hidden="true">{value === 'all' ? skills.length : skills.filter(skill => skillCategory(skill.name) === value).length}</small></button>)}
         </div>}
-        {loading ? <p className="dshIntegrationsEmpty" role="status">{t('loading')}</p> : view === 'library' ? <>
+        {loading && skills.length === 0 ? <SettingsEmptyState loading>{t('loading')}</SettingsEmptyState> : view === 'library' ? <>
           {installed !== undefined && installed.some(item => item.status !== 'effective') && <details className="dshSkillsDiagnostics">
             <summary>{t('installationIssues')} · {installed.filter(item => item.status !== 'effective').length}</summary>
             <dl className="dshSkillsFacts">{installed.filter(item => item.status !== 'effective').map(item => <div key={item.path}>
@@ -360,10 +355,10 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
                 {item.status === 'overridden' && <>
                   <p>{t('effectiveSkill')}{item.effectiveSource === undefined ? '' : ` · ${sourceLabel(item.effectiveSource)}`}</p>
                   {item.effectivePath !== undefined && <code>{item.effectivePath}</code>}
-                  {skills.some(skill => skill.name === item.name) && <div><button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={event => {
+                  {skills.some(skill => skill.name === item.name) && <div><SettingsButton type="button" disabled={disabled} onClick={event => {
                     const skill = skills.find(skill => skill.name === item.name)
                     if (skill !== undefined) openSkill(skill, event.currentTarget)
-                  }}>{t('viewDetails')}: {item.name}</button></div>}
+                  }}>{t('viewDetails')}: {item.name}</SettingsButton></div>}
                 </>}
               </dd>
             </div>)}</dl>
@@ -386,12 +381,12 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
               </span></Tooltip></span>}
             </li>})}</ul>}</section>
           })}</div>
-          {filtered.length === 0 && <p className="dshIntegrationsEmpty">{t(skills.length === 0 ? 'noSkills' : 'noMatches')}{(query !== '' || sourceFilter !== '' || category !== 'all') && <button type="button" className="dshIntegrationsCommand" onClick={() => { setSearch(''); setSourceFilter(''); setCategory('all') }}>{t('clearFilters')}</button>}</p>}
+          {filtered.length === 0 && <SettingsEmptyState action={(query !== '' || sourceFilter !== '' || category !== 'all') && <SettingsButton onClick={() => { setSearch(''); setSourceFilter(''); setCategory('all') }}>{t('clearFilters')}</SettingsButton>}>{t(skills.length === 0 ? 'noSkills' : 'noMatches')}</SettingsEmptyState>}
         </> : <ul className="dshSkillsRecycleList">{filteredRecycled.map(skill => <li key={skill.id}>
           <Trash2 aria-hidden="true" /><div><strong>{skill.name}</strong><span>{t('deletedAt')}: <time dateTime={skill.deletedAt}>{Number.isNaN(Date.parse(skill.deletedAt)) ? '-' : new Date(skill.deletedAt).toLocaleString(t('dateLocale'))}</time></span></div>
-          <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => { void run(`restore:${skill.id}`, async () => { applyView(await api.restore(skill.id)) }) }}>{t('restore')}</button>
+          <SettingsButton type="button" disabled={disabled} onClick={() => { void run(`restore:${skill.id}`, async () => { applyView(await api.restore(skill.id)) }) }}>{t('restore')}</SettingsButton>
           {api.purge && <Tooltip label={`${t('permanentlyDelete')}: ${skill.name}`}><button type="button" className="dshIntegrationsIconButton" data-danger aria-label={`${t('permanentlyDelete')}: ${skill.name}`} disabled={disabled} onClick={event => { returnFocus.current = event.currentTarget; setError(undefined); setPurgeTarget([skill]) }}><Trash2 /></button></Tooltip>}
-        </li>)}{filteredRecycled.length === 0 && <li className="dshSkillsEmpty">{t(recycled.length === 0 ? 'recycleEmpty' : 'noMatches')}</li>}</ul>}
+        </li>)}{filteredRecycled.length === 0 && <li className="dshSkillsEmpty"><SettingsEmptyState>{t(recycled.length === 0 ? 'recycleEmpty' : 'noMatches')}</SettingsEmptyState></li>}</ul>}
       </div>
     </section>
 
@@ -417,29 +412,29 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
     <Modal open={modalOpen} title={title} closeLabel={t('close')} onClose={requestClose} className={`dshSkillsDialog${detail !== undefined && detailTab === 'files' ? ' dshSkillsFileDialog' : ''}`} contentClassName="dshSkillsDialogContent"
       footer={<div className="dshSkillsDialogFooter">
         {purgeTarget !== undefined ? <div className="dshIntegrationsRowActions">
-          <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={close}>{t('cancel')}</button>
-          <button type="button" className="dshIntegrationsDanger" disabled={disabled} onClick={() => { void run('purge', async () => {
+          <SettingsButton type="button" disabled={disabled} onClick={close}>{t('cancel')}</SettingsButton>
+          <SettingsButton type="button" variant="danger" disabled={disabled} onClick={() => { void run('purge', async () => {
             if (!api.purge) return
             const result = await api.purge(purgeTarget.map(item => item.id))
             setRecycled(current => current.filter(item => !result.deleted.includes(item.id)))
             if (result.failed.length > 0) { setPurgeTarget(purgeTarget.filter(item => result.failed.includes(item.id))); setError(t('purgeFailed')) }
             else setPurgeTarget(undefined)
-          }) }}><Trash2 />{t('permanentlyDelete')}</button>
-        </div> : discard ? <div className="dshSkillsConfirmation" role="alert"><span>{t('discardChanges')}</span><div className="dshIntegrationsRowActions"><button type="button" className="dshIntegrationsCommand" onClick={() => { setDiscard(false) }}>{t('keepEditing')}</button><button type="button" className="dshIntegrationsDanger" onClick={close}>{t('discard')}</button></div></div>
-          : recycleConfirm && detail !== undefined ? <div className="dshSkillsConfirmation" role="alert"><span>{t('confirmRecycle')}</span><div className="dshIntegrationsRowActions"><button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => { setRecycleConfirm(false) }}>{t('cancel')}</button><button type="button" className="dshIntegrationsDanger" disabled={disabled} onClick={() => { void run('recycle', async () => { applyView(await api.recycle(detail.name)); setDetail(undefined); setRecycleConfirm(false) }) }}>{t('recycle')}</button></div></div>
+          }) }}><Trash2 />{t('permanentlyDelete')}</SettingsButton>
+        </div> : discard ? <div className="dshSkillsConfirmation" role="alert"><span>{t('discardChanges')}</span><div className="dshIntegrationsRowActions"><SettingsButton type="button" onClick={() => { setDiscard(false) }}>{t('keepEditing')}</SettingsButton><SettingsButton type="button" variant="danger" onClick={close}>{t('discard')}</SettingsButton></div></div>
+          : recycleConfirm && detail !== undefined ? <div className="dshSkillsConfirmation" role="alert"><span>{t('confirmRecycle')}</span><div className="dshIntegrationsRowActions"><SettingsButton type="button" disabled={disabled} onClick={() => { setRecycleConfirm(false) }}>{t('cancel')}</SettingsButton><SettingsButton type="button" variant="danger" disabled={disabled} onClick={() => { void run('recycle', async () => { applyView(await api.recycle(detail.name)); setDetail(undefined); setRecycleConfirm(false) }) }}>{t('recycle')}</SettingsButton></div></div>
           : <>
             {detail !== undefined && <div className="dshSkillsDeleteAction">
-              {canRecycle(detail) && <button type="button" className="dshIntegrationsDanger" disabled={disabled} onClick={() => { setRecycleConfirm(true) }}><Trash2 aria-hidden="true" />{t('recycle')}</button>}
+              {canRecycle(detail) && <SettingsButton type="button" variant="danger" disabled={disabled} onClick={() => { setRecycleConfirm(true) }}><Trash2 aria-hidden="true" />{t('recycle')}</SettingsButton>}
               {!canRecycle(detail) && <p id={`${id}-recycle-reason`} className="dshSkillsNote">{recycleReason(detail)}</p>}
             </div>}
             <div className="dshIntegrationsRowActions">
-              <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={requestClose}>{t(detail === undefined ? 'cancel' : 'close')}</button>
-              {detail?.editable && <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => { beginDraft({ mode: 'edit', revision: detail.revision, shared: detail.source === 'user-agents', name: detail.name, description: detail.description, whenToUse: detail.whenToUse ?? '', instructions: detail.content }) }}><Pencil />{t('edit')}</button>}
-              {draft !== undefined && <button type="submit" form={`${id}-form`} className="dshIntegrationsCommand dshCronPrimary" disabled={disabled || !draftValid}>{busy === 'save' ? t('saving') : t(draft.mode === 'create' ? 'create' : 'save')}</button>}
-              {importOpen && <button type="button" className="dshIntegrationsCommand dshCronPrimary" disabled={disabled || (bundle === undefined && importText.trim() === '')} onClick={() => { void run('import', async () => {
+              <SettingsButton type="button" disabled={disabled} onClick={requestClose}>{t(detail === undefined ? 'cancel' : 'close')}</SettingsButton>
+              {detail?.editable && <SettingsButton type="button" disabled={disabled} onClick={() => { beginDraft({ mode: 'edit', revision: detail.revision, shared: detail.source === 'user-agents', name: detail.name, description: detail.description, whenToUse: detail.whenToUse ?? '', instructions: detail.content }) }}><Pencil />{t('edit')}</SettingsButton>}
+              {draft !== undefined && <SettingsButton type="submit" form={`${id}-form`} variant="primary" disabled={disabled || !draftValid}>{busy === 'save' ? t('saving') : t(draft.mode === 'create' ? 'create' : 'save')}</SettingsButton>}
+              {importOpen && <SettingsButton type="button" variant="primary" disabled={disabled || (bundle === undefined && importText.trim() === '')} onClick={() => { void run('import', async () => {
                 applyView(bundle !== undefined && api.importBundle ? await api.importBundle(bundle) : await api.importDocument(importText))
                 setBundle(undefined); setImportText(''); setFileName(''); setImportOpen(false); setView('library'); setSearch(''); setSourceFilter('')
-              }) }}>{busy === 'import' ? t('importing') : t('import')}</button>}
+              }) }}>{busy === 'import' ? t('importing') : t('import')}</SettingsButton>}
             </div>
           </>}
       </div>}>
@@ -447,15 +442,15 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
         {modalOpen && errorMessage}
         {draft?.shared && <p className="dshSkillsNote">{t('sharedSkillEditImpact')}</p>}
         {purgeTarget !== undefined && <><p className="dshSkillsDescription">{t('purgeWarning')}</p><p className="dshSkillsNote">{t('purgeCount')}: {purgeTarget.length}</p><ul className="dshSkillBundleList">{purgeTarget.map(item => <li key={item.id}>{item.name}</li>)}</ul></>}
-        {draft?.mode === 'edit' && error === t('skillEditConflict') && <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => {
+        {draft?.mode === 'edit' && error === t('skillEditConflict') && <SettingsButton type="button" disabled={disabled} onClick={() => {
           void run('compare', async () => { setConflictDetail(await api.detail(draft.name)) })
-        }}>{t('reviewLatest')}</button>}
+        }}>{t('reviewLatest')}</SettingsButton>}
         {draft?.mode === 'edit' && conflictDetail !== undefined && <section className="dshSkillsInstructions">
           <h3>{t('latestVersion')}</h3><p className="dshSkillsDescription">{conflictDetail.description}</p>
           {conflictDetail.whenToUse && <p className="dshSkillsNote">{conflictDetail.whenToUse}</p>}<pre>{conflictDetail.content}</pre>
-          <button type="button" className="dshIntegrationsCommand" disabled={disabled || conflictDetail.revision === undefined} onClick={() => {
+          <SettingsButton type="button" disabled={disabled || conflictDetail.revision === undefined} onClick={() => {
             setDraft({ ...draft, revision: conflictDetail.revision }); setConflictDetail(undefined)
-          }}>{t('confirmDraftVersion')}</button>
+          }}>{t('confirmDraftVersion')}</SettingsButton>
         </section>}
         {modalOpen && refreshPending && <p role="status" className="dshSkillsNote">{t('skillSavedRefreshPending')}</p>}
         {locations !== undefined && (draft?.mode === 'create' || importOpen) && <dl className="dshSkillsFacts dshSkillsDestination">
@@ -481,20 +476,14 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
             if (files.length === 0) return
             void run('read-folder', async () => { const filesRead = await readSkillFolder(files); setBundle(filesRead); setImportText(''); setFileName(files[0]!.webkitRelativePath.split('/')[0] ?? '') })
           }} />
-          <div className="dshSkillsFileRow"><button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => { fileInput.current?.click() }}><FileUp />{t('chooseFile')}</button>
-            {api.importBundle && <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => { folderInput.current?.click() }}><FileUp />{t('chooseFolder')}</button>}<span>{fileName || t('fileLimit')}</span></div>
+          <div className="dshSkillsFileRow"><SettingsButton type="button" disabled={disabled} onClick={() => { fileInput.current?.click() }}><FileUp />{t('chooseFile')}</SettingsButton>
+            {api.importBundle && <SettingsButton type="button" disabled={disabled} onClick={() => { folderInput.current?.click() }}><FileUp />{t('chooseFolder')}</SettingsButton>}<span>{fileName || t('fileLimit')}</span></div>
           {bundle === undefined ? <><label>{t('rawDocument')}<textarea className="dshSkillsCode" rows={12} disabled={disabled} value={importText} onChange={event => { setImportText(event.target.value) }} placeholder={t('importPlaceholder')} /></label><p className="dshSkillsNote">{t('importHint')}</p></>
             : <><p className="dshSkillsNote">{t('skillBundleHint')}</p><ul className="dshSkillBundleList">{bundle.map(file => <li key={file.path}><code>{file.path}</code></li>)}</ul></>}
         </div>}
         {detail !== undefined && <>
-          {canBrowseFiles(detail) && detail.path !== undefined && api.files && api.file && <div className="dshSkillsTabs" role="tablist" aria-label={t('viewDetails')}>
-            {(['overview', 'files'] as const).map(tab => <button key={tab} type="button" role="tab" id={`${id}-detail-${tab}`} aria-controls={`${id}-detail-panel`} aria-selected={detailTab === tab} tabIndex={detailTab === tab ? 0 : -1} onClick={() => { setDetailTab(tab) }} onKeyDown={event => {
-              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-              event.preventDefault()
-              const next = event.key === 'Home' ? 'overview' : event.key === 'End' ? 'files' : tab === 'files' ? 'overview' : 'files'
-              setDetailTab(next); document.getElementById(`${id}-detail-${next}`)?.focus()
-            }}>{t(tab === 'overview' ? 'skillOverview' : 'skillFiles')}</button>)}
-          </div>}
+          {canBrowseFiles(detail) && detail.path !== undefined && api.files && api.file && <SettingsTabs id={`${id}-detail`} label={t('viewDetails')} value={detailTab} onChange={setDetailTab}
+            items={[{ value: 'overview', label: t('skillOverview') }, { value: 'files', label: t('skillFiles') }]} />}
           <div id={`${id}-detail-panel`} className="dshSkillsDetailPanel" role={api.files && api.file && detail.path !== undefined && canBrowseFiles(detail) ? 'tabpanel' : undefined} aria-label={t(detailTab === 'overview' ? 'skillOverview' : 'skillFiles')}>
           {detailTab === 'overview' ? <>
           <p className="dshSkillsDescription">{detail.description}</p>
@@ -509,9 +498,9 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
           {internalEntry !== undefined ? <div className="dshSkillsNote">
             <p>{t('internalReferenceHint')}</p>
             <p>{t('entrySkill')}: {skills.find(skill => skill.name === internalEntry) === undefined ? internalEntry : presentSkill(skills.find(skill => skill.name === internalEntry)!, locale).name}</p>
-            {entrySkill === undefined ? <p>{t('entryUnavailable')}</p> : <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => {
+            {entrySkill === undefined ? <p>{t('entryUnavailable')}</p> : <SettingsButton type="button" disabled={disabled} onClick={() => {
               void run(`detail:${entrySkill.name}`, async () => { setDetail(await api.detail(entrySkill.name)); setDetailTab('overview') })
-            }}>{t('viewEntrySkill')}</button>}
+            }}>{t('viewEntrySkill')}</SettingsButton>}
           </div> : <>
           {!detail.modelInvocable && !detail.userInvocable && <p className="dshSkillsNote">{t(detail.editable ? 'invocationOffHint' : 'managedInvocationOffHint')}</p>}
           <div className="dshSkillsInvocation">

@@ -12,7 +12,7 @@ describe('expert library UI', () => {
     expect(matchExpertQuery({ ...expert, skills: [{ name: 'tencent-pptx' }] }, 'PowerPoint')).toBe(true)
   })
   it('keeps the library navigation fixed while each tab owns its scroll position', () => {
-    expect(TEAM_CSS).toContain('.aag-section.aag-library-shell{max-width:1120px;height:100%;max-height:100%;gap:0')
+    expect(TEAM_CSS).toContain('.aag-section.aag-library-shell{max-width:var(--dsh-page-width);height:100%;max-height:100%;gap:0')
     expect(TEAM_CSS).toContain('.aag-library-sticky{z-index:20;display:flex;flex:none')
     expect(TEAM_CSS).toContain('.aag-library-navigation{')
     expect(TEAM_CSS).toContain('.aag-tab-label{')

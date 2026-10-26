@@ -38,6 +38,19 @@ async function click(text: string) { await act(async () => { button(text).click(
 afterEach(async () => { await act(async () => { root?.unmount() }); root = undefined; document.body.replaceChildren(); vi.unstubAllGlobals() })
 
 describe('Skills catalog UI', () => {
+  it('keeps existing cards visible while a manual refresh reports progress', async () => {
+    const api = await mount()
+    let finish!: () => void
+    vi.mocked(api.readView).mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve(view) }))
+    await act(async () => { button(zh.refresh).click() })
+    expect(document.querySelector('.dshSkillsCard')).not.toBeNull()
+    expect(button(zh.refresh).disabled).toBe(true)
+    expect(button(zh.refresh).getAttribute('aria-busy')).toBe('true')
+    await act(async () => { finish() })
+    expect(button(zh.refresh).disabled).toBe(false)
+    expect(button(zh.refresh).hasAttribute('aria-busy')).toBe(false)
+  })
+
   it('explains internal references and navigates to their entry without changing invocation policy', async () => {
     const internal = { ...skill, name: 'html-review', source: 'bundled', editable: false, modelInvocable: false, userInvocable: false }
     const entry = { ...skill, name: 'tencent-docx', source: 'bundled', editable: false }

@@ -229,6 +229,7 @@ describe('public composer integration', () => {
       const button = [...container.querySelectorAll('button')].find(item => item.textContent === '优化草稿')!
       expect(button).toBeDefined(); expect(button.disabled).toBe(true); expect(fetcher).not.toHaveBeenCalled()
       expect(button.getAttribute('aria-label')).toBe('优化草稿')
+      expect(button.classList.contains('dshComposerAction')).toBe(true)
       expect(button.querySelector('svg')).not.toBeNull()
       expect(button.querySelector('.dshAiOptimizeTriggerLabel')).not.toBeNull()
       await act(async () => f.input.set({ ...EMPTY, draft: '给这个功能加测试', draftRev: 2 }))

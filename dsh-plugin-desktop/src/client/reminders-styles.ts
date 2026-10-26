@@ -1,10 +1,10 @@
 /** Long-term preferences use the same typography and surfaces as desktop settings. */
 export const REMINDERS_CSS = `
-.dshReminders{gap:24px}
+.dshReminders{gap:var(--dsh-space-6)}
 .dshReminders>.dshIntegrationsHeader{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start}
 .dshRemindersPanel,.dshRemindersCollection{display:flex;flex-direction:column;gap:14px;min-width:0}
-.dshRemindersPanel{padding:20px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}
-.dshRemindersPanel h3,.dshRemindersPanel h4,.dshRemindersCollection h3{margin:0;font-size:14px;font-weight:600;line-height:1.5}
+.dshRemindersPanel{padding:20px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsh-card-radius);background:var(--dsw-alias-bg-layer-1)}
+.dshRemindersPanel h3,.dshRemindersPanel h4,.dshRemindersCollection h3{margin:0;font-size:var(--dsh-section-title-size);font-weight:600;line-height:1.5}
 .dshRemindersPanelHeader{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 16px}
 .dshRemindersPanelHeader>span{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.6}
 .dshRemindersInput{box-sizing:border-box;display:block;field-sizing:content;width:100%;min-height:96px;max-height:260px;resize:vertical;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.65}
@@ -18,7 +18,7 @@ export const REMINDERS_CSS = `
 .dshRemindersSuggestions h4{font-size:13px;font-weight:500}
 .dshRemindersSuggestions p{margin:-4px 0 0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.6}
 .dshRemindersPresets{display:flex;flex-wrap:wrap;gap:8px}
-.dshRemindersPresets button{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-height:32px;padding:6px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:12px;line-height:1.5;text-align:left;overflow-wrap:anywhere}
+.dshRemindersPresets button{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-height:var(--dsh-control-height);padding:6px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:12px;line-height:1.5;text-align:left;overflow-wrap:anywhere}
 .dshRemindersPresets button>svg{width:13px;height:13px;flex-shrink:0;color:var(--dsw-alias-label-secondary)}
 .dshRemindersPresets button>span{color:var(--dsw-alias-label-secondary);font-size:11px}
 .dshRemindersPresets button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);border-color:var(--dsw-alias-border-l2)}

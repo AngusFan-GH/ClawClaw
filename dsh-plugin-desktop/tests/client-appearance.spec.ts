@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { DESKTOP_THEME_CSS } from '../src/client/desktop-theme.ts'
+import { DESKTOP_ACTION_COLORS, DESKTOP_THEME_CSS } from '../src/client/desktop-theme.ts'
 
 const require = createRequire(import.meta.url)
 
@@ -15,6 +15,17 @@ function sources(directory: string): string[] {
 }
 
 describe('desktop appearance contract', () => {
+  it('keeps white primary-button text readable in normal, hover and pressed states', () => {
+    for (const color of Object.values(DESKTOP_ACTION_COLORS)) {
+      const channels = [1, 3, 5].map(offset => {
+        const value = Number.parseInt(color.slice(offset, offset + 2), 16) / 255
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      })
+      const luminance = channels.reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index]!, 0)
+      expect(1.05 / (luminance + 0.05), color).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
   it('uses color variables supported by the pinned host across every owned client page', () => {
     const host = readFileSync(require.resolve('@deepseek-ai/dsh-client-ui-theme/client'), 'utf8')
     const supported = new Set(host.match(/--dsw-[\w-]+/g))

@@ -66,6 +66,20 @@ afterEach(async () => {
 })
 
 describe('MCP settings UI', () => {
+  it('navigates catalog tabs with the keyboard and labels the selected panel', async () => {
+    await mount()
+    const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+    tabs[0]!.focus()
+    await act(async () => { tabs[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })) })
+    expect(document.activeElement).toBe(tabs[1])
+    expect(tabs[1]!.getAttribute('aria-selected')).toBe('true')
+    expect(tabs[0]!.tabIndex).toBe(-1)
+    expect(document.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe(tabs[1]!.id)
+    await act(async () => { tabs[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })) })
+    expect(document.activeElement).toBe(tabs[0])
+    expect(tabs[0]!.getAttribute('aria-selected')).toBe('true')
+  })
+
   it('shows transport guidance and focuses linked validation errors before saving', async () => {
     const api = await mount()
     await act(async () => { button(zh.addServer).click() })
