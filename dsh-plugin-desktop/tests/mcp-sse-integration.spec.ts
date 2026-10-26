@@ -10,16 +10,18 @@ import { DesktopMcpController, parseDesktopMcpServer, type DesktopMcpSettings } 
 
 // Real legacy SSE wire protocol: endpoint event, separate POST channel, replies
 // and notifications on the GET stream. No graphical process or external server.
+const host = process.env.CLAWCLAW_MCP_TEST_HOST ?? '127.0.0.1'
+
 describe('desktop SSE runtime', () => {
   it('reports rejected SSE startup and releases the failed connection', async () => {
     let requests = 0
     const server = createServer((_req, res) => { requests++; res.writeHead(401); res.end() })
-    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    server.listen(0, host); await once(server, 'listening')
     const ctx = new Context()
     await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
     ctx.reflect.provide('credentials', { resolve: async () => undefined })
     const value: DesktopMcpSettings = { mcpServers: [parseDesktopMcpServer({ serverName: 'rejected', transport: 'sse',
-      url: `http://127.0.0.1:${(server.address() as { port: number }).port}/sse`,
+      url: `http://${host}:${(server.address() as { port: number }).port}/sse`,
       reconnect: { enabled: false, initialDelayMs: 100, maxDelayMs: 200, maxAttempts: 1 } })] }
     const settings = { get: () => value } as unknown as SettingsScope<DesktopMcpSettings>
     const controller = new DesktopMcpController(ctx, settings)
@@ -66,12 +68,12 @@ describe('desktop SSE runtime', () => {
       }
       res.writeHead(202); res.end()
     })
-    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    server.listen(0, host); await once(server, 'listening')
     const address = server.address() as { port: number }
     const ctx = new Context()
     await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
     ctx.reflect.provide('credentials', { resolve: async () => ({ value: 'Bearer fixture-token' }) })
-    let value: DesktopMcpSettings = { mcpServers: [parseDesktopMcpServer({ serverName: 'legacy', transport: 'sse', url: `http://127.0.0.1:${address.port}/sse`,
+    let value: DesktopMcpSettings = { mcpServers: [parseDesktopMcpServer({ serverName: 'legacy', transport: 'sse', url: `http://${host}:${address.port}/sse`,
       headers: { Authorization: 'MCP_TOKEN' }, reconnect: { enabled: true, initialDelayMs: 100, maxDelayMs: 200, maxAttempts: 2 } })] }
     const settings = { get: () => value, watch: () => () => {}, update: async (patch: Partial<DesktopMcpSettings>) => { value = { ...value, ...patch } } } as unknown as SettingsScope<DesktopMcpSettings>
     const controller = new DesktopMcpController(ctx, settings)

@@ -107,6 +107,27 @@ describe('Desktop MCP', () => {
     })).not.toThrow()
   })
 
+  it.each(['streamable-http', 'sse'] as const)('accepts private IPv4 HTTP and rejects public HTTP for %s', transport => {
+    const config = { serverName: 'lan', transport, enabled: true }
+    for (const host of ['10.0.0.1', '10.255.255.254', '172.16.0.1', '172.31.255.254', '192.168.0.1', '192.168.255.254']) {
+      const url = `http://${host}:3000/mcp`
+      expect(parseDesktopMcpServer({ ...config, url })).toMatchObject({ url, transport })
+    }
+    for (const host of ['8.8.8.8', '11.0.0.1', '172.15.255.255', '172.32.0.1', '192.169.0.1', '192.168.1.1.example.com']) {
+      expect(() => parseDesktopMcpServer({ ...config, url: `http://${host}/mcp` })).toThrow(/must use HTTPS/)
+    }
+    expect(() => parseDesktopMcpServer({ ...config, url: 'http://user:secret@192.168.1.1/mcp' })).toThrow(/without embedded credentials/)
+  })
+
+  it('saves private HTTP endpoints and passes their credentials to the runtime', async () => {
+    const fixture = controllerFixture({ mcpServers: [] })
+    try {
+      const view = await fixture.controller.save({ serverName: 'lan', transport: 'streamable-http', url: 'http://192.168.1.10:3000/mcp', headers: { Authorization: 'LAN_TOKEN' } }, undefined, { LAN_TOKEN: 'Bearer test-token' })
+      expect(view.mcpServers[0]).toMatchObject({ state: 'running', url: 'http://192.168.1.10:3000/mcp' })
+      expect(fixture.plugin).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ url: 'http://192.168.1.10:3000/mcp', headers: { Authorization: 'Bearer test-token' } }))
+    } finally { await fixture.controller.dispose() }
+  })
+
   it('imports standard mcpServers JSON without persisting credential values in configuration', () => {
     const imported = importMcpServersDocument({ mcpServers: { github: {
       command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], env: { GITHUB_TOKEN: 'ghp_example' },

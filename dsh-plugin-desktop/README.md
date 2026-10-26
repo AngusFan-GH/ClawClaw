@@ -10,6 +10,8 @@ This package is part of the root pnpm workspace. Do not install it as a standalo
 
 Electron main starts the Host through `startIsolatedDesktopHost()` by default. `DSH_DESKTOP_ISOLATED_HOST=0` is an in-process diagnostic route. The Host owns Cordis and Web services; Electron main owns native resources. The browser content uses ordinary loopback HTTP/WebSocket and has no general Electron bridge.
 
+MCP connectors using Streamable HTTP or SSE accept HTTP for loopback addresses and private IPv4 ranges `10.0.0.0/8`, `172.16.0.0/12`, and `192.168.0.0/16`. Other hosts require HTTPS. HTTP traffic, including authentication headers, is unencrypted. OAuth issuer, resource, and authorization/token endpoints still require HTTPS.
+
 The launcher prepares `~/.clawclaw/data` and `~/.clawclaw/workspaces/default` unless saved data-directory configuration, `CLAWCLAW_HOME`, or safe mode selects another path. It never reads, moves, or modifies another application's `~/.dsh` data.
 
 ClawClaw keeps a product default Workspace registered across launches and protects it from deletion; existing user titles are preserved. Session creation, Agent presets, draft initialization, and current/recent Workspace selection use the upstream navigation service unchanged. The Desktop directory picker follows the Workspace of the main-view Session, including restored and historical Sessions, and falls back to its saved location or the product default when no grouped Session is selected. Expert and team creation prepare an editable request without submitting it; superseded navigation keeps Settings open and stops watching that creation attempt.

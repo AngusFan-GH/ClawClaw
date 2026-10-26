@@ -1,3 +1,4 @@
+import { allowsMcpHttp } from '../mcp-url-policy.ts'
 import type { DesktopMcpLocaleKey } from './mcp-locales.ts'
 import type { McpCredentialDraft } from './McpCredentialFields.tsx'
 
@@ -19,8 +20,7 @@ export function validateMcpEditor(draft: {
   } else {
     try {
       const url = new URL(draft.url.trim())
-      const loopback = url.hostname === 'localhost' || url.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/u.test(url.hostname)
-      if (!['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || (url.protocol === 'http:' && !loopback)) {
+      if (!['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || (url.protocol === 'http:' && !allowsMcpHttp(url.hostname))) {
         issues.url = t('remoteUrlError')
       }
     } catch { issues.url = t('remoteUrlError') }

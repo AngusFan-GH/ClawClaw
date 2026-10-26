@@ -15,6 +15,7 @@ import {
   type DesktopMcpServerConfig, type DesktopMcpServerView, type DesktopMcpView,
 } from './mcp-contract.ts'
 import { DESKTOP_MCP_CATALOG, type DesktopMcpCatalogDefinition } from './mcp-catalog.ts'
+import { allowsMcpHttp } from './mcp-url-policy.ts'
 import { deriveMcpDiagnostic } from './mcp-diagnostics.ts'
 import {
   assertSecureOAuthUrl, buildMcpAuthorizationUrl, createMcpPkce, discoverMcpOAuthIssuer, discoverMcpOAuthMetadata,
@@ -70,10 +71,8 @@ function assertHttpUrl(value: string): void {
   if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username !== '' || url.password !== '') {
     throw new TypeError('MCP URL must be an HTTP or HTTPS URL without embedded credentials')
   }
-  const hostname = url.hostname.toLocaleLowerCase()
-  const loopback = hostname === 'localhost' || hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/u.test(hostname)
-  if (url.protocol === 'http:' && !loopback) {
-    throw new TypeError('Remote MCP URLs must use HTTPS; HTTP is allowed only for loopback addresses')
+  if (url.protocol === 'http:' && !allowsMcpHttp(url.hostname)) {
+    throw new TypeError('Public MCP URLs must use HTTPS; HTTP is allowed only for loopback addresses and private IPv4 addresses')
   }
 }
 function serverCredentialReferences(server: DesktopMcpServerConfig): ReadonlySet<string> {

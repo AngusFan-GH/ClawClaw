@@ -10,6 +10,8 @@
 
 Electron main 默认通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKTOP_ISOLATED_HOST=0` 是同进程排查路径。Host 拥有 Cordis 和 Web 服务，Electron main 拥有原生资源。浏览器内容通过普通 loopback HTTP/WebSocket 工作，没有通用 Electron bridge。
 
+Streamable HTTP 和 SSE MCP 连接器允许本机回环地址及内网 IPv4 网段 `10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16` 使用 HTTP，其他主机仍要求 HTTPS。HTTP 流量（包括鉴权请求头）不加密。OAuth 发行方、资源及授权和令牌端点仍要求 HTTPS。
+
 Launcher 默认准备 `~/.clawclaw/data` 与 `~/.clawclaw/workspaces/default`；已保存的数据目录、`CLAWCLAW_HOME` 或安全模式可以覆盖。它不会读取、移动或修改其他应用的 `~/.dsh` 数据。
 
 ClawClaw 在每次启动时确保产品默认工作区已登记，并保护其不被删除；已有的用户名称会保留。会话创建、Agent 预设、草稿初始化以及当前或最近工作区选择均使用未经包装的上游导航服务。Desktop 目录选择器跟随主视图会话所属工作区，包括恢复的会话和历史会话；未选中归属于工作区的会话时，回退到已保存的位置或产品默认工作区。专家和专家团创建只准备可编辑请求，不自动提交；后续导航取消创建时，设置页保持打开，并停止监听该次创建结果。

@@ -100,6 +100,16 @@ describe('MCP settings UI', () => {
     expect(document.activeElement).toBe(field(zh.url))
   })
 
+  it.each(['HTTP', 'SSE'])('saves private IPv4 HTTP from the %s editor', async transport => {
+    const api = await mount()
+    await act(async () => { button(zh.addServer).click() })
+    await act(async () => { button(transport).click() })
+    await setField(zh.serverName, 'lan')
+    await setField(zh.url, 'http://192.168.1.10:3000/mcp')
+    await submit()
+    expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ serverName: 'lan', url: 'http://192.168.1.10:3000/mcp', transport: transport === 'SSE' ? 'sse' : 'streamable-http' }), undefined, undefined)
+  })
+
   it('opens advanced settings from a validation error link', async () => {
     const api = await mount()
     await openServerMenu()
