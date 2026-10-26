@@ -26,6 +26,7 @@ describe('SpiritX onboarding', () => {
     let welcome: ComponentType<{ complete(): void }> | undefined
     const cleanup: Array<() => void> = []
     const ctx = {
+      on: vi.fn(() => vi.fn()),
       effect: vi.fn((mount: () => () => void) => { cleanup.push(mount()) }),
       locale: {
         register: vi.fn(() => vi.fn()),
@@ -42,7 +43,10 @@ describe('SpiritX onboarding', () => {
       remote: {
         llm: { listConfigurableProviders: vi.fn(async () => ({
           ok: true, value: [{ provider: 'spiritx' }],
+        })), discoverModels: vi.fn(async () => ({
+          ok: true, value: [{ id: 'chat-first', api: 'openai-completions' }],
         })) },
+        settings: { mutate: vi.fn(async () => ({ ok: true, value: {} })) },
         credentials: { describe: vi.fn(async () => ({
           ok: true,
           value: { SPIRITX_API_KEY: { configured: true, writable: true } },
@@ -50,7 +54,7 @@ describe('SpiritX onboarding', () => {
       },
       configForms: { describe: () => ({
         ensure: vi.fn(async () => {}),
-        getSnapshot: () => ({ view: { namespaces: [{ ns: 'llm-pi-ai', value: { providers: { spiritx: {
+        getSnapshot: () => ({ view: { namespaces: [{ ns: 'llm-pi-ai', revision: 3, value: { providers: { spiritx: {
           apiKeyEnv: 'SPIRITX_API_KEY', api: 'openai-responses', baseURL: 'https://ai.xzinfra.com/spiritx-api/v1',
           models: [{ id: 'chat-first' }],
         } } } }] } }),
@@ -78,6 +82,9 @@ describe('SpiritX onboarding', () => {
 
     await expect(injected.loadCredential()).resolves.toEqual({ kind: 'configured' })
     expect(ctx.remote.credentials.describe).toHaveBeenCalledWith(['SPIRITX_API_KEY'])
+    expect(ctx.remote.settings.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set', path: ['providers', 'spiritx', 'models', '0', 'api'], value: 'openai-completions',
+    }], 3)
   })
 
   it('owns only the credential copy without DeepSeek branding', () => {

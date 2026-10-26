@@ -6,7 +6,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { SPIRITX_ONBOARDING_COPY, SPIRITX_ONBOARDING_SHADOW, spiritXCredentialState, type SpiritXCredentialState } from './spiritx-onboarding-state.ts'
-import { hasUsableSpiritXProfile, provisionSpiritX, SPIRITX_API_KEY_REF } from './spiritx-provisioning.ts'
+import { hasUsableSpiritXProfile, provisionSpiritX, syncSpiritXModelProtocols, SPIRITX_API_KEY_REF } from './spiritx-provisioning.ts'
 
 const LOCALE_NS = 'desktop.spiritx-onboarding'
 const LOADING_FEEDBACK_DELAY_MS = 500
@@ -153,6 +153,18 @@ export function applySpiritXOnboarding(ctx: ClientContext): void {
   if (typeof document === 'undefined') return
   ctx.effect(() => ctx.locale.register(LOCALE_NS, SPIRITX_ONBOARDING_COPY), 'dsh-plugin-desktop: SpiritX onboarding copy')
   const t = ctx.locale.bind(LOCALE_NS) as CredentialInjected['t']
+  let protocolSync: Promise<void> | undefined
+  const refreshProtocols = (): Promise<void> => {
+    protocolSync ??= syncSpiritXModelProtocols(ctx).catch(() => {}).finally(() => { protocolSync = undefined })
+    return protocolSync
+  }
+  ctx.effect(() => {
+    const dispose = ctx.on('connection/reset', () => { void refreshProtocols() })
+    // Existing conversations also need current capabilities; onboarding only
+    // mounts for a blank conversation. Reconnects retry failed discovery.
+    void refreshProtocols()
+    return dispose
+  }, 'dsh-plugin-desktop: SpiritX protocol discovery')
   const loadCredential = async (): Promise<CredentialState> => {
     const directory = await ctx.remote.llm.listConfigurableProviders()
     if (!directory.ok || !directory.value.some(entry => entry.provider === 'spiritx')) return { kind: 'unavailable' }
@@ -161,6 +173,10 @@ export function applySpiritXOnboarding(ctx: ClientContext): void {
       hasUsableSpiritXProfile(ctx),
     ])
     if (!credentials.ok) return { kind: 'unavailable' }
+    if (profileConfigured && credentials.value[SPIRITX_API_KEY_REF]?.configured) {
+      // Offline discovery must not prevent an already configured app from opening.
+      await refreshProtocols()
+    }
     return spiritXCredentialState(credentials.value[SPIRITX_API_KEY_REF], profileConfigured)
   }
   const storeCredential = async (value: string): Promise<string | undefined> => {

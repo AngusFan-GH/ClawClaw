@@ -10,6 +10,8 @@ export const SPIRITX_SETTINGS_NS = 'llm-pi-ai'
 
 export interface SpiritXModelDraft {
   id: string
+  api?: string
+  supportsConversation?: boolean
   name?: string
   contextWindow?: number
   maxTokens?: number
@@ -25,14 +27,21 @@ export type SpiritXResult<T> = { ok: true; value: T } | { ok: false; error: stri
 
 const NON_LANGUAGE_MODEL = /(?:^|[-_.])(image|embedding|embed|rerank|moderation|tts|speech|whisper|transcri(?:be|ption)|audio)(?:$|[-_.\d])/i
 
-/** Pick the first returned generative language model while excluding dedicated media and ranking models. */
+/** Advertised capability wins; names are only a fallback for legacy catalogs without metadata. */
+export function isConversationModel(model: Pick<LlmDiscoveredModel, 'id' | 'name' | 'supportsConversation'>): boolean {
+  return model.supportsConversation ?? !NON_LANGUAGE_MODEL.test(`${model.id} ${model.name ?? ''}`)
+}
+
+/** Pick the first conversational model without treating vision input as image generation. */
 export function firstLanguageModel(models: readonly LlmDiscoveredModel[]): LlmDiscoveredModel | undefined {
-  return models.find(model => !NON_LANGUAGE_MODEL.test(`${model.id} ${model.name ?? ''}`))
+  return models.find(isConversationModel)
 }
 
 function profileModel(model: LlmDiscoveredModel): JsonValue {
   return {
     id: model.id,
+    ...model.api === undefined ? {} : { api: model.api },
+    ...model.supportsConversation === undefined ? {} : { supportsConversation: model.supportsConversation },
     name: model.name ?? model.id,
     ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
     ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
@@ -43,6 +52,8 @@ function profileModel(model: LlmDiscoveredModel): JsonValue {
 function modelValue(model: SpiritXModelDraft): JsonValue {
   return {
     id: model.id.trim(),
+    ...model.api === undefined ? {} : { api: model.api },
+    ...model.supportsConversation === undefined ? {} : { supportsConversation: model.supportsConversation },
     ...model.name === undefined ? {} : { name: model.name },
     ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
     ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
@@ -59,7 +70,7 @@ function modelCatalogValid(models: readonly SpiritXModelDraft[]): boolean {
   return ids.length > 0
     && ids.every(id => id.length > 0)
     && new Set(ids).size === ids.length
-    && firstLanguageModel(models) !== undefined
+    && models.every(isConversationModel)
 }
 
 function objectAt(value: JsonValue | undefined, path: readonly string[]): Record<string, JsonValue> | undefined {
@@ -79,6 +90,8 @@ function modelDraft(value: JsonValue): SpiritXModelDraft | undefined {
   if (typeof id !== 'string') return undefined
   return {
     id,
+    ...typeof value.api === 'string' ? { api: value.api } : {},
+    ...typeof value.supportsConversation === 'boolean' ? { supportsConversation: value.supportsConversation } : {},
     ...typeof value.name === 'string' ? { name: value.name } : {},
     ...typeof value.contextWindow === 'number' ? { contextWindow: value.contextWindow } : {},
     ...typeof value.maxTokens === 'number' ? { maxTokens: value.maxTokens } : {},
@@ -114,7 +127,7 @@ export async function loadSpiritXProfile(ctx: ClientContext): Promise<SpiritXRes
   if (spiritx === undefined) return { ok: false, error: '模型配置暂不可用，请稍后重试。' }
   const profile = objectAt(spiritx.value, ['providers', 'spiritx'])
   const models = Array.isArray(profile?.models)
-    ? profile.models.map(modelDraft).filter((model): model is SpiritXModelDraft => model !== undefined)
+    ? profile.models.map(modelDraft).filter((model): model is SpiritXModelDraft => model !== undefined).filter(isConversationModel)
     : []
   return {
     ok: true,
@@ -136,8 +149,44 @@ export async function hasUsableSpiritXProfile(ctx: ClientContext): Promise<boole
   return firstLanguageModel(models.filter(model => model.id.trim().length > 0)) !== undefined
 }
 
+/** Refresh model protocols from current gateway capabilities without replacing catalogs or valid defaults. */
+export async function syncSpiritXModelProtocols(ctx: ClientContext): Promise<void> {
+  const namespaces = await settingsView(ctx)
+  const namespace = namespaces === undefined ? undefined : namespaceOf(namespaces, SPIRITX_SETTINGS_NS)
+  const profile = namespace === undefined ? undefined : objectAt(namespace.value, ['providers', 'spiritx'])
+  if (namespace === undefined || profile?.baseURL !== SPIRITX_BASE_URL || profile.api !== SPIRITX_API
+    || profile.apiKeyEnv !== SPIRITX_API_KEY_REF || !Array.isArray(profile.models)) return
+  const models = profile.models.map(modelDraft)
+  if (models.length === 0) return
+  const discovered = await fetchSpiritXModels(ctx)
+  if (!discovered.ok) return
+  const advertised = new Map(discovered.value.map(model => [model.id, model]))
+  const ops: SettingsPathOpView[] = []
+  models.forEach((model, index) => {
+    const live = model === undefined ? undefined : advertised.get(model.id)
+    const api = live?.api
+    if (model !== undefined && live?.supportsConversation !== undefined && model.supportsConversation !== live.supportsConversation) {
+      ops.push({ op: 'set', path: ['providers', 'spiritx', 'models', String(index), 'supportsConversation'], value: live.supportsConversation })
+    }
+    if (model !== undefined && api !== undefined && model.api !== api) {
+      ops.push({ op: 'set', path: ['providers', 'spiritx', 'models', String(index), 'api'], value: api })
+    }
+  })
+  if (ops.length > 0 && await mutate(ctx, namespace, ops) !== undefined) return
+  const defaults = namespaceOf(namespaces!, 'agent-default-model')
+  if (defaults !== undefined) {
+    const conversational = models.filter((model): model is SpiritXModelDraft => model !== undefined)
+      .map(model => {
+        const capability = advertised.get(model.id)?.supportsConversation
+        return capability === undefined ? model : { ...model, supportsConversation: capability }
+      })
+      .filter(isConversationModel)
+    await repairSpiritXDefault(ctx, defaults, conversational, false)
+  }
+}
+
 /** Interrogate SpiritX with a replacement key, or the stored credential when the field is blank. */
-export async function discoverSpiritXModels(
+async function fetchSpiritXModels(
   ctx: ClientContext,
   rawKey?: string,
 ): Promise<SpiritXResult<LlmDiscoveredModel[]>> {
@@ -153,6 +202,12 @@ export async function discoverSpiritXModels(
     : { ok: false, error: discovered.error.message }
 }
 
+/** Only conversational models belong in the product's chat catalog. */
+export async function discoverSpiritXModels(ctx: ClientContext, rawKey?: string): Promise<SpiritXResult<LlmDiscoveredModel[]>> {
+  const result = await fetchSpiritXModels(ctx, rawKey)
+  return result.ok ? { ok: true, value: result.value.filter(isConversationModel) } : result
+}
+
 async function repairSpiritXDefault(
   ctx: ClientContext,
   defaults: SettingsNamespaceView,
@@ -165,10 +220,7 @@ async function repairSpiritXDefault(
   const ids = new Set(models.map(item => item.id))
   if (!force && provider !== 'spiritx') return undefined
   if (!force && typeof model === 'string' && ids.has(model)) return undefined
-  const selected = firstLanguageModel(models.map(item => ({
-    id: item.id,
-    ...item.name === undefined ? {} : { name: item.name },
-  })))
+  const selected = firstLanguageModel(models)
   if (selected === undefined) return 'SpiritX 未返回可用的大语言模型。'
   return mutate(ctx, defaults, [
     { op: 'set', path: ['provider'], value: 'spiritx' },
@@ -183,7 +235,7 @@ export async function saveSpiritXModels(
   models: readonly SpiritXModelDraft[],
 ): Promise<string | undefined> {
   const normalized = normalizedModels(models)
-  if (!modelCatalogValid(normalized)) return 'SpiritX 至少需要一个可用且 ID 不重复的大语言模型。'
+  if (!modelCatalogValid(normalized)) return 'SpiritX 至少需要一个可用且 ID 不重复的大语言模型，且不能包含非对话模型。'
   const namespaces = await settingsView(ctx)
   const spiritx = namespaces === undefined ? undefined : namespaceOf(namespaces, SPIRITX_SETTINGS_NS)
   const defaults = namespaces === undefined ? undefined : namespaceOf(namespaces, 'agent-default-model')
@@ -214,9 +266,13 @@ export async function provisionSpiritX(
     ? normalizedModels(models)
     : undefined
   if (editedModels !== undefined && !modelCatalogValid(editedModels)) {
-    return 'SpiritX 至少需要一个可用且 ID 不重复的大语言模型。'
+    return 'SpiritX 至少需要一个可用且 ID 不重复的大语言模型，且不能包含非对话模型。'
   }
-  const selectedModels = editedModels ?? discovered.value
+  const advertised = new Map(discovered.value.map(model => [model.id, model]))
+  const selectedModels = editedModels?.map(model => ({ ...model,
+    ...advertised.get(model.id)?.api === undefined ? {} : { api: advertised.get(model.id)!.api! },
+    ...advertised.get(model.id)?.supportsConversation === undefined ? {} : { supportsConversation: advertised.get(model.id)!.supportsConversation! },
+  })) ?? discovered.value
   const selected = firstLanguageModel(selectedModels)
   if (selected === undefined) return 'SpiritX 未返回可用的大语言模型。'
 
@@ -235,7 +291,7 @@ export async function provisionSpiritX(
       api: SPIRITX_API,
       baseURL: SPIRITX_BASE_URL,
       models: editedModels !== undefined
-        ? editedModels.map(modelValue)
+        ? selectedModels.map(modelValue)
         : discovered.value.map(profileModel),
     },
   }])

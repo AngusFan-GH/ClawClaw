@@ -1,0 +1,28 @@
+diff --git a/lib/index.js b/lib/index.js
+index 63d26e90550c1ee7f8ce1dc79d9c3c46be0a3e99..ddd77ba8b5540636663cf54608154c0a397f649f 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -2007,6 +2007,8 @@ let LlmRuntime = (() => {
+ 				seen.add(model.id);
+ 				models.push({
+ 					id: model.id,
++					...model.api === void 0 ? {} : { api: model.api },
++					...model.supportsConversation === void 0 ? {} : { supportsConversation: model.supportsConversation },
+ 					...model.name === void 0 ? {} : { name: model.name },
+ 					...model.contextWindow === void 0 ? {} : { contextWindow: model.contextWindow },
+ 					...model.maxTokens === void 0 ? {} : { maxTokens: model.maxTokens },
+diff --git a/lib/types/types.d.ts b/lib/types/types.d.ts
+index d943b117538f1c52c04a7a6549334288dab3cacd..0dfda7561dfb08b7d960de12eedec66b7485cd58 100644
+--- a/lib/types/types.d.ts
++++ b/lib/types/types.d.ts
+@@ -306,6 +306,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
+  * a surface adopting one of these still owes the capacities its adapter needs.
+  */
+ export interface LlmDiscoveredModel {
++    /** Whether advertised endpoints or model type support conversational inference; absent means unknown. */
++    supportsConversation?: boolean;
++    /** Wire protocol selected from the endpoint capabilities, when advertised. */
++    api?: string;
+     /** Model id the endpoint accepts. */
+     id: string;
+     /** Human-readable name when the endpoint supplies one. */

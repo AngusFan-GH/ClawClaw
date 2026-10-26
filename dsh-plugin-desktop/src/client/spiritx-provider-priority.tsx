@@ -109,6 +109,8 @@ type SpiritXProviderProps = PropsRuntime<'settings.models.provider-card'> & Inje
 function discoveredDraft(model: LlmDiscoveredModel): SpiritXModelDraft {
   return {
     id: model.id,
+    ...model.api === undefined ? {} : { api: model.api },
+    ...model.supportsConversation === undefined ? {} : { supportsConversation: model.supportsConversation },
     ...model.name === undefined ? {} : { name: model.name },
     ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
     ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
@@ -121,7 +123,7 @@ function modelsValid(models: readonly SpiritXModelDraft[]): boolean {
   return ids.length > 0
     && ids.every(id => id.length > 0)
     && new Set(ids).size === ids.length
-    && firstLanguageModel(models) !== undefined
+    && models.every(model => firstLanguageModel([model]) !== undefined)
 }
 
 /** Enforce product-owned card chrome without depending on upstream hashed CSS classes. */

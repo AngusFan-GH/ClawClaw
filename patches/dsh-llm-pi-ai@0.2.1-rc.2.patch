@@ -1,7 +1,47 @@
 diff --git a/lib/index.js b/lib/index.js
+index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..9495b818eb92087e6ba7b01ebdf8363d5ee569cf 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -1047,6 +1047,7 @@
+@@ -686,7 +686,8 @@ function resolveRouteModels(request, validation = "strict") {
+ 		if (seen.has(entry.id)) invalid(provider, `lists model "${entry.id}" more than once`);
+ 		seen.add(entry.id);
+ 		const base = defaults.get(entry.id);
+-		const api = request.api ?? base?.api ?? routeApi;
++		const api = entry.api ?? request.api ?? base?.api ?? routeApi;
++		if (entry.api !== void 0 && !supportedProtocols().includes(entry.api)) invalid(provider, `model "${entry.id}" names unsupported api "${entry.api}"`);
+ 		if (api === void 0) invalid(provider, `model "${entry.id}" needs an api; the installed catalog does not describe it, so set the route's api to the wire protocol its endpoint speaks`);
+ 		const baseUrl = request.baseURL ?? base?.baseUrl ?? providerBaseUrl;
+ 		if (baseUrl === void 0) invalid(provider, `model "${entry.id}" needs a baseURL; the installed catalog does not describe this route`);
+@@ -712,6 +713,7 @@ function resolveRouteModels(request, validation = "strict") {
+ 	};
+ 	const models = [];
+ 	for (const entry of entries) {
++		if (entry.supportsConversation === false) continue;
+ 		let model;
+ 		try {
+ 			model = resolveEntry(entry);
+@@ -934,7 +936,10 @@ function buildProvider(spec) {
+ 		...spec.baseURL === void 0 ? {} : { baseUrl: spec.baseURL },
+ 		auth: routeAuth(spec, catalog),
+ 		models: spec.models,
+-		api: factory()
++		api: {
++			stream: (model, context, options) => PROTOCOLS[model.api]().stream(model, context, options),
++			streamSimple: (model, context, options) => PROTOCOLS[model.api]().streamSimple(model, context, options)
++		}
+ 	});
+ }
+ //#endregion
+@@ -1033,6 +1038,8 @@ const compatProfile = z.object({
+ const reasoningEfforts = z.dict(z.union([z.string(), z.const(null)]), z.union(THINKING_LEVELS));
+ /** The fields a `models` entry and a `modelOverrides` value share; only the id's home differs. */
+ const modelFields = {
++	supportsConversation: z.boolean(),
++	api: z.union(supportedProtocols()),
+ 	name: z.string(),
+ 	contextWindow: z.number().step(1).min(1),
+ 	maxTokens: z.number().step(1).min(1),
+@@ -1047,6 +1054,7 @@ const modelProfile = z.object({
  /** A {@link modelProfile} whose id lives in the `modelOverrides` dict key. */
  const modelOverride = z.object(modelFields);
  const profile = z.object({
@@ -9,7 +49,7 @@ diff --git a/lib/index.js b/lib/index.js
  	apiKeyEnv: z.string().role("credential-ref"),
  	displayName: z.string(),
  	api: z.union(supportedProtocols()),
-@@ -1135,10 +1136,12 @@
+@@ -1135,10 +1143,12 @@ function resolveProfiles(providers, validation = "strict") {
  		const defaultInput = [...source.defaultInput ?? DEFAULT_INPUT];
  		if (defaultInput.length === 0) throw new Error(`llm-pi-ai: provider "${provider}" defaultInput must name at least one modality`);
  		const displayName = source.displayName ?? provider;
@@ -23,7 +63,7 @@ diff --git a/lib/index.js b/lib/index.js
  			catalog = resolveRouteModels({
  				provider,
  				...source.api === void 0 ? {} : { api: source.api },
-@@ -1166,6 +1169,7 @@
+@@ -1166,6 +1176,7 @@ function resolveProfiles(providers, validation = "strict") {
  		const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source;
  		resolved.set(provider, {
  			...rest,
@@ -31,7 +71,112 @@ diff --git a/lib/index.js b/lib/index.js
  			provider,
  			displayName,
  			...apiKeyEnv === void 0 ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
-@@ -2821,7 +2825,7 @@
+@@ -1856,7 +1867,8 @@ var PiAiAdapter = class extends LlmAdapter {
+ 		for (const profile of profiles.values()) if (profile.piProvider !== void 0) models.setProvider(profile.piProvider);
+ 		this.snapshot = {
+ 			profiles,
+-			models
++			models,
++			contextLimits: new Map()
+ 		};
+ 		return this.snapshot;
+ 	}
+@@ -1873,7 +1885,12 @@ var PiAiAdapter = class extends LlmAdapter {
+ 		if (failure !== void 0) throw new LlmError(failure, "INVALID_CONFIG");
+ 		const resolved = snapshot.models.getModel(provider, model);
+ 		if (resolved === void 0) throw new LlmError(`pi-ai provider "${provider}" has no configured model "${model}"`, "UNKNOWN_MODEL");
+-		return resolved;
++		const learned = snapshot.contextLimits.get(JSON.stringify([provider, model]));
++		return learned === void 0 ? resolved : {
++			...resolved,
++			contextWindow: Math.min(resolved.contextWindow, learned),
++			maxTokens: Math.min(resolved.maxTokens, learned)
++		};
+ 	}
+ 	providerInfo(provider) {
+ 		return {
+@@ -1935,6 +1952,41 @@ var PiAiAdapter = class extends LlmAdapter {
+ 		return this.streamWithSnapshot(options, this.current());
+ 	}
+ 	async *streamWithSnapshot(options, snapshot) {
++		// A gateway can advertise a different capacity than its active upstream.
++		// Learn only an explicit server limit, before any visible output, and
++		// retry once with a fresh SDK budget. Never repeat partial generations.
++		for (let attempt = 0; attempt < 2; attempt++) {
++			const pendingUsage = [];
++			let emitted = false;
++			let retry = false;
++			for await (const chunk of this.streamOnceWithSnapshot(options, snapshot)) {
++				if (!emitted && attempt === 0 && !options.signal?.aborted && chunk.type === "finish"
++					&& chunk.reason.kind === "error" && chunk.reason.failure.code === CONTEXT_WINDOW_EXCEEDED_CODE) {
++					const match = chunk.reason.failure.message.match(/maximum context length (?:is|of)\s+([\d,]+)\s+tokens/i);
++					const capacity = match === null ? NaN : Number(match[1].replaceAll(",", ""));
++					const model = this.modelOf(snapshot, options.provider, options.model);
++					if (Number.isSafeInteger(capacity) && capacity > 0 && capacity < model.contextWindow) {
++						snapshot.contextLimits.set(JSON.stringify([options.provider, options.model]), capacity);
++						retry = true;
++						break;
++					}
++				}
++				if (!emitted && chunk.type === "usage") {
++					pendingUsage.push(chunk);
++					continue;
++				}
++				if (chunk.type !== "finish") emitted = true;
++				yield* pendingUsage;
++				pendingUsage.length = 0;
++				yield chunk;
++			}
++			if (!retry) {
++				yield* pendingUsage;
++				return;
++			}
++		}
++	}
++	async *streamOnceWithSnapshot(options, snapshot) {
+ 		const env_1 = {
+ 			stack: [],
+ 			error: void 0,
+@@ -2329,7 +2381,8 @@ async function readBounded(response, url) {
+ * a working endpoint's catalog. Missing names fall back to the adopted id so
+ * the Web form receives a complete human-readable row.
+ */
+-function readListing(body) {
++function readListing(body, preferredApi) {
++	const paths = { "openai-responses": "/v1/responses", "openai-completions": "/v1/chat/completions", "anthropic-messages": "/v1/messages" };
+ 	const listing = body;
+ 	const data = listing?.data;
+ 	let listed;
+@@ -2350,8 +2403,19 @@ function readListing(body) {
+ 		const name = label(entry?.name, entry?.display_name, entry?.displayName) ?? id;
+ 		const contextWindow = capacity(entry?.contextWindow, entry?.context_window, entry?.context_length, entry?.max_input_tokens, entry?.limit?.context);
+ 		const maxTokens = capacity(entry?.maxOutputTokens, entry?.max_output_tokens, entry?.maxTokens, entry?.max_tokens, entry?.limit?.output, entry?.top_provider?.max_completion_tokens);
++		const endpoints = entry?.supportedEndpointPaths;
++		const modelType = label(entry?.type_code, entry?.modelType);
++		const supportsConversation = Array.isArray(endpoints) && endpoints.length > 0
++			? Object.values(paths).some(path => endpoints.includes(path))
++			: modelType === void 0 ? void 0 : ["LLM", "VLM", "MLLM"].includes(modelType.toUpperCase())
++				? true : /image|embedding|rerank|speech|audio|tts|asr/i.test(modelType) ? false : void 0;
++		const api = Array.isArray(endpoints) && endpoints.length > 0
++			? endpoints.includes(paths[preferredApi]) ? preferredApi : Object.keys(paths).find(protocol => endpoints.includes(paths[protocol]))
++			: void 0;
+ 		models.push({
+ 			id,
++			...api === void 0 ? {} : { api },
++			...supportsConversation === void 0 ? {} : { supportsConversation },
+ 			name,
+ 			...contextWindow === void 0 ? {} : { contextWindow },
+ 			...maxTokens === void 0 ? {} : { maxTokens }
+@@ -2432,7 +2496,7 @@ async function discoverModels(request, storedProfile) {
+ 	} catch (error) {
+ 		throw new LlmError(`${url} did not answer with JSON`, "DISCOVERY_FAILED", { cause: error });
+ 	}
+-	return readListing(body);
++	return readListing(body, api);
+ }
+ //#endregion
+ //#region lib/types/login.js
+@@ -2821,7 +2885,7 @@ const NS = "llm-pi-ai";
  * not mistaken for a route change.
  */
  function registrationFacts(profiles) {
@@ -40,7 +185,7 @@ diff --git a/lib/index.js b/lib/index.js
  		provider,
  		displayName: profile.displayName,
  		retryPolicy: profile.retryPolicy
-@@ -2943,7 +2947,7 @@
+@@ -2943,7 +3007,7 @@ function apply(ctx, config) {
  	const ensureRegistrationFacts = () => {
  		const facts = registrationFacts(profiles());
  		if (deepEqualJson(facts, registeredFacts)) return;
@@ -49,10 +194,26 @@ diff --git a/lib/index.js b/lib/index.js
  		if (registration === void 0) {
  			if (routes.length === 0) {
  				registeredFacts = facts;
+diff --git a/lib/types/catalog.d.ts b/lib/types/catalog.d.ts
+index 73d8b43cdc0ad34a971bcac2629cadc48382563b..d78caf864665ae1e7ccc4d213a8f9bfb8c041afb 100644
+--- a/lib/types/catalog.d.ts
++++ b/lib/types/catalog.d.ts
+@@ -266,6 +266,10 @@ type UpstreamCompat = OpenAICompletionsCompat & OpenAIResponsesCompat & Anthropi
+ export type EveryProfileFieldMatchesUpstream = AssertTrue<PiAiCompatProfile extends Partial<Pick<UpstreamCompat, OfferedCompatField>> ? Partial<Pick<UpstreamCompat, OfferedCompatField>> extends PiAiCompatProfile ? true : false : false>;
+ /** One configured model entry: an id plus the catalog fields it overrides. */
+ export interface PiAiModelProfile {
++    /** False excludes a known non-conversational model from inference and listing. */
++    supportsConversation?: boolean;
++    /** Per-model wire protocol override for mixed-protocol gateways. */
++    api?: string;
+     /** Model id sent to the provider and accepted by {@link GenerateOptions.model}. */
+     id: string;
+     /** Display name for selectors; defaults to the catalog name, then the id. */
 diff --git a/lib/types/config.d.ts b/lib/types/config.d.ts
+index f45d7d97a520ee50a2198357c40bca484c991f1d..2721ee310243b30d2597bb5a8d2d553ac5be09f9 100644
 --- a/lib/types/config.d.ts
 +++ b/lib/types/config.d.ts
-@@ -52,6 +52,8 @@
+@@ -52,6 +52,8 @@ export declare const DEFAULT_INPUT: readonly PiAiModality[];
  export type { PiAiCompatProfile, PiAiModality, PiAiModelOverride, PiAiModelProfile, PiAiReasoningEfforts, PiAiThinkingFormat, } from './catalog.ts';
  /** Configuration for one pi-ai provider route; the `providers` dict key IS the route. */
  export interface PiAiProviderProfile {
@@ -61,7 +222,7 @@ diff --git a/lib/types/config.d.ts b/lib/types/config.d.ts
      /** Credential reference (environment-variable name) resolved per request through `ctx.credentials`. */
      apiKeyEnv?: string;
      /** Name shown by configuration surfaces; defaults to the route key. */
-@@ -193,6 +195,7 @@
+@@ -193,6 +195,7 @@ export type Options = {
  /** Runtime schema for {@link Config}. */
  export declare const Config: z<Schemastery.ObjectS<NoInfer<{
      providers: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -69,7 +230,7 @@ diff --git a/lib/types/config.d.ts b/lib/types/config.d.ts
          apiKeyEnv?: string | null;
          displayName?: string | null;
          api?: string | null;
-@@ -221,6 +224,7 @@
+@@ -221,6 +224,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
          requestImageMaxBytes?: number | null;
          retryPolicy?: RetryPolicyConfig | null;
      } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
@@ -77,7 +238,7 @@ diff --git a/lib/types/config.d.ts b/lib/types/config.d.ts
          apiKeyEnv: z<string, string, "plain">;
          displayName: z<string, string, "plain">;
          api: z<string, string, "plain">;
-@@ -256,6 +260,7 @@
+@@ -256,6 +260,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
      }>>, string>>, "volatile-defined">;
  }>>, Schemastery.ObjectT<NoInfer<{
      providers: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -85,7 +246,7 @@ diff --git a/lib/types/config.d.ts b/lib/types/config.d.ts
          apiKeyEnv?: string | null;
          displayName?: string | null;
          api?: string | null;
-@@ -284,6 +289,7 @@
+@@ -284,6 +289,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
          requestImageMaxBytes?: number | null;
          retryPolicy?: RetryPolicyConfig | null;
      } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
