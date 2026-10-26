@@ -5,9 +5,8 @@ import {
 } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  DesktopMarketProvider, DesktopSettingsApi, DesktopSettingsView,
+  DesktopSettingsApi, DesktopSettingsView,
 } from './desktop-settings-api.ts'
-import type { DesktopSettingsLocaleKey } from './desktop-settings-locales.ts'
 import type { DesktopClientPlatform } from './environment.ts'
 
 /** Browser view of the Host `dsh-desktop` settings namespace. */
@@ -42,77 +41,8 @@ export type DesktopSettingsSectionProps =
   & PropsLocale<'desktop.settings'>
   & InjectFace<DesktopSettingsSectionInjected>
 
-type Translate = DesktopSettingsSectionProps['t']
-type BusyOperation = 'load' | 'select-aa' | 'select-market' | 'material' | 'notification'
+type BusyOperation = 'load' | 'select-aa' | 'material' | 'notification'
 type RestartState = 'none' | 'restarting' | 'required'
-
-function Choice({
-  title,
-  body,
-  aside,
-  selected,
-  reselectable,
-  disabled,
-  action,
-  status,
-  badge,
-}: {
-  title: ReactNode
-  body: ReactNode
-  aside?: ReactNode
-  selected: boolean
-  reselectable?: boolean
-  disabled?: boolean
-  action: () => void
-  status?: ReactNode
-  badge?: ReactNode
-}) {
-  const actionable = disabled !== true && (!selected || reselectable === true)
-  const choose = (): void => {
-    if (actionable) action()
-  }
-  return (
-    <div
-      role="radio"
-      className="dshDesktopSettingsChoice"
-      data-selected={selected ? 'true' : undefined}
-      data-actionable={actionable ? 'true' : undefined}
-      aria-checked={selected}
-      aria-disabled={disabled === true ? 'true' : undefined}
-      tabIndex={disabled === true ? -1 : 0}
-      onClick={choose}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
-        event.preventDefault()
-        choose()
-      }}
-    >
-      <span className="dshDesktopSettingsChoiceCopy">
-        <span className="dshDesktopSettingsChoiceTitle">
-          {title}
-          {badge !== undefined && <span className="dshDesktopSettingsBadge">{badge}</span>}
-          {status !== undefined && <span className="dshDesktopSettingsBadge">{status}</span>}
-        </span>
-        <span className="dshDesktopSettingsChoiceBody">{body}</span>
-      </span>
-      {aside}
-    </div>
-  )
-}
-
-function RepositoryLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a
-      className="dshDesktopSettingsChoiceLink"
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={event => { event.stopPropagation() }}
-    >
-      {children}
-    </a>
-  )
-}
 
 function ToggleRow({
   label,
@@ -146,35 +76,6 @@ function ToggleRow({
         <span className="dshDesktopSettingsToggleKnob" aria-hidden="true" />
       </button>
     </div>
-  )
-}
-
-const MARKET_OPTIONS: readonly {
-  id: DesktopMarketProvider
-  title: DesktopSettingsLocaleKey
-  body: DesktopSettingsLocaleKey
-}[] = [
-  { id: 'disabled', title: 'marketDisabled', body: 'marketDisabledBody' },
-  { id: 'dsh-market', title: 'dshMarket', body: 'dshMarketBody' },
-]
-
-const DSH_MARKET_URL = 'https://github.com/dsh-market/dsh-market'
-const AWESOME_DSH_PLUGIN_URL = 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin'
-
-function marketTitle(option: (typeof MARKET_OPTIONS)[number], t: Translate): ReactNode {
-  if (option.id === 'dsh-market') {
-    return <RepositoryLink href={DSH_MARKET_URL}>{t(option.title)}</RepositoryLink>
-  }
-  return t(option.title)
-}
-
-function marketBody(option: (typeof MARKET_OPTIONS)[number], t: Translate): ReactNode {
-  if (option.id !== 'dsh-market') return t(option.body)
-  return (
-    <>
-      {t(option.body)}{' '}
-      <RepositoryLink href={AWESOME_DSH_PLUGIN_URL}>awesome-dsh-plugin</RepositoryLink>
-    </>
   )
 }
 
@@ -229,7 +130,6 @@ export function DesktopSettingsSection({
     }
   }, [])
 
-  const requestRestart = (): void => { setRestart('restarting') }
   const settingsWritable = view !== undefined
   const preferences = view?.preferences
   const notificationValue = preferences?.notifications ?? {
@@ -238,17 +138,6 @@ export function DesktopSettingsSection({
     notifyOnTurnFailure: true,
     notifyOnJobCompletion: true,
     notifyOnJobFailure: true,
-  }
-
-  const selectMarket = (provider: DesktopMarketProvider): void => {
-    void run('select-market', async () => {
-      const response = await api.selectMarket(provider)
-      setView(current => current === undefined ? current : {
-        ...current,
-        market: { requested: provider, effective: current.market.effective, legacyDefaulted: false },
-      })
-      if (response.restartRequired) requestRestart()
-    })
   }
 
   const setMaterial = (next: string): void => {
@@ -297,35 +186,6 @@ export function DesktopSettingsSection({
           <button type="button" className="dshDesktopSettingsButton" onClick={() => { void load() }}>{t('retry')}</button>
         </div>
       )}
-
-      <section className="dshDesktopSettingsGroup" aria-labelledby="dsh-desktop-market-title">
-        <div>
-          <h3 id="dsh-desktop-market-title">{t('marketTitle')}</h3>
-          <p className="dshDesktopSettingsGroupIntro">{t('marketIntro')}</p>
-        </div>
-        {view?.market.legacyDefaulted === true && <p className="dshDesktopSettingsNotice">{t('legacyMarketNotice')}</p>}
-        {view !== undefined && view.market.requested !== view.market.effective && restart === 'none' && (
-          <p className="dshDesktopSettingsNotice" role="status">{t('marketLoadFailed')}</p>
-        )}
-        {view !== undefined && (
-          <div className="dshDesktopSettingsList" role="radiogroup" aria-labelledby="dsh-desktop-market-title">
-            {MARKET_OPTIONS.map(option => (
-              <Choice
-                key={option.id}
-                title={marketTitle(option, t)}
-                                body={marketBody(option, t)}
-                selected={view.market.requested === option.id}
-                reselectable={view.market.requested === option.id && view.market.requested !== view.market.effective}
-                disabled={busy !== undefined || restart !== 'none'}
-                action={() => { selectMarket(option.id) }}
-                status={view.market.requested === option.id && view.market.requested !== view.market.effective
-                    ? t('retryMarket')
-                    : view.market.requested === option.id ? t('selected') : undefined}
-              />
-            ))}
-          </div>
-        )}
-      </section>
 
       <section className="dshDesktopSettingsGroup" aria-labelledby="dsh-desktop-appearance-title">
         <div>
