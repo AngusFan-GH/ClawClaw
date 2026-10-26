@@ -9,6 +9,7 @@ import { SPIRITX_ONBOARDING_COPY, SPIRITX_ONBOARDING_SHADOW, spiritXCredentialSt
 import { hasUsableSpiritXProfile, provisionSpiritX, SPIRITX_API_KEY_REF } from './spiritx-provisioning.ts'
 
 const LOCALE_NS = 'desktop.spiritx-onboarding'
+const LOADING_FEEDBACK_DELAY_MS = 500
 type Copy = typeof SPIRITX_ONBOARDING_COPY.en
 type CopyKey = keyof Copy
 type CredentialState = { kind: 'loading' } | SpiritXCredentialState
@@ -53,6 +54,7 @@ function ProductOnboardingModal({ title, focusTitle = false, children }: {
 
 export function SpiritXCredential({ complete, loadCredential, storeCredential, t }: CredentialProps): ReactNode {
   const [state, setState] = useState<CredentialState>({ kind: 'loading' })
+  const [showLoading, setShowLoading] = useState(false)
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>()
@@ -67,16 +69,27 @@ export function SpiritXCredential({ complete, loadCredential, storeCredential, t
   useEffect(() => {
     let stale = false
     setState({ kind: 'loading' })
+    setShowLoading(false)
+    // New conversations remount this step. Keep quick checks from opening a modal.
+    const feedbackTimer = setTimeout(() => {
+      if (!stale && !finished.current) setShowLoading(true)
+    }, LOADING_FEEDBACK_DELAY_MS)
     void loadCredential().then(
-      next => { if (!stale && !finished.current) setState(next) },
-      () => { if (!stale && !finished.current) setState({ kind: 'unavailable' }) },
+      next => {
+        clearTimeout(feedbackTimer)
+        if (!stale && !finished.current) setState(next)
+      },
+      () => {
+        clearTimeout(feedbackTimer)
+        if (!stale && !finished.current) setState({ kind: 'unavailable' })
+      },
     )
-    return () => { stale = true }
+    return () => { stale = true; clearTimeout(feedbackTimer) }
   }, [loadCredential, attempt])
   useEffect(() => {
     if (state.kind === 'configured') finish()
   }, [finish, state.kind])
-  if (state.kind === 'configured') return null
+  if (state.kind === 'configured' || (state.kind === 'loading' && !showLoading)) return null
   if (state.kind === 'loading' || state.kind === 'unavailable') return <ProductOnboardingModal title={t('title')} focusTitle>
     <p className="spiritxOnboardingDescription" role={state.kind === 'loading' ? 'status' : 'alert'}>{t(state.kind === 'loading' ? 'loading' : 'unavailable')}</p>
     <p className="spiritxOnboardingDescription">{t('laterHelp')}</p>

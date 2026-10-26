@@ -29,6 +29,7 @@ beforeEach(() => {
 })
 afterEach(async () => {
   await act(async () => { root.unmount() })
+  vi.useRealTimers()
   document.body.replaceChildren()
   vi.unstubAllGlobals()
 })
@@ -61,6 +62,43 @@ describe('model onboarding flow', () => {
     expect(document.querySelector('form')).toBeNull()
   })
 
+  it('keeps quick configured checks silent across new-conversation remounts', async () => {
+    vi.useFakeTimers()
+    for (let conversation = 0; conversation < 2; conversation++) {
+      let finishLoad!: (state: SpiritXCredentialState) => void
+      const props = await render({ loadCredential: () => new Promise(resolve => { finishLoad = resolve }) })
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
+      await act(async () => { vi.advanceTimersByTime(100) })
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
+      await act(async () => { finishLoad({ kind: 'configured' }) })
+      await act(async () => { vi.advanceTimersByTime(1000) })
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
+      expect(props.complete).toHaveBeenCalledOnce()
+      await act(async () => { root.render(null) })
+    }
+  })
+
+  it('shows the credential form immediately when configuration is missing', async () => {
+    vi.useFakeTimers()
+    const props = await render()
+    expect(document.querySelector('input[type="password"]')).not.toBeNull()
+    expect(props.complete).not.toHaveBeenCalled()
+    await act(async () => { vi.advanceTimersByTime(1000) })
+    expect(document.querySelector('input[type="password"]')).not.toBeNull()
+    expect(document.querySelector('[role="status"]')).toBeNull()
+  })
+
+  it('cancels loading feedback and ignores results after unmount', async () => {
+    vi.useFakeTimers()
+    let finishLoad!: (state: SpiritXCredentialState) => void
+    const props = await render({ loadCredential: () => new Promise(resolve => { finishLoad = resolve }) })
+    await act(async () => { root.render(null) })
+    expect(vi.getTimerCount()).toBe(0)
+    await act(async () => { finishLoad({ kind: 'configured' }); vi.advanceTimersByTime(1000) })
+    expect(props.complete).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
   it('keeps failed loads visible and retries instead of silently marking setup complete', async () => {
     const loadCredential = vi.fn<Props['loadCredential']>()
       .mockRejectedValueOnce(new Error('offline'))
@@ -78,8 +116,12 @@ describe('model onboarding flow', () => {
   })
 
   it('allows entering the app while a configuration check is still pending', async () => {
+    vi.useFakeTimers()
     let finishLoad!: (state: SpiritXCredentialState) => void
     const props = await render({ loadCredential: () => new Promise(resolve => { finishLoad = resolve }) })
+    await act(async () => { vi.advanceTimersByTime(499) })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    await act(async () => { vi.advanceTimersByTime(1) })
     expect(document.querySelector('[role="status"]')?.textContent).toBe(copy.loading)
     await act(async () => { button(copy.later).click(); button(copy.later).click() })
     await act(async () => { finishLoad({ kind: 'configured' }) })
