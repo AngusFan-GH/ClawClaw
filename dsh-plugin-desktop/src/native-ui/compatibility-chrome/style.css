@@ -6,7 +6,7 @@
   --dsw-alias-border-l1: #e3e3e3;
   --dsw-alias-border-l2: #d5d5d5;
   --dsw-alias-interactive-bg-hover: #0000000f;
-  --dsw-alias-brand-primary: #536dfe;
+  --dsw-alias-brand-primary: #1677ff;
   --dsw-alias-state-error-primary: #d93025;
   --dsh-desktop-frame-fill: var(--dsw-alias-bg-layer-1);
 }
@@ -20,6 +20,7 @@
     --dsw-alias-border-l2: #383838;
     --dsw-alias-interactive-bg-hover: #ffffff0f;
     --dsw-alias-state-error-primary: #ff8080;
+    --dsw-alias-brand-primary: #1668dc;
   }
 }
 html, body, #root { background: transparent; font-size: 13px; }

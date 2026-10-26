@@ -40,11 +40,11 @@ export function installSelectionQuoteStyles(): void {
 .clawSelectionQuoteToolbar button:hover,
 .clawSelectionQuoteCard button:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); }
 .clawSelectionQuoteToolbar button:focus-visible,
-.clawSelectionQuoteCard button:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #2563eb); outline-offset: 1px; }
+.clawSelectionQuoteCard button:focus-visible { outline: 2px solid var(--dsh-color-accent); outline-offset: 1px; }
 .clawSelectionQuoteToolbar svg { width: 14px; height: 14px; flex: none; }
 .clawSelectionQuoteOverlay { display: contents; }
 .clawSelectionQuoteDivider { width: 1px; height: 18px; background: var(--dsw-alias-border-l2, rgba(0, 0, 0, .14)); }
-.clawSelectionQuotePrimary { color: var(--dsw-alias-state-business-primary, #2563eb) !important; }
+.clawSelectionQuotePrimary { color: var(--dsh-color-accent) !important; }
 [data-composer-chip="desktop-selection-quote"] { position: absolute !important; width: 0 !important; height: 0 !important; overflow: hidden !important; opacity: 0 !important; pointer-events: none !important; }
 [data-composer-card].clawSelectionQuoteComposer { padding-top: calc(12px + var(--claw-selection-quote-height)); }
 .clawSelectionQuoteCards {
@@ -66,13 +66,13 @@ export function installSelectionQuoteStyles(): void {
   align-items: start;
   padding: 8px 10px;
   border: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, .09));
-  border-left: 3px solid var(--dsw-alias-state-business-primary, #2563eb);
+  border-left: 3px solid var(--dsh-color-accent);
   border-radius: 6px;
   color: var(--dsw-alias-label-primary, #171717);
   background: var(--dsw-alias-bg-layer-2, #f7f7f7);
 }
 .clawSelectionQuoteCard > svg,
-.clawSelectionQuoteHistoryCard > svg { width: 15px; height: 15px; margin-top: 2px; color: var(--dsw-alias-state-business-primary, #2563eb); }
+.clawSelectionQuoteHistoryCard > svg { width: 15px; height: 15px; margin-top: 2px; color: var(--dsh-color-accent); }
 .clawSelectionQuoteCard span,
 .clawSelectionQuoteHistoryCard span { display: block; color: var(--dsw-alias-label-caption, #777); font-size: 11px; line-height: 16px; }
 .clawSelectionQuoteCard p,
@@ -85,7 +85,7 @@ export function installSelectionQuoteStyles(): void {
 .clawSelectionQuoteHistoryCard { grid-template-columns: 18px minmax(0, 1fr); width: 100%; background: var(--dsw-specific-input-major, #f7f7f7); }
 .clawSelectionQuoteHistoryLink { grid-template-columns: 18px minmax(0, 1fr) 18px; border: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, .09)); font: inherit; letter-spacing: 0; text-align: left; cursor: pointer; }
 .clawSelectionQuoteHistoryLink:hover { background: var(--dsw-alias-interactive-bg-hover-solid, #f0f0f0); }
-.clawSelectionQuoteHistoryLink:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary, #2563eb)); outline-offset: 2px; }
+.clawSelectionQuoteHistoryLink:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, var(--dsh-color-accent)); outline-offset: 2px; }
 .clawSelectionQuoteLocateIcon { align-self: center; color: var(--dsw-alias-label-tertiary, #777) !important; }
 /* Follow upstream user-bubble typography, including Appearance font-size changes. */
 .clawSelectionQuoteHistoryBubble { box-sizing: border-box; max-width: 100%; padding: 10px 14px; border-radius: 8px; font-size: var(--dsh-content-font-size, 14px); line-height: calc(22px + var(--dsh-content-font-delta, 0px)); color: var(--dsw-alias-label-primary, #171717); background: var(--dsw-alias-bg-layer-2, #f2f3f5); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -97,13 +97,13 @@ export function installSelectionQuoteStyles(): void {
 .clawSelectionQuoteHistoryActions time { margin-right: 12px; font-size: var(--dsh-content-font-size-secondary, 13px); line-height: 24px; white-space: nowrap; }
 .clawSelectionQuoteHistoryActions button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 6px; border: 0; border-radius: var(--dsw-radius-sm, 6px); color: inherit; background: transparent; cursor: pointer; }
 .clawSelectionQuoteHistoryActions button:hover { color: var(--dsw-alias-label-secondary, #555); background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.06)); }
-.clawSelectionQuoteHistoryActions button:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary, #2563eb)); outline-offset: 1px; }
+.clawSelectionQuoteHistoryActions button:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, var(--dsh-color-accent)); outline-offset: 1px; }
 .clawSelectionQuoteHistoryActions svg { width: 15px; height: 15px; }
-.clawSelectionQuoteSourceMark { border-radius: 2px; color: inherit; background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 16%, transparent); box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 55%, transparent); }
+.clawSelectionQuoteSourceMark { border-radius: 2px; color: inherit; background: color-mix(in srgb, var(--dsh-color-accent) 16%, transparent); box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--dsh-color-accent) 55%, transparent); }
 .clawSelectionQuoteSourceFlash { animation: claw-selection-quote-flash 1.5s ease-out; }
 @keyframes claw-selection-quote-flash {
-  0%, 30% { background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 36%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 18%, transparent); }
-  100% { background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 16%, transparent); box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 55%, transparent); }
+  0%, 30% { background: color-mix(in srgb, var(--dsh-color-accent) 36%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsh-color-accent) 18%, transparent); }
+  100% { background: color-mix(in srgb, var(--dsh-color-accent) 16%, transparent); box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--dsh-color-accent) 55%, transparent); }
 }
 @media (hover: hover) {
   :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering']):has(~ :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering'])) .clawSelectionQuoteHistoryActions { opacity: 0; transition: opacity 80ms ease; }
@@ -132,18 +132,18 @@ body[data-ds-dark-theme] .clawSelectionQuoteToolbar { box-shadow: 0 8px 24px rgb
   margin: 0 auto;
   padding: 9px 10px;
   box-sizing: border-box;
-  border-left: 3px solid var(--dsw-alias-state-business-primary, #2563eb);
+  border-left: 3px solid var(--dsh-color-accent);
   border-radius: var(--dsw-radius-sm, 8px);
   background: var(--dsw-alias-bg-layer-2, #f7f7f7);
 }
-.clawSelectionSideChatPreparingQuote > svg { width: 15px; height: 15px; margin-top: 2px; color: var(--dsw-alias-state-business-primary, #2563eb); }
+.clawSelectionSideChatPreparingQuote > svg { width: 15px; height: 15px; margin-top: 2px; color: var(--dsh-color-accent); }
 .clawSelectionSideChatPreparingQuote span { color: var(--dsw-alias-label-caption, #777); font-size: 11px; line-height: 16px; }
 .clawSelectionSideChatPreparingQuote p { display: -webkit-box; margin: 1px 0 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .clawSelectionSideChatSpinner { animation: claw-selection-sidechat-spin .8s linear infinite; }
 .clawSelectionSideChatPreparingStatus,
 .clawSelectionSideChatPreparingError { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--dsw-alias-label-secondary, #666); font-size: 12px; line-height: 18px; }
 .clawSelectionSideChatPreparingStatus svg { width: 14px; height: 14px; }
-.clawSelectionSideChatPreparingError { color: var(--dsw-alias-label-error, #b42318); }
+.clawSelectionSideChatPreparingError { color: var(--dsw-alias-state-error-primary, #b42318); }
 .clawSelectionSideChatPreparingError button,
 .clawSelectionSideChatExpired button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 0; border-radius: 6px; color: inherit; background: transparent; cursor: pointer; font: inherit; letter-spacing: 0; }
 .clawSelectionSideChatPreparingError button:hover,

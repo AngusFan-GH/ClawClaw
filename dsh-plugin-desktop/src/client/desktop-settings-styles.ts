@@ -57,19 +57,19 @@ const CSS = `
 .dshDesktopSettingsChoice[data-actionable="true"] { cursor: pointer; }
 .dshDesktopSettingsChoice[data-actionable="true"]:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .dshDesktopSettingsChoice:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: 2px solid var(--dsh-color-primary);
   outline-offset: 2px;
 }
 .dshDesktopSettingsChoice[data-selected="true"] {
-  border-color: var(--dsw-alias-brand-primary);
-  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+  border-color: var(--dsh-color-accent);
+  box-shadow: 0 0 0 1px var(--dsh-color-primary);
 }
 .dshDesktopSettingsChoice[aria-disabled="true"]:not([data-selected="true"]) { opacity: .58; }
 .dshDesktopSettingsChoiceCopy { display: block; flex: 1; min-width: 0; }
 .dshDesktopSettingsToggleLabel { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .dshDesktopSettingsChoiceAside { flex: 0 0 auto; margin-left: 12px; }
 .dshDesktopSettingsDeleteConfirm { display: flex; align-items: flex-end; flex-direction: column; gap: 8px; max-width: 320px; }
-.dshDesktopSettingsDeleteWarning { color: var(--dsw-alias-state-warning-primary); font-size: 12px; line-height: 1.4; text-align: right; }
+.dshDesktopSettingsDeleteWarning { color: var(--dsw-alias-state-warn-primary); font-size: 12px; line-height: 1.4; text-align: right; }
 .dshDesktopSettingsDeleteActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .dshDesktopSettingsChoiceTitle {
   display: flex;
@@ -87,7 +87,7 @@ const CSS = `
   line-height: 1.5;
 }
 .dshDesktopSettingsChoiceLink {
-  color: var(--dsw-alias-brand-primary);
+  color: var(--dsh-color-accent);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
@@ -139,8 +139,8 @@ const CSS = `
   font-size: 13px;
 }
 .dshDesktopSettingsInput:focus-visible {
-  border-color: var(--dsw-alias-brand-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 20%, transparent);
+  border-color: var(--dsh-color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsh-color-primary) 20%, transparent);
 }
 .dshDesktopSettingsButton {
   flex: 0 0 auto;
@@ -274,11 +274,11 @@ const CSS = `
   transition: background-color var(--ds-transition-duration-fast) var(--ds-ease-in-out);
 }
 .dshDesktopSettingsToggle[aria-checked="true"] {
-  background: var(--dsw-alias-brand-primary);
+  background: var(--dsh-color-primary);
 }
 .dshDesktopSettingsToggle:disabled { cursor: default; opacity: .5; }
 .dshDesktopSettingsToggle:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: 2px solid var(--dsh-color-primary);
   outline-offset: 2px;
 }
 .dshDesktopSettingsToggleKnob {
@@ -286,7 +286,7 @@ const CSS = `
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--dsw-alias-label-primary-foreground);
+  background: var(--dsh-color-on-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, .24);
   transform: translateX(0);
   transition: transform var(--ds-transition-duration-fast) var(--ds-ease-in-out);
@@ -336,7 +336,7 @@ const CSS = `
   width: fit-content;
   max-width: 100%;
   overflow-wrap: anywhere;
-  color: var(--dsw-alias-brand-primary);
+  color: var(--dsh-color-accent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
 }

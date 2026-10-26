@@ -9,7 +9,7 @@ export const REMINDERS_CSS = `
 .dshRemindersPanelHeader>span{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.6}
 .dshRemindersInput{box-sizing:border-box;display:block;field-sizing:content;width:100%;min-height:96px;max-height:260px;resize:vertical;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.65}
 .dshRemindersInput::placeholder{color:var(--dsw-alias-label-secondary);opacity:1}
-.dshRemindersInput:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.dshRemindersInput:focus-visible{outline:2px solid var(--dsh-color-primary);outline-offset:2px}
 .dshRemindersComposerActions{display:flex;align-items:center;justify-content:flex-end;gap:12px}
 .dshRemindersTextButton{min-height:32px;padding:4px 8px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;cursor:pointer}
 .dshRemindersTextButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}

@@ -46,7 +46,7 @@ ${part('dialogField')} input,${part('dialogField')} select {
  border:0.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);
  background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:14px;
 }
-${part('dialogField')} input:focus,${part('dialogField')} select:focus { outline:none;box-shadow:none;border-color:var(--dsw-alias-state-business-primary); }
+${part('dialogField')} input:focus,${part('dialogField')} select:focus { outline:none;box-shadow:none;border-color:var(--dsh-color-accent); }
 ${part('dialogActions')} { gap:8px;margin-top:20px;flex-wrap:wrap; }
 ${part('dialogButton')} {
  display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;
@@ -55,13 +55,13 @@ ${part('dialogButton')} {
  font:inherit;font-size:14px;line-height:22px;cursor:pointer;
 }
 ${part('dialogButton')}:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); }
-${part('dialogButtonPrimary')} { border-color:transparent;background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground); }
-${part('dialogButtonPrimary')}:hover:not(:disabled) { background:var(--dsw-alias-button-primary-hover); }
+${part('dialogButtonPrimary')} { border-color:transparent;background:var(--dsh-color-primary);color:var(--dsh-color-on-primary); }
+${part('dialogButtonPrimary')}:hover:not(:disabled) { background:var(--dsh-color-primary-hover); }
 ${part('dialogButton')}:disabled { opacity:0.4;cursor:default; }
-${anchor} :is(button,input,select):focus-visible { outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px;box-shadow:none; }
+${anchor} :is(button,input,select):focus-visible { outline:2px solid var(--dsh-color-accent);outline-offset:2px;box-shadow:none; }
 ${part('searchBox')} input:focus-visible,${part('dialogField')} :is(input,select):focus-visible { outline:none;box-shadow:none; }
 ${part('searchBox')} { margin:4px 4px 8px;padding:7px 10px;border-width:1px;border-radius:var(--dsw-radius-md); }
-${part('searchBox')}:focus-within { border-color:var(--dsw-alias-state-business-primary); }
+${part('searchBox')}:focus-within { border-color:var(--dsh-color-accent); }
 ${part('item')},${part('footerItem')} { min-height:34px;box-sizing:border-box;padding:8px 10px;border-radius:var(--dsw-radius-md); }
 ${part('itemName')},${part('footerItem')} { font-size:13px;line-height:20px; }
 ${part('itemPath')} { font-size:12px;line-height:18px; }
@@ -76,7 +76,7 @@ ${part('graphMain')} { gap:5px; }
 ${part('graphSubject')} { font-size:13px;font-weight:500;line-height:20px; }
 ${part('graphMeta')} { gap:4px 8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary); }
 ${part('graphRef')} { max-width:180px;padding:1px 7px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px; }
-${part('graphRefCurrent')} { background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground); }
+${part('graphRefCurrent')} { background:var(--dsh-color-primary);color:var(--dsh-color-on-primary); }
 ${part('graphMore')} { min-height:36px;margin-top:12px;font-size:13px;border-radius:var(--dsw-radius-md);border-color:var(--dsw-alias-border-l2); }
 ${part('graphMore')}:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); }
 ${part('managerList')} { margin-top:16px;border-radius:var(--dsw-radius-md);padding:4px;border-color:var(--dsw-alias-border-l1); }
@@ -86,7 +86,7 @@ ${part('managerHeadline')} { flex-wrap:wrap;font-size:13px;line-height:20px; }
 ${part('managerPath')} { font-size:12px;line-height:18px;white-space:normal;overflow-wrap:anywhere; }
 ${part('managerOid')},${part('managerCheck')} { font-size:12px;line-height:18px; }
 ${part('managerBadge')} { font-size:11px;line-height:18px;background:var(--dsw-alias-interactive-bg-hover); }
-${part('managerCheck')} input { accent-color:var(--dsw-alias-brand-primary); }
+${part('managerCheck')} input { accent-color:var(--dsh-color-accent); }
 ${part('managerConfirm')} { flex-wrap:wrap;line-height:20px; }
 @media(max-width:640px) {
  ${anchor} ${dialog} { width:calc(100vw - 24px);padding:20px 16px; }

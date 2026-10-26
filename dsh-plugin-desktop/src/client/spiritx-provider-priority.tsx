@@ -67,7 +67,7 @@ li:has([data-dsh-spiritx-provider]) > div:not(.spiritxProviderEditor):not(:has(>
 .spiritxProviderField { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .spiritxProviderLabel { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; font-weight: 500; }
 .spiritxProviderInput { box-sizing: border-box; width: 100%; min-width: 0; height: 32px; padding: 0 10px; border: .5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; line-height: 20px; }
-.spiritxProviderInput:focus { outline: none; border-color: var(--dsw-alias-state-business-primary); }
+.spiritxProviderInput:focus { outline: none; border-color: var(--dsh-color-accent); }
 .spiritxProviderInput:read-only { color: var(--dsw-alias-label-tertiary); background: transparent; }
 .spiritxProviderCustom { border-top: .5px solid var(--dsw-alias-border-l2); padding-top: 10px; }
 .spiritxProviderSummary { display: flex; align-items: center; gap: 6px; width: fit-content; padding: 2px 4px; margin-left: -4px; border-radius: var(--dsw-radius-sm); cursor: pointer; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; font-weight: 500; list-style: none; }
@@ -90,7 +90,8 @@ li:has([data-dsh-spiritx-provider]) > div:not(.spiritxProviderEditor):not(:has(>
 .spiritxProviderError { margin: 0; color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 18px; }
 .spiritxProviderActions { display: flex; justify-content: flex-end; gap: 8px; }
 .spiritxProviderButton { box-sizing: border-box; height: 36px; padding: 0 14px; border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-md); background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; cursor: pointer; }
-.spiritxProviderButtonPrimary { border: none; background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.spiritxProviderButtonPrimary { border: none; background: var(--dsh-color-primary); color: var(--dsh-color-on-primary); }
+.spiritxProviderButtonPrimary:hover:not(:disabled) { background: var(--dsh-color-primary-hover); }
 .spiritxProviderButton:disabled, .spiritxProviderLink:disabled, .spiritxProviderIcon:disabled { opacity: .4; cursor: default; }
 @media (max-width: 520px) { .spiritxProviderModelRow { grid-template-columns: minmax(0, 1fr) auto auto; } .spiritxProviderModelRow > input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; } .spiritxProviderModelAdvanced { grid-template-columns: 1fr; } .spiritxProviderInputTypes { grid-column: 1; } }
 `

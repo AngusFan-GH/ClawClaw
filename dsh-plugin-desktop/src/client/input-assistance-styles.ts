@@ -42,7 +42,7 @@ button.dshAiOptimizeTrigger { flex:none; white-space:nowrap; color:var(--dsw-ali
 .dshAiOptimizeNotes ul { margin:0; padding-left:20px; font-size:13px; line-height:22px; color:var(--dsw-alias-label-secondary); overflow-wrap:anywhere; }
 .dshAiOptimizeReasoning { margin-top:12px; }
 .dshAiOptimizeReasoning summary { cursor:pointer; font-size:13px; line-height:20px; color:var(--dsw-alias-label-secondary); }
-.dshAiOptimizeReasoning summary:focus-visible { outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary)); outline-offset:2px; }
+.dshAiOptimizeReasoning summary:focus-visible { outline:2px solid var(--dsw-focus-ring-color,var(--dsh-color-accent)); outline-offset:2px; }
 .dshAiOptimizeReasoning pre { margin-top:8px; color:var(--dsw-alias-label-secondary); }
 .dshAiOptimizeProgress { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:13px; line-height:20px; color:var(--dsw-alias-label-secondary); }
 .dshAiOptimizeActions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; width:100%; }

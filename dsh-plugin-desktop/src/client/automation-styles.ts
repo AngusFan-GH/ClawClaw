@@ -1,7 +1,7 @@
 /** Automation surfaces share the host theme and adapt to the panel width. */
 export const AUTOMATION_CSS = `
-.dshAutomationPage{padding:32px clamp(16px,4vw,56px) 48px}
-.dshAutomationPage>.dshCronTasks{max-width:1080px;gap:24px}
+.dshAutomationPage{display:flex;flex-direction:column;min-height:0;container-type:inline-size;padding:32px clamp(16px,4vw,56px) 48px}
+.dshAutomationPage>.dshCronTasks{flex:none;max-width:1080px;gap:24px}
 .dshCronTasks .dshIntegrationsHeader p{max-width:600px;line-height:1.7}
 .dshCronHeaderDescription{max-width:720px;margin-top:6px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.7;overflow-wrap:anywhere}
 .dshCronHeaderPolicy{display:inline;font-size:inherit}
@@ -59,12 +59,31 @@ export const AUTOMATION_CSS = `
 .dshCronRunHeading>span{color:var(--dsw-alias-label-secondary);font-size:12px;font-variant-numeric:tabular-nums}
 .dshCronTasks .dshCronHistoryPanel li p{line-height:1.65}
 .dshCronTasks .dshCronOpenSession{min-height:28px;margin-top:4px}
-.dshCronTasks button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
+.dshCronTasks button:focus-visible{outline:2px solid var(--dsh-color-primary);outline-offset:3px}
 .dshCronTasks .dshCronEditorBody{display:flex;flex-direction:column;gap:16px;min-width:0;margin:0;padding:0;border:0}
 .dshCronTasks .dshIntegrationsError{display:flex;align-items:center;justify-content:space-between;gap:12px;overflow-wrap:anywhere}
 .dshCronTasks .dshCronEditor{max-width:800px;width:100%;align-self:center}
 .dshCronTasks .dshCronFormSection,.dshCronTasks .dshCronScheduleBuilder{padding:20px;gap:16px}
 .dshCronTasks .dshCronEditor textarea{line-height:1.7}
+/* Wide details reserve the remaining panel height for the history list.
+ * The existing single-column page scroll remains unchanged below 721px. */
+@container(min-width:721px){
+ .dshAutomationPage>.dshCronTasksDetail{flex:1;min-height:0;height:100%;padding-bottom:0;overflow:hidden}
+ .dshCronTasksDetail>.dshCronSubHeader,.dshCronTasksDetail>.dshIntegrationsError{flex:none}
+ .dshCronTasksDetail .dshCronDetail{flex:1;min-height:0;overflow:hidden}
+ .dshCronTasksDetail .dshCronDetailTitle{flex:none}
+ .dshCronTasksDetail .dshCronDetailLayout{flex:1;min-height:0;align-items:stretch;overflow:hidden}
+ .dshCronTasksDetail .dshCronOverview{min-height:0;max-height:100%;align-self:start;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+ .dshCronTasksDetail .dshCronDetailContent{min-height:0;overflow:hidden}
+ .dshCronTasksDetail .dshCronInstructions{display:flex;flex:none;flex-direction:column;min-height:0;max-height:40%}
+ .dshCronTasksDetail .dshCronInstructions h3{flex:none}
+ .dshCronTasksDetail .dshCronDetailPrompt{min-height:0;overflow-y:auto;overscroll-behavior:contain}
+ .dshCronTasksDetail .dshCronHistoryPanel{display:flex;flex:1;flex-direction:column;min-height:0;overflow:hidden}
+ .dshCronTasksDetail .dshCronHistoryPanel>header{flex:none}
+ .dshCronTasksDetail .dshCronHistoryPanel ol{flex:1;min-height:0;margin:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+ .dshCronTasksDetail :is(.dshCronOverview,.dshCronDetailPrompt,.dshCronHistoryPanel ol){scrollbar-width:thin;scrollbar-color:var(--dsw-alias-label-tertiary) transparent}
+}
+.dshCronHistoryPanel ol:focus-visible{outline:2px solid var(--dsh-color-accent);outline-offset:-2px}
 @container(max-width:720px){
  .dshCronDetailLayout{grid-template-columns:minmax(0,1fr)}
  .dshCronTasks .dshCronOverview dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}

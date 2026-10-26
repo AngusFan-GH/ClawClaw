@@ -127,7 +127,7 @@ const STYLES = `
 .spiritxOnboardingDescription { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 24px; }
 .spiritxOnboardingField { display: flex; flex-direction: column; gap: 6px; margin-top: 24px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; font-weight: 500; }
 .spiritxOnboardingField input { box-sizing: border-box; width: 100%; height: 32px; padding: 0 10px; border: .5px solid var(--dsw-alias-border-l4); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; }
-.spiritxOnboardingField input:focus { outline: none; border-color: var(--dsw-alias-brand-primary); }
+.spiritxOnboardingField input:focus { outline: none; border-color: var(--dsh-color-accent); }
 .spiritxOnboardingField input::placeholder { color: var(--dsw-alias-label-dimmed); }
 .spiritxOnboardingField input:disabled { cursor: default; opacity: .6; }
 .spiritxOnboardingError { margin: 12px 0 0; color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 18px; }

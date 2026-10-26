@@ -56,6 +56,7 @@ describe('ClawClaw product copy', () => {
       expect(applyWorkspaceDirectoryFlow).toHaveBeenCalledWith(expect.any(Object))
       expect(applyInputSuggestions).toHaveBeenCalledWith(expect.any(Object))
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([
+        'dsh-plugin-desktop: shared appearance',
         'dsh-plugin-desktop: ClawClaw page identity',
         'dsh-plugin-desktop: market integration dictionaries',
         'desktop: selection quote reference codec',

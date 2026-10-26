@@ -5,7 +5,7 @@ export const MCP_CARD_CSS = `
 .dshMcpPage .dshMcpServerCard,.dshMcpPage .dshMcpCatalogCard{display:flex;box-sizing:border-box;min-width:0;min-height:224px;flex-direction:column;gap:14px;padding:24px;border:1px solid var(--dsw-alias-border-l1);border-radius:20px;background:var(--dsw-alias-bg-layer-1);box-shadow:0 4px 20px color-mix(in srgb,var(--dsw-alias-label-primary) 3%,transparent);transition:border-color .16s ease,box-shadow .16s ease}
 .dshMcpPage .dshMcpServerCard:hover,.dshMcpPage .dshMcpCatalogCard:hover{border-color:var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);box-shadow:0 6px 24px color-mix(in srgb,var(--dsw-alias-label-primary) 6%,transparent)}
 .dshMcpPage .dshMcpServerMain,.dshMcpPage .dshMcpCatalogCard .dshIntegrationsMcpHeader{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;gap:12px}
-.dshMcpPage .dshMcpGlyph{width:52px;height:52px;border:0;border-radius:15px;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 12%,var(--dsw-alias-bg-layer-1));color:var(--dsw-alias-brand-primary)}
+.dshMcpPage .dshMcpGlyph{width:52px;height:52px;border:0;border-radius:15px;background:color-mix(in srgb,var(--dsh-color-primary) 12%,var(--dsw-alias-bg-layer-1));color:var(--dsh-color-accent)}
 .dshMcpPage .dshMcpGlyph>svg{width:26px;height:26px}
 .dshMcpConnectorIcon{display:flex;align-self:start;width:52px;height:52px}
 .dshMcpConnectorIcon .dshSkillsCategoryIcon{width:52px;height:52px;border-radius:15px}

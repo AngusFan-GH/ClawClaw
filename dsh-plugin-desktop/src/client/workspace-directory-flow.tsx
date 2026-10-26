@@ -225,7 +225,7 @@ export const DIRECTORY_STYLES = `
 .ccWorkspaceDirectoryPanel button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--dsw-alias-border-l2, #ddd); border-radius: 6px; background: transparent; cursor: pointer; }
 .ccWorkspaceDirectoryPanel button:disabled { opacity: .45; cursor: default; }
 .ccWorkspaceDirectoryPanel button:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-2, #f3f4f5); }
-.ccWorkspaceDirectoryPanel :focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #3370ff); outline-offset: 2px; }
+.ccWorkspaceDirectoryPanel :focus-visible { outline: 2px solid var(--dsh-color-accent); outline-offset: 2px; }
 .ccWorkspaceDirectoryPanel nav { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-height: 28px; margin-bottom: 8px; color: var(--dsw-alias-label-tertiary, #8f959e); }
 .ccWorkspaceDirectoryPanel nav span { display: inline-flex; align-items: center; min-width: 0; max-width: 100%; }
 .ccWorkspaceDirectoryPanel nav button { max-width: 210px; min-width: 0; display: block; overflow: hidden; border: 0; padding: 3px 5px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary, #646a73); text-overflow: ellipsis; white-space: nowrap; text-align: left; }
@@ -251,7 +251,7 @@ export const DIRECTORY_STYLES = `
 .ccWorkspaceDirectoryPanel footer > div { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ccDirectoryNotice { flex: 1; margin: 0; color: var(--dsw-alias-label-tertiary, #8f959e); font-size: 12px; text-align: center; }
 .ccWorkspaceDirectoryPanel label { display: flex; align-items: center; gap: 5px; font-size: 13px; }
-.ccWorkspaceDirectoryPanel .ccDirectoryPrimary { background: var(--dsw-alias-label-primary, #222); color: var(--dsw-alias-bg-layer-1, #fff); }
-.ccWorkspaceDirectoryPanel .ccDirectoryPrimary:hover:not(:disabled) { opacity: .85; background: var(--dsw-alias-label-primary, #222); }
+.ccWorkspaceDirectoryPanel .ccDirectoryPrimary { background: var(--dsh-color-primary); border-color: var(--dsh-color-primary); color: var(--dsh-color-on-primary); }
+.ccWorkspaceDirectoryPanel .ccDirectoryPrimary:hover:not(:disabled) { background: var(--dsh-color-primary-hover); border-color: var(--dsh-color-primary-hover); }
 @media(max-width: 520px) { .ccWorkspaceDirectoryPanel header { padding: 16px; } .ccDirectoryPathMeta { display: block; } .ccDirectoryPathMeta span { display: block; text-align: left; } .ccWorkspaceDirectoryPanel footer { padding: 12px 16px; } .ccDirectoryNotice { flex-basis: 100%; order: 3; text-align: left; } .ccWorkspaceDirectoryPanel footer > div:last-child { margin-left: auto; } }
 `

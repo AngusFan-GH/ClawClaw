@@ -16,7 +16,7 @@ function installStyles(): () => void {
   if (document.getElementById(STYLE_ID) !== null) return () => {}
   const style = document.createElement('style')
   style.id = STYLE_ID
-  style.textContent = `.${BUTTON_CLASS}{margin-right:auto;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;cursor:pointer}.${BUTTON_CLASS}:hover:not(:disabled){color:var(--dsw-alias-danger-primary,#d14343)}.${BUTTON_CLASS}:disabled{opacity:.55;cursor:default}`
+  style.textContent = `.${BUTTON_CLASS}{margin-right:auto;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;cursor:pointer}.${BUTTON_CLASS}:hover:not(:disabled){color:var(--dsw-alias-state-error-primary,#d14343)}.${BUTTON_CLASS}:disabled{opacity:.55;cursor:default}`
   document.head.append(style)
   return () => { style.remove() }
 }

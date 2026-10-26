@@ -1,3 +1,4 @@
+import { installDesktopTheme } from './desktop-theme.ts'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
@@ -129,6 +130,7 @@ export function apply(ctx: ClientContext): void {
   }
   // The Desktop-hosted browser client shares the product identity, while
   // native window services and shell effects require the Electron markers.
+  ctx.effect(() => installDesktopTheme(), 'dsh-plugin-desktop: shared appearance')
   applyClawClawBrand(ctx)
   applyWorkspaceDirectoryFlow(ctx)
   applyMarketIntegration(ctx)
