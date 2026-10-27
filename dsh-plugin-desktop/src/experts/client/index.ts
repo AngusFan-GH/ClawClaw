@@ -1615,7 +1615,7 @@ export function installExpertManagementNavigation(ctx, renderSettingsPanel, inst
   })
 }
 
-export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation', 'sidebarRight']
+export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'remote.commands', 'sessions', 'conversation', 'sidebarRight']
 const SKILL_REFERENCE_SOURCE = 'clawclaw-experts:skills'
 
 export async function apply(ctx: ClientContext): Promise<() => void> {

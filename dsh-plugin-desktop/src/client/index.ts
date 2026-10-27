@@ -108,6 +108,8 @@ export const inject = [
   'locale',
   'connection',
   'remote',
+  // Experts is applied directly with this context and checks Skill/command collisions.
+  'remote.commands',
   'remote.credentials',
   'remote.llm',
   'remote.settings',
