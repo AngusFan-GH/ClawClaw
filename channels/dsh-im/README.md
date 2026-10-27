@@ -34,4 +34,6 @@ corepack pnpm --filter @clawclaw/dsh-im run check
 
 The package delegates channel protocol behavior to `@xmanrui/dsh-im`. Keep its pinned version, local build patches, tests, and [third-party notices](THIRD_PARTY_NOTICES.md) aligned. Do not put provider credentials in source, test fixtures, logs, or issues.
 
+The local build adapts the pinned channel sources and their bilingual dictionaries to use ClawClaw for welcome messages, connection tests, status, card prompts, and settings copy. This operates on product source text before bundling, preserving runtime user messages, model replies, and custom bot names. Protocol identifiers remain unchanged; upstream and installed dependency files are not edited.
+
 See the product [user guide](../../docs/user-guide.en.md), [data handling](../../PRIVACY.md), and package [manifest](package.json).

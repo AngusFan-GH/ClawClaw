@@ -706,14 +706,14 @@ var EN = Object.freeze({
   "\u542F\u7528 macOS \u539F\u751F iMessage": "Enable native macOS iMessage",
   "\u652F\u6301\u540C\u8D26\u53F7\u81EA\u804A\uFF1A\u5728 iPhone \u6216 Mac \u4E0A\u7ED9\u81EA\u5DF1\u5DF2\u767B\u5F55\u7684 iMessage \u90AE\u7BB1\u6216\u53F7\u7801\u53D1\u6307\u4EE4\u3002AI \u56DE\u590D\u4EE5 \u{1F916} DSH \u5F00\u5934\uFF0C\u4E0D\u4F1A\u518D\u6B21\u89E6\u53D1\u673A\u5668\u4EBA\u3002": "Self-chat is supported: send instructions from your iPhone or Mac to your signed-in iMessage email or phone number. AI replies start with \u{1F916} DSH and do not trigger the bot again.",
   "\u68C0\u67E5\u6743\u9650\u5E76\u542F\u7528": "Check permissions and enable",
-  "DeepSeek Harness \u901A\u8FC7 macOS Messages.app \u6536\u53D1\u6587\u672C\u6D88\u606F\u3002\u9996\u6B21\u4F7F\u7528\u9700\u8981\u6388\u4E88\u4EE5\u4E0B\u6743\u9650\uFF1A": "DeepSeek Harness sends and receives messages through macOS Messages.app. The following permissions are required the first time:",
+  "ClawClaw \u901A\u8FC7 macOS Messages.app \u6536\u53D1\u6587\u672C\u6D88\u606F\u3002\u9996\u6B21\u4F7F\u7528\u9700\u8981\u6388\u4E88\u4EE5\u4E0B\u6743\u9650\uFF1A": "ClawClaw sends and receives messages through macOS Messages.app. The following permissions are required the first time:",
   "\u2713 \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u5DF2\u6388\u4E88": "\u2713 Full Disk Access granted",
   "1. \u6388\u4E88\u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650": "1. Grant Full Disk Access",
-  "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u201D\u4E2D\uFF0C\u6253\u5F00\u8FD0\u884C DeepSeek Harness \u7684\u7EC8\u7AEF\u6216\u5E94\u7528\u3002": "In System Settings \u2192 Privacy & Security \u2192 Full Disk Access, enable the terminal or app running DeepSeek Harness.",
+  "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u201D\u4E2D\uFF0C\u6253\u5F00\u8FD0\u884C ClawClaw \u7684\u7EC8\u7AEF\u6216\u5E94\u7528\u3002": "In System Settings \u2192 Privacy & Security \u2192 Full Disk Access, enable the terminal or app running ClawClaw.",
   "\u6253\u5F00\u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u8BBE\u7F6E": "Open Full Disk Access settings",
   "\u2713 Messages \u81EA\u52A8\u5316\u6743\u9650\u5DF2\u6388\u4E88": "\u2713 Messages automation granted",
   "2. \u5141\u8BB8\u81EA\u52A8\u5316\u63A7\u5236 Messages": "2. Allow automation control of Messages",
-  "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u81EA\u52A8\u5316\u201D\u4E2D\uFF0C\u5141\u8BB8\u8FD0\u884C DeepSeek Harness \u7684\u5E94\u7528\u63A7\u5236 Messages\u3002": "In System Settings \u2192 Privacy & Security \u2192 Automation, allow the app running DeepSeek Harness to control Messages.",
+  "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u81EA\u52A8\u5316\u201D\u4E2D\uFF0C\u5141\u8BB8\u8FD0\u884C ClawClaw \u7684\u5E94\u7528\u63A7\u5236 Messages\u3002": "In System Settings \u2192 Privacy & Security \u2192 Automation, allow the app running ClawClaw to control Messages.",
   "\u6253\u5F00\u81EA\u52A8\u5316\u8BBE\u7F6E": "Open Automation settings",
   "\u6B63\u5728\u68C0\u67E5\u2026": "Checking\u2026",
   "\u63A5\u5165 macOS \u539F\u751F iMessage": "Connect native macOS iMessage",
@@ -779,7 +779,7 @@ var EN = Object.freeze({
   "\u7FA4\u6210\u5458\u7535\u8BDD\u53F7\u7801\u6216 JID": "Group member phone number or JID",
   "8613800000000 \u6216\u5B8C\u6574 JID": "8613800000000 or a full JID",
   "IM \u6E20\u9053": "IM channels",
-  "\u8BA9 DeepSeek Harness \u89E6\u624B\u53EF\u53CA": "Connecting DeepSeek Harness",
+  "\u8BA9 ClawClaw \u89E6\u624B\u53EF\u53CA": "Connecting ClawClaw",
   "\u5F53\u524D\u7248\u672C": "Current version",
   "DSH-IM \u66F4\u65B0": "DSH-IM update",
   "\u68C0\u67E5\u66F4\u65B0": "Check for updates",
@@ -1314,7 +1314,7 @@ var EN = Object.freeze({
   "\u7B49\u5F85 WhatsApp \u626B\u7801": "Waiting for WhatsApp scan",
   "\u5DF2\u626B\u7801\uFF0C\u6B63\u5728\u8FDE\u63A5 WhatsApp": "Scanned. Connecting WhatsApp",
   "\u6B63\u5728\u5EFA\u7ACB\u5B89\u5168\u7684\u5173\u8054\u8BBE\u5907\u4F1A\u8BDD\u3002": "Creating a secure linked-device session.",
-  "\u5173\u8054\u8BBE\u5907\u6B63\u5728\u63A5\u5165 DeepSeek Harness\u3002": "Linking the device to DeepSeek Harness.",
+  "\u5173\u8054\u8BBE\u5907\u6B63\u5728\u63A5\u5165 ClawClaw\u3002": "Linking the device to ClawClaw.",
   "WhatsApp Web \u5173\u8054\u8BBE\u5907\u8FD0\u884C\u6B63\u5E38": "WhatsApp linked device is healthy",
   "\u67E5\u770B WhatsApp \u8BBF\u95EE\u6A21\u5F0F\u8BF4\u660E": "View WhatsApp access mode details",
   "WhatsApp \u8BBF\u95EE\u6A21\u5F0F": "WhatsApp access mode",
@@ -1410,8 +1410,8 @@ var EN = Object.freeze({
   "\u626B\u7801\u8D26\u53F7\u5FC5\u987B\u5DF2\u52A0\u5165\u4F01\u4E1A/\u7EC4\u7EC7\u3002\u5982\u679C\u9489\u9489\u63D0\u793A\u5C1A\u672A\u52A0\u5165\u7EC4\u7EC7\uFF0C\u8BF7\u5728\u63D0\u793A\u9875\u521B\u5EFA\u7EC4\u7EC7\uFF0C\u6216\u6362\u7528\u5DF2\u52A0\u5165\u7EC4\u7EC7\u7684\u8D26\u53F7\u3002": "The DingTalk account must belong to an organization. If prompted, create an organization or use an account that already belongs to one.",
   "\u8BF7\u5728\u624B\u673A\u4E0A\u6838\u5BF9\u5E76\u786E\u8BA4\u6388\u6743\u3002\u90E8\u5206\u8D26\u53F7\u4F1A\u989D\u5916\u663E\u793A\u4E00\u4E2A\u914D\u5BF9\u6570\u5B57\uFF0C\u9875\u9762\u4F1A\u5728\u9700\u8981\u65F6\u63D0\u793A\u8F93\u5165\u3002": "Review and confirm authorization on your phone. Some accounts may also require a pairing number.",
   "\u6388\u6743\u7531\u9489\u9489\u5B98\u65B9\u9875\u9762\u5B8C\u6210\u3002\u626B\u7801\u8D26\u53F7\u5FC5\u987B\u5DF2\u52A0\u5165\u4E00\u4E2A\u4F01\u4E1A/\u7EC4\u7EC7\u5E76\u6709\u6743\u521B\u5EFA\u673A\u5668\u4EBA\uFF1B\u521B\u5EFA\u6210\u529F\u540E\uFF0C\u5E94\u7528\u51ED\u636E\u4F1A\u76F4\u63A5\u5199\u5165 Harness Host\u3002": "Authorization is completed on DingTalk\u2019s official page. The account must belong to an organization and be allowed to create bots. Credentials are written directly to the Harness Host.",
-  "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 AppID \u6216 AppSecret\u3002\u626B\u7801\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 DeepSeek Harness\u3002": "Scanning is completed on Tencent\u2019s official page. No AppID or AppSecret is required, and the bot connects automatically.",
-  "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 Bot ID \u6216 Secret\u3002\u521B\u5EFA\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 DeepSeek Harness\u3002": "Scanning is completed on Tencent\u2019s official page. No Bot ID or Secret is required, and the bot connects automatically.",
+  "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 AppID \u6216 AppSecret\u3002\u626B\u7801\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 ClawClaw\u3002": "Scanning is completed on Tencent\u2019s official page. No AppID or AppSecret is required, and the bot connects automatically.",
+  "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 Bot ID \u6216 Secret\u3002\u521B\u5EFA\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 ClawClaw\u3002": "Scanning is completed on Tencent\u2019s official page. No Bot ID or Secret is required, and the bot connects automatically.",
   "\u817E\u8BAF\u9875\u9762\u4F1A\u521B\u5EFA\u6216\u7ED1\u5B9A\u4E00\u4E2A QQ \u673A\u5668\u4EBA\uFF0C\u5E76\u628A\u8FDE\u63A5\u51ED\u636E\u5B89\u5168\u4EA4\u7ED9\u672C\u673A Harness Host\u3002": "Tencent will create or connect a QQ bot and securely deliver its credentials to the local Harness Host.",
   "\u4F01\u4E1A\u5FAE\u4FE1\u5B98\u65B9\u9875\u9762\u4F1A\u521B\u5EFA\u4E00\u4E2A\u667A\u80FD\u673A\u5668\u4EBA\uFF0C\u5E76\u628A\u8FDE\u63A5\u51ED\u636E\u5B89\u5168\u4EA4\u7ED9\u672C\u673A Harness Host\u3002": "WeCom will create an AI bot and securely deliver its credentials to the local Harness Host.",
   "\u4ECE\u6B64 Harness \u79FB\u9664\u8FD9\u4E2A\u5FAE\u4FE1\u8D26\u53F7\uFF1F": "Remove this WeChat account from Harness?",
@@ -1425,13 +1425,13 @@ var EN = Object.freeze({
   "\u6B63\u5728\u8BFB\u53D6\u98DE\u4E66\u8FDE\u63A5\u72B6\u6001\u2026": "Loading Feishu connection status\u2026",
   "\u6B63\u5728\u8BFB\u53D6\u5FAE\u4FE1\u8FDE\u63A5\u72B6\u6001\u2026": "Loading WeChat connection status\u2026",
   "\u6B63\u5728\u8BFB\u53D6\u9489\u9489\u8FDE\u63A5\u72B6\u6001\u2026": "Loading DingTalk connection status\u2026",
-  "\u901A\u8FC7\u626B\u7801\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 DeepSeek Harness": "Connect a DingTalk bot to DeepSeek Harness by QR code",
+  "\u901A\u8FC7\u626B\u7801\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 ClawClaw": "Connect a DingTalk bot to ClawClaw by QR code",
   "\u9489\u9489\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u626B\u7801\u7ED1\u5B9A\u8FDB\u5EA6": "DingTalk did not return QR setup progress",
   "\u9489\u9489\u626B\u7801\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u7ED1\u5B9A\u4EFB\u52A1": "DingTalk did not return a valid setup attempt",
   "\u9489\u9489 Stream \u957F\u8FDE\u63A5\u8FD0\u884C\u6B63\u5E38": "DingTalk Stream connection is healthy",
   "\u9489\u9489\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u673A\u5668\u4EBA\u5217\u8868": "DingTalk did not return a valid bot list",
   "${totals.connected} / ${totals.configured} \u5728\u7EBF": "${totals.connected} / ${totals.configured} online",
-  "\u7528\u4E8E\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 DeepSeek Harness \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801": "One-time QR code for connecting a DingTalk bot to DeepSeek Harness",
+  "\u7528\u4E8E\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 ClawClaw \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801": "One-time QR code for connecting a DingTalk bot to ClawClaw",
   "\u4E8C\u7EF4\u7801\u5DF2\u8FC7\u671F\\n\u8BF7\u91CD\u65B0\u751F\u6210": "QR code expired\\nGenerate a new one",
   "\u673A\u5668\u4EBA\u5DF2\u521B\u5EFA\uFF0C\u6B63\u5728\u5EFA\u7ACB\u6D88\u606F\u8FDE\u63A5": "Bot created. Starting the message connection",
   "\u9489\u9489\u626B\u7801\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u5B89\u5168\u7684\u4E8C\u7EF4\u7801": "DingTalk did not return a secure QR code",
@@ -1448,7 +1448,7 @@ var EN = Object.freeze({
   "\u98DE\u4E66\u670D\u52A1\u8FD4\u56DE\u4E86\u672A\u77E5\u7684\u521B\u5EFA\u72B6\u6001": "Feishu returned an unknown creation status",
   "\u5DF2\u63A5\u5165 ${totals.configured} \u4E2A\u673A\u5668\u4EBA\uFF0C\u5176\u4E2D ${totals.connected} \u4E2A\u5728\u7EBF": "${totals.connected} of ${totals.configured} bots online",
   "\u5C1A\u672A\u63A5\u5165\u673A\u5668\u4EBA": "No bot connected yet",
-  "\u7528\u4E8E\u65B0\u589E DeepSeek Harness \u98DE\u4E66\u673A\u5668\u4EBA\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801": "One-time authorization QR code for adding a Feishu bot to DeepSeek Harness",
+  "\u7528\u4E8E\u65B0\u589E ClawClaw \u98DE\u4E66\u673A\u5668\u4EBA\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801": "One-time authorization QR code for adding a Feishu bot to ClawClaw",
   "\u8BF7\u5237\u65B0\u540E\u91CD\u65B0\u626B\u7801": "Refresh and scan again",
   '${connected ? "\u68C0\u67E5\u8FDE\u63A5" : "\u91CD\u8BD5\u8FDE\u63A5"}${bot.name}': '${connected ? "Check connection" : "Reconnect"} ${bot.name}',
   "\u65E0\u6CD5\u8BFB\u53D6\u98DE\u4E66\u673A\u5668\u4EBA": "Could not load Feishu bots",
@@ -1457,7 +1457,7 @@ var EN = Object.freeze({
   "\u5DF2\u53D6\u6D88\u6DFB\u52A0\u673A\u5668\u4EBA\u3002": "Adding the bot was cancelled.",
   "${newBot.bot.name}\u5DF2\u8FDE\u63A5\uFF0C\u53EF\u4EE5\u5728\u98DE\u4E66\u4E2D\u5F00\u59CB\u804A\u5929\u3002": "${newBot.bot.name} is connected and ready to chat in Feishu.",
   "${bot.name}\u64CD\u4F5C\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u673A\u5668\u4EBA\u72B6\u6001\u3002": "${bot.name} operation failed. Check the bot status.",
-  "${bot.name}\u5DF2\u4ECE\u6B64 DeepSeek Harness \u79FB\u9664\uFF1B\u98DE\u4E66\u5F00\u653E\u5E73\u53F0\u4E2D\u7684\u5E94\u7528\u672A\u88AB\u5220\u9664\u3002": "${bot.name} was removed from this DeepSeek Harness. The app in Feishu Open Platform was not deleted.",
+  "${bot.name}\u5DF2\u4ECE\u6B64 ClawClaw \u79FB\u9664\uFF1B\u98DE\u4E66\u5F00\u653E\u5E73\u53F0\u4E2D\u7684\u5E94\u7528\u672A\u88AB\u5220\u9664\u3002": "${bot.name} was removed from this ClawClaw. The app in Feishu Open Platform was not deleted.",
   "\u65E0\u6CD5\u8BFB\u53D6\u8FDE\u63A5\u72B6\u6001": "Could not load connection status",
   "QQ \u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u626B\u7801\u7ED1\u5B9A\u8FDB\u5EA6": "QQ did not return QR setup progress",
   "QQ \u626B\u7801\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u7ED1\u5B9A\u4EFB\u52A1": "QQ did not return a valid setup attempt",
@@ -1499,7 +1499,7 @@ var EN = Object.freeze({
   "\u6D88\u606F\u5904\u7406\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": "Message processing failed. Try again later.",
   "\u5FAE\u4FE1\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u8D26\u53F7\u5217\u8868": "WeChat did not return a valid account list",
   "\u5C1A\u672A\u7ED1\u5B9A\u5FAE\u4FE1": "No WeChat account connected yet",
-  "\u7528\u4E8E\u628A\u5FAE\u4FE1\u673A\u5668\u4EBA\u7ED1\u5B9A\u5230 DeepSeek Harness \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801": "One-time QR code for connecting a WeChat bot to DeepSeek Harness",
+  "\u7528\u4E8E\u628A\u5FAE\u4FE1\u673A\u5668\u4EBA\u7ED1\u5B9A\u5230 ClawClaw \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801": "One-time QR code for connecting a WeChat bot to ClawClaw",
   "\u4FDD\u6301\u672C\u9875\u6253\u5F00\uFF0C\u7B49\u5F85\u6D88\u606F\u957F\u8F6E\u8BE2\u53D8\u4E3A\u5728\u7EBF": "Keep this page open until long polling is online",
   "\u5FAE\u4FE1\u4E8C\u7EF4\u7801\u5DF2\u751F\u6210\uFF0C\u8BF7\u4F7F\u7528\u624B\u673A\u5FAE\u4FE1\u626B\u63CF\u3002": "WeChat QR code generated. Scan it with WeChat on your phone.",
   "\u79FB\u9664\u5931\u8D25\uFF1A${presentError(error).message}": "Removal failed: ${presentError(error).message}",
@@ -1714,10 +1714,10 @@ function translateDynamic(text7) {
   if (match) return `Connect ${channelName(match[1])} bot manually`;
   match = /^(.+) 设置$/.exec(text7);
   if (match) return `${channelName(match[1])} settings`;
-  match = /^从 DeepSeek Harness 移除“(.+)”？$/.exec(text7);
-  if (match) return `Remove \u201C${match[1]}\u201D from DeepSeek Harness?`;
-  match = /^从 DeepSeek Harness 移除(.+)$/.exec(text7);
-  if (match) return `Remove ${match[1]} from DeepSeek Harness`;
+  match = /^从 ClawClaw 移除“(.+)”？$/.exec(text7);
+  if (match) return `Remove \u201C${match[1]}\u201D from ClawClaw?`;
+  match = /^从 ClawClaw 移除(.+)$/.exec(text7);
+  if (match) return `Remove ${match[1]} from ClawClaw`;
   match = /^(.+)的飞书授权流程$/.exec(text7);
   if (match) return `Feishu authorization flow for ${match[1]}`;
   match = /^用于为(.+)补全权限与回调的一次性授权二维码$/.exec(text7);
@@ -1768,7 +1768,7 @@ function translateDynamic(text7) {
   if (match) return `Removal failed: ${match[1]}`;
   const phrases = [
     ["\u4F01\u4E1A\u5FAE\u4FE1", "WeCom"],
-    ["DeepSeek Harness", "DeepSeek Harness"],
+    ["ClawClaw", "ClawClaw"],
     ["WhatsApp", "WhatsApp"],
     ["iMessage", "iMessage"],
     ["macOS Messages", "macOS Messages"],
@@ -1956,172 +1956,7 @@ function callManagementRpc(connection, channel5, method, payload, signal) {
 var React31 = __toESM(require("react"), 1);
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/package.json
-var package_default = {
-  name: "@xmanrui/dsh-im",
-  version: "4.20.2",
-  description: "\u628A\u5341\u4E00\u79CD IM \u6E20\u9053\u548C\u516C\u7F51 AI Office \u63A5\u5165\u672C\u673A DeepSeek Harness\u3002 Connect eleven IM channels and a public AI Office to a local DeepSeek Harness.",
-  keywords: [
-    "deepseek-harness",
-    "dsh",
-    "dsh-plugin",
-    "ai-agent",
-    "im",
-    "instant-messaging",
-    "chatbot",
-    "feishu",
-    "lark",
-    "wechat",
-    "wecom",
-    "dingtalk",
-    "qq",
-    "slack",
-    "telegram",
-    "discord",
-    "whatsapp",
-    "imessage",
-    "ai-office"
-  ],
-  author: "xmanrui (https://github.com/xmanrui)",
-  contributors: [
-    {
-      name: "C3H3-AI",
-      url: "https://github.com/C3H3-AI"
-    },
-    {
-      name: "divingleee",
-      url: "https://github.com/divingleee"
-    },
-    {
-      name: "Chan-0312",
-      url: "https://github.com/Chan-0312"
-    },
-    {
-      name: "BuvkB",
-      url: "https://github.com/BuvkB"
-    },
-    {
-      name: "masucc",
-      url: "https://github.com/masucc"
-    },
-    {
-      name: "cherryFloris",
-      url: "https://github.com/cherryFloris"
-    },
-    {
-      name: "geekyfoxlab",
-      url: "https://github.com/geekyfoxlab"
-    },
-    {
-      name: "grloper",
-      url: "https://github.com/grloper"
-    },
-    {
-      name: "baijian",
-      url: "https://github.com/baijian"
-    },
-    {
-      name: "lyzhu86",
-      url: "https://github.com/lyzhu86"
-    }
-  ],
-  license: "MIT",
-  type: "module",
-  repository: {
-    type: "git",
-    url: "git+https://github.com/xmanrui/dsh-im.git"
-  },
-  homepage: "https://github.com/xmanrui/dsh-im#readme",
-  bugs: {
-    url: "https://github.com/xmanrui/dsh-im/issues"
-  },
-  publishConfig: {
-    access: "public"
-  },
-  bin: {
-    "dsh-im": "bin/dsh-im.mjs"
-  },
-  main: "./lib/index.js",
-  exports: {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
-    "./package.json": "./package.json"
-  },
-  files: [
-    "assets",
-    "bin",
-    "cordis.patch.yml",
-    "lib",
-    "plugin-src",
-    "scripts",
-    "src",
-    "PROACTIVE_DELIVERY.md",
-    "PROACTIVE_DELIVERY.en.md",
-    "LICENSE",
-    "README.md",
-    "README.en.md",
-    "THIRD_PARTY_NOTICES.md"
-  ],
-  dsh: {
-    bundle: {
-      patch: "./cordis.patch.yml"
-    },
-    client: {
-      inject: [
-        "@deepseek-ai/dsh-client-connection",
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-locale"
-      ],
-      platform: "web"
-    },
-    compatibility: {
-      dsh: "0.1.2-alpha.4 || 0.1.2-alpha.5 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1",
-      dshReleases: {
-        "0.1.2-alpha.4": "compatible",
-        "0.1.2-alpha.5": "compatible",
-        "0.1.2-rc.1": "compatible",
-        "0.1.3-alpha.1": "compatible",
-        "0.1.5-alpha.1": "compatible"
-      },
-      profiles: [
-        "web"
-      ]
-    }
-  },
-  scripts: {
-    build: "node plugin-src/client/build.mjs && node plugin-src/host/build.mjs",
-    test: "node --test test/*.test.mjs test/channels/*/*.test.mjs",
-    check: "npm run build && npm test && node scripts/verify-package.mjs"
-  },
-  engines: {
-    node: ">=22.19"
-  },
-  dependencies: {
-    "@tencent-connect/qqbot-connector": "1.2.0",
-    "@tencent-connect/qqbot-nodejs": "1.0.4",
-    "@wecom/aibot-node-sdk": "1.0.7",
-    "dingtalk-stream": "2.1.4",
-    qrcode: "1.5.4",
-    undici: "7.29.0"
-  },
-  devDependencies: {
-    "@deepseek-ai/cordis": "4.0.1",
-    "@larksuiteoapi/node-sdk": "1.73.0",
-    "@whiskeysockets/baileys": "7.0.0-rc14",
-    esbuild: "0.25.9",
-    "https-proxy-agent": "5.0.1",
-    react: "18.3.1",
-    "react-dom": "18.3.1",
-    "react-test-renderer": "18.3.1",
-    semver: "7.8.5"
-  },
-  directories: {
-    doc: "docs",
-    lib: "lib",
-    test: "test"
-  }
-};
+var package_default = { name: "@xmanrui/dsh-im", version: "4.20.2", description: "\u628A\u5341\u4E00\u79CD IM \u6E20\u9053\u548C\u516C\u7F51 AI Office \u63A5\u5165\u672C\u673A ClawClaw\u3002 Connect eleven IM channels and a public AI Office to a local ClawClaw.", keywords: ["deepseek-harness", "dsh", "dsh-plugin", "ai-agent", "im", "instant-messaging", "chatbot", "feishu", "lark", "wechat", "wecom", "dingtalk", "qq", "slack", "telegram", "discord", "whatsapp", "imessage", "ai-office"], author: "xmanrui (https://github.com/xmanrui)", contributors: [{ name: "C3H3-AI", url: "https://github.com/C3H3-AI" }, { name: "divingleee", url: "https://github.com/divingleee" }, { name: "Chan-0312", url: "https://github.com/Chan-0312" }, { name: "BuvkB", url: "https://github.com/BuvkB" }, { name: "masucc", url: "https://github.com/masucc" }, { name: "cherryFloris", url: "https://github.com/cherryFloris" }, { name: "geekyfoxlab", url: "https://github.com/geekyfoxlab" }, { name: "grloper", url: "https://github.com/grloper" }, { name: "baijian", url: "https://github.com/baijian" }, { name: "lyzhu86", url: "https://github.com/lyzhu86" }], license: "MIT", type: "module", repository: { type: "git", url: "git+https://github.com/xmanrui/dsh-im.git" }, homepage: "https://github.com/xmanrui/dsh-im#readme", bugs: { url: "https://github.com/xmanrui/dsh-im/issues" }, publishConfig: { access: "public" }, bin: { "dsh-im": "bin/dsh-im.mjs" }, main: "./lib/index.js", exports: { ".": "./lib/index.js", "./client": "./lib/client.js", "./package.json": "./package.json" }, files: ["assets", "bin", "cordis.patch.yml", "lib", "plugin-src", "scripts", "src", "PROACTIVE_DELIVERY.md", "PROACTIVE_DELIVERY.en.md", "LICENSE", "README.md", "README.en.md", "THIRD_PARTY_NOTICES.md"], dsh: { bundle: { patch: "./cordis.patch.yml" }, client: { inject: ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-slots", "@deepseek-ai/dsh-client-locale"], platform: "web" }, compatibility: { dsh: "0.1.2-alpha.4 || 0.1.2-alpha.5 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1", dshReleases: { "0.1.2-alpha.4": "compatible", "0.1.2-alpha.5": "compatible", "0.1.2-rc.1": "compatible", "0.1.3-alpha.1": "compatible", "0.1.5-alpha.1": "compatible" }, profiles: ["web"] } }, scripts: { build: "node plugin-src/client/build.mjs && node plugin-src/host/build.mjs", test: "node --test test/*.test.mjs test/channels/*/*.test.mjs", check: "npm run build && npm test && node scripts/verify-package.mjs" }, engines: { node: ">=22.19" }, dependencies: { "@tencent-connect/qqbot-connector": "1.2.0", "@tencent-connect/qqbot-nodejs": "1.0.4", "@wecom/aibot-node-sdk": "1.0.7", "dingtalk-stream": "2.1.4", qrcode: "1.5.4", undici: "7.29.0" }, devDependencies: { "@deepseek-ai/cordis": "4.0.1", "@larksuiteoapi/node-sdk": "1.73.0", "@whiskeysockets/baileys": "7.0.0-rc14", esbuild: "0.25.9", "https-proxy-agent": "5.0.1", react: "18.3.1", "react-dom": "18.3.1", "react-test-renderer": "18.3.1", semver: "7.8.5" }, directories: { doc: "docs", lib: "lib", test: "test" } };
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/plugin-src/client/channel-logos.js
 var React2 = __toESM(require("react"), 1);
@@ -4962,7 +4797,7 @@ function Heading({ totals, adding, busy, onAdd, onCredential, credentialOpen, ad
       { className: "ddt-headingCopy" },
       h("div", { className: "ddt-eyebrow" }, "Channel"),
       h("h2", null, "\u9489\u9489\u673A\u5668\u4EBA"),
-      h("p", null, "\u901A\u8FC7\u626B\u7801\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 DeepSeek Harness")
+      h("p", null, "\u901A\u8FC7\u626B\u7801\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 ClawClaw")
     ),
     h(
       "div",
@@ -5061,7 +4896,7 @@ function QrPanel({ provision, now, busy, onRefresh, onCancel }) {
           { className: "ddt-qrFrame dim-qrFrame" },
           source && !imageFailed ? h("img", {
             src: source,
-            alt: "\u7528\u4E8E\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 DeepSeek Harness \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801",
+            alt: "\u7528\u4E8E\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 ClawClaw \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801",
             onError: () => setImageFailed(true)
           }) : h("div", { className: "ddt-qrFallback dim-qrFallback" }, "\u4E8C\u7EF4\u7801\u56FE\u7247\u672A\u5C31\u7EEA\uFF0C\u8BF7\u91CD\u65B0\u751F\u6210\u3002"),
           expired ? h("div", { className: "ddt-expired dim-qrExpired" }, "\u4E8C\u7EF4\u7801\u5DF2\u8FC7\u671F\n\u8BF7\u91CD\u65B0\u751F\u6210") : null
@@ -5195,7 +5030,7 @@ function RemoveConfirmation({ account, busy, onConfirm, onCancel }) {
         if (event.key === "Escape" && !busy) onCancel();
       }
     },
-    h("strong", null, `\u4ECE DeepSeek Harness \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
+    h("strong", null, `\u4ECE ClawClaw \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
     h("p", null, "\u8FD9\u4F1A\u505C\u6B62\u6D88\u606F\u8FDE\u63A5\uFF0C\u5E76\u5220\u9664\u672C\u673A\u4FDD\u5B58\u7684\u5E94\u7528\u51ED\u636E\u3001\u673A\u5668\u4EBA\u914D\u7F6E\u53CA\u4F1A\u8BDD\u6620\u5C04\u3002\u9489\u9489\u5F00\u653E\u5E73\u53F0\u4E2D\u7684\u673A\u5668\u4EBA\u4E0D\u4F1A\u88AB\u81EA\u52A8\u5220\u9664\u3002"),
     h(
       "div",
@@ -6231,7 +6066,7 @@ function createTokenChannelSettings(definition) {
       removing ? h(
         "div",
         { className: "ddt-confirm dim-confirm", role: "alertdialog" },
-        h("strong", null, `\u4ECE DeepSeek Harness \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
+        h("strong", null, `\u4ECE ClawClaw \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
         h("p", null, `\u8FD9\u4F1A\u505C\u6B62\u6D88\u606F\u8FDE\u63A5\uFF0C\u5E76\u5220\u9664\u672C\u673A\u4FDD\u5B58\u7684 ${credentialNoun}\u3001\u673A\u5668\u4EBA\u914D\u7F6E\u53CA\u4F1A\u8BDD\u6620\u5C04\u3002${platformLabel}\u4E2D\u7684\u673A\u5668\u4EBA\u4E0D\u4F1A\u88AB\u81EA\u52A8\u5220\u9664\u3002`),
         h(
           "div",
@@ -7187,7 +7022,7 @@ function QrPane({ provision, now, onRefresh, onCancel, busy }) {
           { className: "bxf-qrFrame dim-qrFrame" },
           qrSource && !imageFailed ? h("img", {
             src: qrSource,
-            alt: repairing ? `\u7528\u4E8E\u4E3A${botName}\u8865\u5168\u6743\u9650\u4E0E\u56DE\u8C03\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801` : grantingGroupMessages ? `\u7528\u4E8E\u4E3A${botName}\u5F00\u901A\u7FA4\u6D88\u606F\u6743\u9650\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801` : "\u7528\u4E8E\u65B0\u589E DeepSeek Harness \u98DE\u4E66\u673A\u5668\u4EBA\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801",
+            alt: repairing ? `\u7528\u4E8E\u4E3A${botName}\u8865\u5168\u6743\u9650\u4E0E\u56DE\u8C03\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801` : grantingGroupMessages ? `\u7528\u4E8E\u4E3A${botName}\u5F00\u901A\u7FA4\u6D88\u606F\u6743\u9650\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801` : "\u7528\u4E8E\u65B0\u589E ClawClaw \u98DE\u4E66\u673A\u5668\u4EBA\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801",
             onError: () => setImageFailed(true)
           }) : h(
             "div",
@@ -7354,7 +7189,7 @@ function RemoveConfirmation2({ bot, busy, onConfirm, onCancel }) {
         }
       }
     },
-    h("h4", { id: titleId }, `\u4ECE DeepSeek Harness \u79FB\u9664\u201C${bot.bot.name}\u201D\uFF1F`),
+    h("h4", { id: titleId }, `\u4ECE ClawClaw \u79FB\u9664\u201C${bot.bot.name}\u201D\uFF1F`),
     h(
       "p",
       { id: descriptionId },
@@ -7633,7 +7468,7 @@ function BotCard({
                 onClick: onRequestRemove,
                 disabled: Boolean(busy),
                 ref: removeButtonRef,
-                "aria-label": `\u4ECE DeepSeek Harness \u79FB\u9664${bot.name}`
+                "aria-label": `\u4ECE ClawClaw \u79FB\u9664${bot.name}`
               }, "\u79FB\u9664\u63A5\u5165")
             ),
             summary2 ? h(
@@ -8245,7 +8080,7 @@ function FeishuSettingsTab({ rpcCall }) {
       if (mountedRef.current && workspaceFence.canCommitMutation(snapshotVersion)) {
         mergeSnapshot(snapshot);
       }
-      announce(`${bot.name}\u5DF2\u4ECE\u6B64 DeepSeek Harness \u79FB\u9664\uFF1B\u98DE\u4E66\u5F00\u653E\u5E73\u53F0\u4E2D\u7684\u5E94\u7528\u672A\u88AB\u5220\u9664\u3002`);
+      announce(`${bot.name}\u5DF2\u4ECE\u6B64 ClawClaw \u79FB\u9664\uFF1B\u98DE\u4E66\u5F00\u653E\u5E73\u53F0\u4E2D\u7684\u5E94\u7528\u672A\u88AB\u5220\u9664\u3002`);
       scheduleAnimationFrame(() => addButtonRef.current?.focus(), "focus");
     } catch (error) {
       setBotError(botId, error);
@@ -9245,7 +9080,7 @@ function EmptyView3({ busy, onStart }) {
           h("span", null, "\u5C1A\u672A\u7ED1\u5B9A QQ \u673A\u5668\u4EBA")
         ),
         h("h3", null, "\u4F7F\u7528\u624B\u673A QQ \u626B\u7801\u521B\u5EFA\u5E76\u7ED1\u5B9A\u673A\u5668\u4EBA"),
-        h("p", null, "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 AppID \u6216 AppSecret\u3002\u626B\u7801\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 DeepSeek Harness\u3002"),
+        h("p", null, "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 AppID \u6216 AppSecret\u3002\u626B\u7801\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 ClawClaw\u3002"),
         h(
           "div",
           { className: "ddt-actions dim-viewActions" },
@@ -9361,7 +9196,7 @@ function RemoveConfirmation3({ account, busy, onConfirm, onCancel }) {
   return h(
     "div",
     { className: "ddt-confirm dim-confirm", role: "alertdialog" },
-    h("strong", null, `\u4ECE DeepSeek Harness \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
+    h("strong", null, `\u4ECE ClawClaw \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
     h("p", null, "\u8FD9\u4F1A\u505C\u6B62\u6D88\u606F\u8FDE\u63A5\uFF0C\u5E76\u5220\u9664\u672C\u673A\u4FDD\u5B58\u7684\u5E94\u7528\u51ED\u636E\u3001\u673A\u5668\u4EBA\u914D\u7F6E\u53CA\u4F1A\u8BDD\u6620\u5C04\u3002\u817E\u8BAF\u5E73\u53F0\u4E2D\u7684\u673A\u5668\u4EBA\u4E0D\u4F1A\u88AB\u81EA\u52A8\u5220\u9664\u3002"),
     h(
       "div",
@@ -10189,8 +10024,8 @@ var React19 = __toESM(require("react"), 1);
 var SLACK_APP_MANIFEST_YAML = `_metadata:
   major_version: 1
 display_information:
-  name: DeepSeek Harness
-  description: Connect Slack conversations to a local DeepSeek Harness agent.
+  name: ClawClaw
+  description: Connect Slack conversations to a local ClawClaw agent.
   background_color: "#4A154B"
 features:
   app_home:
@@ -10198,7 +10033,7 @@ features:
     messages_tab_enabled: true
     messages_tab_read_only_enabled: false
   bot_user:
-    display_name: DeepSeek Harness
+    display_name: ClawClaw
     always_online: false
 oauth_config:
   scopes:
@@ -10685,7 +10520,7 @@ function EmptyView4({ busy, onStart }) {
           h("span", null, "\u5C1A\u672A\u7ED1\u5B9A\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA")
         ),
         h("h3", null, "\u4F7F\u7528\u4F01\u4E1A\u5FAE\u4FE1 App \u626B\u7801\u521B\u5EFA\u667A\u80FD\u673A\u5668\u4EBA"),
-        h("p", null, "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 Bot ID \u6216 Secret\u3002\u521B\u5EFA\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 DeepSeek Harness\u3002"),
+        h("p", null, "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 Bot ID \u6216 Secret\u3002\u521B\u5EFA\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 ClawClaw\u3002"),
         h(
           "div",
           { className: "ddt-actions dim-viewActions" },
@@ -10801,7 +10636,7 @@ function RemoveConfirmation4({ account, busy, onConfirm, onCancel }) {
   return h(
     "div",
     { className: "ddt-confirm dim-confirm", role: "alertdialog" },
-    h("strong", null, `\u4ECE DeepSeek Harness \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
+    h("strong", null, `\u4ECE ClawClaw \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
     h("p", null, "\u8FD9\u4F1A\u505C\u6B62\u6D88\u606F\u8FDE\u63A5\uFF0C\u5E76\u5220\u9664\u672C\u673A\u4FDD\u5B58\u7684\u5E94\u7528\u51ED\u636E\u3001\u673A\u5668\u4EBA\u914D\u7F6E\u53CA\u4F1A\u8BDD\u6620\u5C04\u3002\u4F01\u4E1A\u5FAE\u4FE1\u5E73\u53F0\u4E2D\u7684\u673A\u5668\u4EBA\u4E0D\u4F1A\u88AB\u81EA\u52A8\u5220\u9664\u3002"),
     h(
       "div",
@@ -11711,7 +11546,7 @@ function RemoveConfirmation5({ account, busy, onConfirm, onCancel }) {
   return h(
     "div",
     { className: "ddt-confirm dim-confirm", role: "alertdialog" },
-    h("strong", null, `\u4ECE DeepSeek Harness \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
+    h("strong", null, `\u4ECE ClawClaw \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
     h("p", null, "\u8FD9\u4F1A\u5220\u9664\u672C\u673A\u4FDD\u5B58\u7684\u5E94\u7528\u51ED\u636E\u3001\u56DE\u8C03\u914D\u7F6E\u53CA\u4F1A\u8BDD\u6620\u5C04\u3002\u4F01\u4E1A\u5FAE\u4FE1\u540E\u53F0\u7684\u5E94\u7528\u4E0D\u4F1A\u88AB\u5220\u9664\u3002"),
     h(
       "div",
@@ -12630,7 +12465,7 @@ function QrPanel4({ provision, now, busy, onRefresh, onCancel }) {
           { className: "dxw-qrFrame dim-qrFrame" },
           source && !imageFailed ? h("img", {
             src: source,
-            alt: "\u7528\u4E8E\u628A\u5FAE\u4FE1\u673A\u5668\u4EBA\u7ED1\u5B9A\u5230 DeepSeek Harness \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801",
+            alt: "\u7528\u4E8E\u628A\u5FAE\u4FE1\u673A\u5668\u4EBA\u7ED1\u5B9A\u5230 ClawClaw \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801",
             onError: () => setImageFailed(true)
           }) : h("div", { className: "dxw-qrFallback dim-qrFallback" }, "\u4E8C\u7EF4\u7801\u56FE\u7247\u672A\u5C31\u7EEA\uFF0C\u8BF7\u4F7F\u7528\u5907\u7528\u94FE\u63A5\u3002"),
           expired ? h("div", { className: "dxw-expired dim-qrExpired" }, "\u4E8C\u7EF4\u7801\u5DF2\u8FC7\u671F\n\u8BF7\u91CD\u65B0\u751F\u6210") : null
@@ -13860,7 +13695,7 @@ function ProvisionView3({ provision, busy, onRetry, onClose }) {
       },
       h("div", { className: "ddt-spinner dim-spinner" }),
       h("h3", null, starting ? "\u6B63\u5728\u751F\u6210 WhatsApp \u4E8C\u7EF4\u7801" : "\u5DF2\u626B\u7801\uFF0C\u6B63\u5728\u8FDE\u63A5 WhatsApp"),
-      h("p", null, starting ? "\u6B63\u5728\u5EFA\u7ACB\u5B89\u5168\u7684\u5173\u8054\u8BBE\u5907\u4F1A\u8BDD\u3002" : "\u5173\u8054\u8BBE\u5907\u6B63\u5728\u63A5\u5165 DeepSeek Harness\u3002")
+      h("p", null, starting ? "\u6B63\u5728\u5EFA\u7ACB\u5B89\u5168\u7684\u5173\u8054\u8BBE\u5907\u4F1A\u8BDD\u3002" : "\u5173\u8054\u8BBE\u5907\u6B63\u5728\u63A5\u5165 ClawClaw\u3002")
     );
   }
   const error = provision.error ?? {
@@ -13889,7 +13724,7 @@ function RemoveConfirmation6({ account, busy, onConfirm, onCancel }) {
   return h(
     "div",
     { className: "ddt-confirm dim-confirm", role: "alertdialog" },
-    h("strong", null, `\u4ECE DeepSeek Harness \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
+    h("strong", null, `\u4ECE ClawClaw \u79FB\u9664\u201C${account.bot.name}\u201D\uFF1F`),
     h("p", null, "\u8FD9\u4F1A\u505C\u6B62\u6D88\u606F\u8FDE\u63A5\uFF0C\u5E76\u5220\u9664\u672C\u673A\u4FDD\u5B58\u7684 WhatsApp \u5173\u8054\u8BBE\u5907\u548C\u4F1A\u8BDD\u6620\u5C04\u3002"),
     h(
       "div",
@@ -14398,7 +14233,7 @@ function PermissionPanel({ permissions, busy, error, onSubmit, onCancel }) {
     { className: "ddt-card dim-surfaceCard dim-imessagePermissionPanel" },
     h("h3", null, "\u542F\u7528 macOS \u539F\u751F iMessage"),
     h("p", null, "\u652F\u6301\u540C\u8D26\u53F7\u81EA\u804A\uFF1A\u5728 iPhone \u6216 Mac \u4E0A\u7ED9\u81EA\u5DF1\u5DF2\u767B\u5F55\u7684 iMessage \u90AE\u7BB1\u6216\u53F7\u7801\u53D1\u6307\u4EE4\u3002AI \u56DE\u590D\u4EE5 \u{1F916} DSH \u5F00\u5934\uFF0C\u4E0D\u4F1A\u518D\u6B21\u89E6\u53D1\u673A\u5668\u4EBA\u3002"),
-    h("p", null, "DeepSeek Harness \u901A\u8FC7 macOS Messages.app \u6536\u53D1\u6587\u672C\u6D88\u606F\u3002\u9996\u6B21\u4F7F\u7528\u9700\u8981\u6388\u4E88\u4EE5\u4E0B\u6743\u9650\uFF1A"),
+    h("p", null, "ClawClaw \u901A\u8FC7 macOS Messages.app \u6536\u53D1\u6587\u672C\u6D88\u606F\u3002\u9996\u6B21\u4F7F\u7528\u9700\u8981\u6388\u4E88\u4EE5\u4E0B\u6743\u9650\uFF1A"),
     h(
       "ol",
       { className: "dim-imessagePermissionSteps" },
@@ -14406,14 +14241,14 @@ function PermissionPanel({ permissions, busy, error, onSubmit, onCancel }) {
         "li",
         null,
         h("strong", null, databaseReady ? "\u2713 \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u5DF2\u6388\u4E88" : "1. \u6388\u4E88\u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650"),
-        databaseReady ? null : h("p", null, "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u201D\u4E2D\uFF0C\u6253\u5F00\u8FD0\u884C DeepSeek Harness \u7684\u7EC8\u7AEF\u6216\u5E94\u7528\u3002"),
+        databaseReady ? null : h("p", null, "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u201D\u4E2D\uFF0C\u6253\u5F00\u8FD0\u884C ClawClaw \u7684\u7EC8\u7AEF\u6216\u5E94\u7528\u3002"),
         databaseReady ? null : h("a", { href: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" }, "\u6253\u5F00\u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u8BBE\u7F6E")
       ),
       h(
         "li",
         null,
         h("strong", null, automationReady ? "\u2713 Messages \u81EA\u52A8\u5316\u6743\u9650\u5DF2\u6388\u4E88" : "2. \u5141\u8BB8\u81EA\u52A8\u5316\u63A7\u5236 Messages"),
-        automationReady ? null : h("p", null, "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u81EA\u52A8\u5316\u201D\u4E2D\uFF0C\u5141\u8BB8\u8FD0\u884C DeepSeek Harness \u7684\u5E94\u7528\u63A7\u5236 Messages\u3002"),
+        automationReady ? null : h("p", null, "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u81EA\u52A8\u5316\u201D\u4E2D\uFF0C\u5141\u8BB8\u8FD0\u884C ClawClaw \u7684\u5E94\u7528\u63A7\u5236 Messages\u3002"),
         automationReady ? null : h("a", { href: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation" }, "\u6253\u5F00\u81EA\u52A8\u5316\u8BBE\u7F6E")
       )
     ),
@@ -18537,7 +18372,7 @@ function IMSettingsTab({
             h("strong", { className: "dim-brandName" }, "DSH-IM"),
             h("span", { className: "dim-brandVersion" }, `v${runningVersion}`)
           ),
-          h("p", null, "\u8BA9 DeepSeek Harness \u89E6\u624B\u53EF\u53CA")
+          h("p", null, "\u8BA9 ClawClaw \u89E6\u624B\u53EF\u53CA")
         ),
         h(
           "div",

@@ -34,4 +34,6 @@ corepack pnpm --filter @clawclaw/dsh-im run check
 
 本包把渠道协议行为委托给 `@xmanrui/dsh-im`。固定版本、本地构建补丁、测试和[第三方声明](THIRD_PARTY_NOTICES.md)必须一起维护。不要把供应方凭据写入源码、fixture、日志或 issue。
 
+本地构建会适配固定渠道依赖的源码及中英文词典，将欢迎语、连接测试、状态、卡片提示和设置文案统一为 ClawClaw。适配在打包前处理产品源码文本，保留运行时的用户消息、模型回复和自定义机器人名称。协议标识保持不变，不修改上游或已安装的依赖文件。
+
 参阅产品[用户指南](../../docs/user-guide.md)、[数据处理说明](../../PRIVACY.zh.md)和 package [manifest](package.json)。

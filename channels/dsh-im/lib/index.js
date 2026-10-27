@@ -23738,14 +23738,14 @@ var shared_a_default = {
   "\u6D88\u606F\u5904\u7406\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": "Failed to process the message. Please try again later.",
   "\u5361\u7247\u5DF2\u7ED3\u675F\uFF0C\u8BF7\u67E5\u770B\u540E\u7EED\u6D88\u606F\u3002": "This card has ended. Please check the next message.",
   "\u5DE5\u5177\u8C03\u7528\u300C{name}\u300D\u672A\u6210\u529F\uFF0C\u8BF7\u68C0\u67E5\u5DE5\u5177\u914D\u7F6E\u6216\u7A0D\u540E\u91CD\u8BD5\u3002": 'Tool call "{name}" did not succeed. Check the tool configuration or try again later.',
-  "\u65E0\u6CD5\u8FDE\u63A5\u5904\u7406\u670D\u52A1\uFF0C\u6D88\u606F\u5C1A\u672A\u63D0\u4EA4\u3002\u8BF7\u786E\u8BA4 DeepSeek Harness \u6B63\u5728\u8FD0\u884C\u540E\u91CD\u8BD5\u3002": "Could not connect to the processing service, so the message was not submitted. Make sure DeepSeek Harness is running, then try again.",
+  "\u65E0\u6CD5\u8FDE\u63A5\u5904\u7406\u670D\u52A1\uFF0C\u6D88\u606F\u5C1A\u672A\u63D0\u4EA4\u3002\u8BF7\u786E\u8BA4 ClawClaw \u6B63\u5728\u8FD0\u884C\u540E\u91CD\u8BD5\u3002": "Could not connect to the processing service, so the message was not submitted. Make sure ClawClaw is running, then try again.",
   "\u5904\u7406\u670D\u52A1\u54CD\u5E94\u8D85\u65F6\uFF0C\u6D88\u606F\u5C1A\u672A\u5F00\u59CB\u5904\u7406\u3002\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": "The processing service timed out before the message started. Please try again later.",
   "\u6682\u65F6\u65E0\u6CD5\u786E\u8BA4\u4EFB\u52A1\u72B6\u6001\uFF0C\u4EFB\u52A1\u53EF\u80FD\u5DF2\u7ECF\u5F00\u59CB\u3002\u8BF7\u5148\u7B49\u5F85\u6216\u53D1\u9001 /stop\uFF0C\u4E0D\u8981\u7ACB\u5373\u91CD\u590D\u63D0\u4EA4\u3002": "The task status could not be confirmed and the task may have started. Wait or send /stop before submitting it again.",
   "\u6D88\u606F\u63D0\u4EA4\u7ED3\u679C\u672A\u80FD\u786E\u8BA4\uFF0C\u4EFB\u52A1\u53EF\u80FD\u5DF2\u7ECF\u5F00\u59CB\u3002\u8BF7\u5148\u7B49\u5F85\u6216\u53D1\u9001 /status \u67E5\u770B\u72B6\u6001\uFF0C\u4E0D\u8981\u7ACB\u5373\u91CD\u590D\u63D0\u4EA4\u3002": "The message submission could not be confirmed and the task may have started. Wait or send /status before submitting it again.",
   "\u6682\u65F6\u65E0\u6CD5\u8BFB\u53D6\u4EFB\u52A1\u8FDB\u5EA6\uFF0C\u4EFB\u52A1\u53EF\u80FD\u4ECD\u5728\u8FD0\u884C\u3002\u8BF7\u5148\u7B49\u5F85\u6216\u53D1\u9001 /stop\uFF0C\u4E0D\u8981\u7ACB\u5373\u91CD\u590D\u63D0\u4EA4\u3002": "Task progress is temporarily unavailable and the task may still be running. Wait or send /stop before submitting it again.",
   "\u5904\u7406\u670D\u52A1\u62D2\u7EDD\u4E86\u673A\u5668\u4EBA\u8FDE\u63A5\u3002\u8BF7\u7BA1\u7406\u5458\u68C0\u67E5 Harness \u5730\u5740\u3001\u4EE3\u7406\u6216\u8BBF\u95EE\u914D\u7F6E\u540E\u91CD\u8BD5\u3002": "The processing service rejected the bot connection. Ask an administrator to check the Harness address, proxy, or access settings.",
-  "\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u7684\u63A5\u53E3\u4E0D\u517C\u5BB9\u3002\u8BF7\u7BA1\u7406\u5458\u68C0\u67E5 Harness \u5730\u5740\u5E76\u66F4\u65B0\u76F8\u5173\u7248\u672C\u3002": "The bot and DeepSeek Harness use incompatible APIs. Ask an administrator to check the Harness address and update the related components.",
-  "DeepSeek Harness \u6682\u65F6\u65E0\u6CD5\u5B8C\u6210\u8BF7\u6C42\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": "DeepSeek Harness could not complete the request. Please try again later.",
+  "\u673A\u5668\u4EBA\u4E0E ClawClaw \u7684\u63A5\u53E3\u4E0D\u517C\u5BB9\u3002\u8BF7\u7BA1\u7406\u5458\u68C0\u67E5 Harness \u5730\u5740\u5E76\u66F4\u65B0\u76F8\u5173\u7248\u672C\u3002": "The bot and ClawClaw use incompatible APIs. Ask an administrator to check the Harness address and update the related components.",
+  "ClawClaw \u6682\u65F6\u65E0\u6CD5\u5B8C\u6210\u8BF7\u6C42\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": "ClawClaw could not complete the request. Please try again later.",
   "\u7B49\u5F85\u6A21\u578B\u56DE\u590D\u8D85\u65F6\uFF0C\u4EFB\u52A1\u53EF\u80FD\u4ECD\u5728\u8FD0\u884C\u3002\u8BF7\u5148\u7B49\u5F85\u6216\u53D1\u9001 /stop\uFF0C\u4E0D\u8981\u7ACB\u5373\u91CD\u590D\u63D0\u4EA4\u3002": "Waiting for the model reply timed out and the task may still be running. Wait or send /stop before submitting it again.",
   "\u6A21\u578B\u51ED\u636E\u7F3A\u5931\u6216\u5DF2\u5931\u6548\u3002\u8BF7\u7BA1\u7406\u5458\u68C0\u67E5\u6A21\u578B\u914D\u7F6E\u540E\u91CD\u8BD5\u3002": "The model credentials are missing or invalid. Ask an administrator to check the model settings.",
   "\u6A21\u578B\u989D\u5EA6\u6216\u4F59\u989D\u4E0D\u8DB3\uFF0C\u672C\u6B21\u4EFB\u52A1\u672A\u5B8C\u6210\u3002\u8BF7\u7BA1\u7406\u5458\u8865\u5145\u989D\u5EA6\u6216\u5207\u6362\u6A21\u578B\u540E\u91CD\u8BD5\u3002": "The model quota or balance is insufficient. Ask an administrator to add quota or switch models, then try again.",
@@ -23762,7 +23762,7 @@ var shared_a_default = {
   "\u6A21\u578B\u6CA1\u6709\u8FD4\u56DE\u53EF\u663E\u793A\u7684\u5185\u5BB9\u3002\u8BF7\u91CD\u8BD5\uFF1B\u82E5\u6301\u7EED\u53D1\u751F\uFF0C\u8BF7\u5207\u6362\u6A21\u578B\u3002": "The model returned no displayable content. Try again, or switch models if this keeps happening.",
   "\u6A21\u578B\u62D2\u7EDD\u5904\u7406\u5F53\u524D\u5185\u5BB9\u3002\u8BF7\u8C03\u6574\u95EE\u9898\u5185\u5BB9\u540E\u91CD\u8BD5\u3002": "The model rejected the current content. Revise the request and try again.",
   "\u6A21\u578B\u8FBE\u5230\u8F93\u51FA\u957F\u5EA6\u4E0A\u9650\uFF0C\u4F46\u6CA1\u6709\u751F\u6210\u53EF\u663E\u793A\u7684\u7ED3\u679C\u3002\u8BF7\u7F29\u5C0F\u4EFB\u52A1\u8303\u56F4\u540E\u91CD\u8BD5\u3002": "The model reached its output limit without producing a displayable result. Reduce the task scope and try again.",
-  "\u4EFB\u52A1\u6B63\u5728\u7B49\u5F85\u65E0\u6CD5\u5728\u5F53\u524D\u6E20\u9053\u5B8C\u6210\u7684\u64CD\u4F5C\u3002\u8BF7\u5728 DeepSeek Harness \u4E2D\u5904\u7406\u540E\u518D\u8BD5\u3002": "The task is waiting for an action that cannot be completed in this channel. Handle it in DeepSeek Harness, then try again.",
+  "\u4EFB\u52A1\u6B63\u5728\u7B49\u5F85\u65E0\u6CD5\u5728\u5F53\u524D\u6E20\u9053\u5B8C\u6210\u7684\u64CD\u4F5C\u3002\u8BF7\u5728 ClawClaw \u4E2D\u5904\u7406\u540E\u518D\u8BD5\u3002": "The task is waiting for an action that cannot be completed in this channel. Handle it in ClawClaw, then try again.",
   "\u4EFB\u52A1\u88AB\u610F\u5916\u4E2D\u65AD\uFF0C\u672C\u6B21\u672A\u5B8C\u6210\u3002\u8BF7\u91CD\u8BD5\u3002": "The task was unexpectedly interrupted and did not finish. Please try again.",
   "\u5F53\u524D\u4F1A\u8BDD\u5DF2\u4E0D\u5B58\u5728\u3002\u8BF7\u53D1\u9001 /new \u521B\u5EFA\u65B0\u4F1A\u8BDD\u540E\u91CD\u8BD5\u3002": "The current Session no longer exists. Send /new to create one, then try again.",
   "\u5F53\u524D\u4F1A\u8BDD\u4ECD\u5728\u5904\u7406\u4E0A\u4E00\u9879\u4EFB\u52A1\u3002\u8BF7\u7B49\u5F85\u5B8C\u6210\uFF0C\u6216\u53D1\u9001 /stop \u540E\u91CD\u8BD5\u3002": "The current Session is still processing the previous task. Wait for it to finish, or send /stop before trying again.",
@@ -23784,7 +23784,7 @@ var shared_a_default = {
   "\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u6216\u56FE\u7247\u5373\u53EF\u7EE7\u7EED\u5F53\u524D\u4F1A\u8BDD\u3002": "Send text or an image directly to continue the current session.",
   "\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u3001\u56FE\u7247\u6216\u6587\u4EF6\u5373\u53EF\u7EE7\u7EED\u5F53\u524D\u4F1A\u8BDD\u3002": "Send text, an image, or a file directly to continue the current session.",
   "\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u3001\u56FE\u7247\u3001\u6587\u4EF6\u6216\u5E26\u6587\u5B57\u8BC6\u522B\u7ED3\u679C\u7684\u8BED\u97F3\u5373\u53EF\u7EE7\u7EED\u5F53\u524D\u4F1A\u8BDD\u3002": "Send text, an image, a file, or a voice message already transcribed to text to continue the current session.",
-  "{label}\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002": "The {label} bot is connected to DeepSeek Harness.",
+  "{label}\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 ClawClaw\u3002": "The {label} bot is connected to ClawClaw.",
   "\u67E5\u770B\u6700\u8FD1\u5386\u53F2\u6D88\u606F\uFF08\u4EC5\u79C1\u804A\uFF09": "Show recent history (private chats only)",
   "\u6309\u5E8F\u53F7\u5217\u51FA\u5F53\u524D\u6A21\u578B\u53EF\u7528\u63A8\u7406\u7B49\u7EA7": "List reasoning efforts for the current model by index",
   "\u67E5\u770B\u6216\u5207\u6362\u5F53\u524D\u63A8\u7406\u7B49\u7EA7": "Show or switch the current reasoning effort",
@@ -23838,7 +23838,7 @@ var shared_a_default = {
   "/status  \u68C0\u67E5\u8FDE\u63A5\u72B6\u6001": "/status  Check the connection status",
   "/version  \u67E5\u770B\u63D2\u4EF6\u7248\u672C": "/version  Show the plugin version",
   "/help  \u663E\u793A\u672C\u5E2E\u52A9": "/help  Show this help",
-  "{label}\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002": "The {label} bot is connected to DeepSeek Harness and working normally.",
+  "{label}\u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002": "The {label} bot is connected to ClawClaw and working normally.",
   "{label}\u673A\u5668\u4EBA\u51ED\u636E\u7F3A\u5931\uFF0C\u8BF7\u79FB\u9664\u540E\u91CD\u65B0\u63A5\u5165\u3002": "{label} bot credentials are missing. Remove the bot and connect it again.",
   "{label}\u8FDE\u63A5\u672A\u5C31\u7EEA\uFF0C\u63D2\u4EF6\u4F1A\u81EA\u52A8\u91CD\u8BD5\u3002": "The {label} connection is not ready yet. The plugin will retry automatically.",
   "{label}\u673A\u5668\u4EBA\u5DF2\u63A5\u5165\uFF0C\u6D88\u606F\u8FDE\u63A5\u6682\u672A\u5C31\u7EEA\u3002": "The {label} bot is connected, but its message connection is not ready yet.",
@@ -24079,7 +24079,7 @@ var shared_c_default = {
   "\u8BF7\u7CBE\u51C6\u56DE\u590D\u300C\u6279\u51C6\u300D\u6216\u300C\u62D2\u7EDD\u300D\uFF08\u4E5F\u652F\u6301\uFF1A\u540C\u610F / \u4E0D\u540C\u610F / yes / no\uFF09\u3002": "Please reply exactly with \u300C\u6279\u51C6\u300D (approve) or \u300C\u62D2\u7EDD\u300D (reject). Also accepted: \u540C\u610F / \u4E0D\u540C\u610F / yes / no.",
   "\u8BF7\u5148\u5B8C\u6210\u5F53\u524D\u95EE\u9898\uFF0C\u518D\u7CBE\u51C6\u56DE\u590D\u300C\u6279\u51C6\u300D\u6216\u300C\u62D2\u7EDD\u300D\u3002": "Please finish the current question first, then reply exactly with \u300C\u6279\u51C6\u300D (approve) or \u300C\u62D2\u7EDD\u300D (reject).",
   "\u8BE5\u5BA1\u6279\u5DF2\u5904\u7406\uFF0C\u65E0\u9700\u518D\u6B21\u56DE\u590D\u3002": "This approval has already been handled; no need to reply again.",
-  "DeepSeek Harness \u9700\u8981\u4F60\u7684\u5BA1\u6279\uFF1A": "DeepSeek Harness needs your approval:",
+  "ClawClaw \u9700\u8981\u4F60\u7684\u5BA1\u6279\uFF1A": "ClawClaw needs your approval:",
   "\u5DE5\u5177\uFF1A{tool}": "Tool: {tool}",
   "\u64CD\u4F5C\u53C2\u6570\uFF1A": "Operation parameters:",
   "\u539F\u56E0\uFF1A{reason}": "Reason: {reason}",
@@ -24091,7 +24091,7 @@ var shared_c_default = {
   "\u65E0\u6CD5\u5B8C\u6574\u5C55\u793A\u8FD9\u6B21\u64CD\u4F5C\uFF0C\u5DF2\u5B89\u5168\u62D2\u7EDD\u6B64\u6B21\u5BA1\u6279\u3002": "The operation could not be displayed in full, so this approval was safely rejected.",
   "\u5BA1\u6279\u63D0\u4EA4\u5931\u8D25\uFF0C\u8BF7\u91CD\u65B0\u56DE\u590D\u300C\u6279\u51C6\u300D\u6216\u300C\u62D2\u7EDD\u300D\u3002": "Failed to submit the approval; please reply with \u300C\u6279\u51C6\u300D (approve) or \u300C\u62D2\u7EDD\u300D (reject) again.",
   // harness-question.mjs
-  "DeepSeek Harness \u9700\u8981\u4F60\u8865\u5145\u4FE1\u606F{progress}\uFF1A": "DeepSeek Harness needs more information{progress}:",
+  "ClawClaw \u9700\u8981\u4F60\u8865\u5145\u4FE1\u606F{progress}\uFF1A": "ClawClaw needs more information{progress}:",
   "\u8BF7\u8F93\u5165\u4F60\u7684\u56DE\u7B54\u3002": "Please enter your answer.",
   "\u8BF7\u56DE\u590D\u9009\u9879\u5E8F\u53F7\u6216\u6587\u5B57\uFF1B\u591A\u9009\u7528\u9017\u53F7\u5206\u9694\uFF0C\u4E5F\u53EF\u8865\u5145\u5176\u4ED6\u5185\u5BB9\u3002": "Reply with option numbers or text; separate multiple choices with commas, or add anything else.",
   "\u8BF7\u56DE\u590D\u4E00\u4E2A\u9009\u9879\u5E8F\u53F7\u6216\u6587\u5B57\uFF0C\u4E5F\u53EF\u76F4\u63A5\u8F93\u5165\u5176\u4ED6\u7B54\u6848\u3002": "Reply with an option number or its text, or type your own answer directly.",
@@ -24115,7 +24115,7 @@ var shared_c_default = {
   "\u56FE\u7247\u4E0B\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u65B0\u53D1\u9001\u540E\u518D\u8BD5\u3002": "Image download failed; please resend it and try again.",
   "\u6682\u4E0D\u652F\u6301\u8BE5\u56FE\u7247\u683C\u5F0F\uFF0C\u8BF7\u53D1\u9001 JPEG\u3001PNG\u3001WebP \u6216 GIF \u56FE\u7247\u3002": "This image format is not supported yet; please send a JPEG, PNG, WebP, or GIF image.",
   // connection-test.mjs
-  "\u2705 DeepSeek Harness \u8FDE\u63A5\u6D4B\u8BD5\u6210\u529F": "\u2705 DeepSeek Harness connection test succeeded",
+  "\u2705 ClawClaw \u8FDE\u63A5\u6D4B\u8BD5\u6210\u529F": "\u2705 ClawClaw connection test succeeded",
   "\u8FD9\u6761\u6D88\u606F\u7531\u300CIM\u673A\u5668\u4EBA\u300D\u8BBE\u7F6E\u9875\u4E2D\u7684\u201C{name}\u201D\u673A\u5668\u4EBA\u5361\u7247\u53D1\u51FA\u3002": 'This message was sent from the "{name}" bot card on the IM Bot settings page.',
   "{channelLabel}\u5C1A\u672A\u6536\u5230\u53EF\u7528\u4E8E\u6D4B\u8BD5\u7684\u79C1\u804A\u6D88\u606F\u3002": "The {channelLabel} has not received a direct message that can be used for testing yet.",
   "\u673A\u5668\u4EBA": "bot",
@@ -24168,7 +24168,7 @@ var shared_c_default = {
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/src/channels/shared/i18n-en/feishu.mjs
 var feishu_default = {
   // feishu/bridge.mjs — welcome / help
-  "\u5317\u6C47\u661F\u6CB3 AIOS \u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002": "BeiHui XingHe AIOS is connected to DeepSeek Harness.",
+  "\u5317\u6C47\u661F\u6CB3 AIOS \u5DF2\u8FDE\u63A5 ClawClaw\u3002": "BeiHui XingHe AIOS is connected to ClawClaw.",
   "/repair  \u8865\u5168\u98DE\u4E66\u6743\u9650\u4E0E\u5361\u7247\u56DE\u8C03": "/repair  Complete Feishu permissions and the card callback",
   "/m\uFF08\u6216 /menu\uFF09  \u6253\u5F00\u4EA4\u4E92\u5361\u7247\u83DC\u5355": "/m (or /menu)  Open the interactive card menu",
   "/watch [Session ID \u6216\u5E8F\u53F7]  \u5173\u6CE8\u4F1A\u8BDD\uFF0C\u4EFB\u52A1\u5B8C\u6210\u81EA\u52A8\u63A8\u9001": "/watch [Session ID or index]  Watch a session; completion is pushed automatically",
@@ -24185,9 +24185,9 @@ var feishu_default = {
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u4E3A\u7A7A\uFF0C\u98DE\u4E66\u4E0D\u5141\u8BB8\u53D1\u9001\u7A7A\u6587\u4EF6\u3002": 'The result file "{name}" is empty; Feishu does not allow sending empty files.',
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u6682\u65F6\u88AB\u98DE\u4E66\u9650\u6D41\uFF0C\u672A\u80FD\u53D1\u9001\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": 'The result file "{name}" was temporarily rate-limited by Feishu and could not be sent. Please try again later.',
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u6682\u65F6\u672A\u80FD\u53D1\u9001\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": 'The result file "{name}" was generated but could not be sent right now. Please try again later.',
-  "\u5904\u7406\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002\u5982\u679C\u95EE\u9898\u6301\u7EED\uFF0C\u8BF7\u5728 DeepSeek Harness \u7684\u300CIM\u673A\u5668\u4EBA\u300D\u8BBE\u7F6E\u9875\u68C0\u67E5\u98DE\u4E66\u8FDE\u63A5\u72B6\u6001\u3002": "Message processing failed. Please try again later. If the problem persists, check the Feishu connection status on the IM Bot settings page in DeepSeek Harness.",
+  "\u5904\u7406\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002\u5982\u679C\u95EE\u9898\u6301\u7EED\uFF0C\u8BF7\u5728 ClawClaw \u7684\u300CIM\u673A\u5668\u4EBA\u300D\u8BBE\u7F6E\u9875\u68C0\u67E5\u98DE\u4E66\u8FDE\u63A5\u72B6\u6001\u3002": "Message processing failed. Please try again later. If the problem persists, check the Feishu connection status on the IM Bot settings page in ClawClaw.",
   "\u5DF2\u5F00\u542F\u5168\u65B0 Harness \u4F1A\u8BDD\u3002": "A brand-new Harness session has started.",
-  "\u98DE\u4E66\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002": "The Feishu bot is connected to DeepSeek Harness and working normally.",
+  "\u98DE\u4E66\u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002": "The Feishu bot is connected to ClawClaw and working normally.",
   "\u7528\u6CD5\uFF1A/archived on\uFF08\u5305\u542B\u5F52\u6863\u4F1A\u8BDD\uFF09\u6216 /archived off\uFF08\u9690\u85CF\u5F52\u6863\u4F1A\u8BDD\uFF09": "Usage: /archived on (include archived sessions) or /archived off (hide archived sessions)",
   "\u5DF2\u5F00\u542F\uFF1A\u4F1A\u8BDD\u5217\u8868\u5305\u542B\u5F52\u6863\u4F1A\u8BDD\u3002": "On: the session list includes archived sessions.",
   "\u5DF2\u5173\u95ED\uFF1A\u4F1A\u8BDD\u5217\u8868\u9690\u85CF\u5F52\u6863\u4F1A\u8BDD\u3002": "Off: the session list hides archived sessions.",
@@ -24470,8 +24470,8 @@ var feishu_default = {
 var dingtalk_default = {
   // Bot chat replies and card text (dingtalk-bridge.mjs, dingtalk-card-stream.mjs,
   // dingtalk-api.mjs)
-  "\u5DF2\u8FDE\u63A5 DeepSeek Harness\uFF0C\u6B63\u5728\u601D\u8003\u2026": "Connected to DeepSeek Harness, thinking\u2026",
-  "\u9489\u9489\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002": "The DingTalk bot is connected to DeepSeek Harness.",
+  "\u5DF2\u8FDE\u63A5 ClawClaw\uFF0C\u6B63\u5728\u601D\u8003\u2026": "Connected to ClawClaw, thinking\u2026",
+  "\u9489\u9489\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 ClawClaw\u3002": "The DingTalk bot is connected to ClawClaw.",
   "/m \u6216 /menu  \u6253\u5F00\u4E0B\u62C9\u64CD\u4F5C\u83DC\u5355": "/m or /menu  Open the dropdown action menu",
   "\u4F1A\u8BDD\u6216\u5DE5\u4F5C\u533A\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u53D1\u9001 /m\u3002": "The session or workspace changed. Send /m again.",
   "\u4F1A\u8BDD\u6216\u5DE5\u4F5C\u533A\u5DF2\u53D8\u5316\uFF0C\u83DC\u5355\u5DF2\u5237\u65B0\uFF0C\u8BF7\u91CD\u65B0\u9009\u62E9\u3002": "The session or workspace changed. The menu was refreshed; please select again.",
@@ -24487,7 +24487,7 @@ var dingtalk_default = {
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u9489\u9489\u62D2\u7EDD\u4E86\u8BE5\u6587\u4EF6\u6D88\u606F\uFF0C\u8BF7\u68C0\u67E5\u6587\u4EF6\u7C7B\u578B\u548C\u673A\u5668\u4EBA\u6587\u4EF6\u6D88\u606F\u914D\u7F6E\u3002": `Result file "{name}" was generated, but DingTalk rejected the file message. Check the file type and the bot's file message configuration.`,
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u6682\u65F6\u672A\u80FD\u901A\u8FC7\u9489\u9489\u53D1\u9001\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": 'Result file "{name}" was generated but could not be sent via DingTalk right now. Please try again later.',
   "\u7ED3\u679C\u6587\u4EF6\u5DF2\u751F\u6210\u3002": "The result file has been generated.",
-  "\u9489\u9489\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002": "The DingTalk bot is connected to DeepSeek Harness normally.",
+  "\u9489\u9489\u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002": "The DingTalk bot is connected to ClawClaw normally.",
   // Host-side status and error text (dingtalk-bridge.mjs, dingtalk-runtime.mjs,
   // dingtalk-controller.mjs, config-store.mjs, state-store.mjs)
   "\u9489\u9489\u547D\u4EE4\u5904\u7406\u5931\u8D25\u3002": "Failed to process the DingTalk command.",
@@ -24565,7 +24565,7 @@ var wecom_default = {
   "\u90E8\u5206\u6A21\u578B\u6682\u4E0D\u53EF\u7528\uFF0C\u53EF\u7A0D\u540E\u91CD\u8BD5\u3002": "Some models are unavailable. Try again later.",
   "\u5DE5\u4F5C\u533A\u5DF2\u53D8\u5316\uFF0C\u8BF7\u53D1\u9001 /m \u91CD\u65B0\u6253\u5F00\u83DC\u5355\u540E\u9009\u62E9\u3002": "The workspace changed. Send /m to reopen the menu and select again.",
   // Help text (wecom-bridge.mjs)
-  "\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002": "The Enterprise WeChat bot is connected to DeepSeek Harness.",
+  "\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 ClawClaw\u3002": "The Enterprise WeChat bot is connected to ClawClaw.",
   // Bot replies and status text (wecom-bridge.mjs)
   "\u5F53\u524D\u5F85\u5904\u7406\u56FE\u7247\u8F83\u591A\uFF0C\u8BF7\u7A0D\u540E\u91CD\u65B0\u53D1\u9001\u3002": "Too many images are pending. Please send them again later.",
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u4F01\u4E1A\u5FAE\u4FE1\u667A\u80FD\u673A\u5668\u4EBA\u7F3A\u5C11\u7D20\u6750\u4E0A\u4F20\u6216\u6587\u4EF6\u6D88\u606F\u80FD\u529B\uFF0C\u8BF7\u68C0\u67E5\u673A\u5668\u4EBA\u6743\u9650\u3002": 'The result file "{name}" was generated, but the Enterprise WeChat bot lacks media upload or file message capability. Please check the bot permissions.',
@@ -24576,7 +24576,7 @@ var wecom_default = {
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u6682\u65F6\u672A\u80FD\u901A\u8FC7\u4F01\u4E1A\u5FAE\u4FE1\u53D1\u9001\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": 'The result file "{name}" was generated but could not be sent via Enterprise WeChat right now. Please try again later.',
   "\u4EFB\u52A1\u5DF2\u5B8C\u6210\uFF0C\u4F46\u6CA1\u6709\u751F\u6210\u53EF\u663E\u793A\u7684\u6587\u672C\u3002": "The task completed, but no displayable text was generated.",
   "\u76EE\u524D\u652F\u6301\u6587\u5B57\u3001\u56FE\u7247\u548C\u8BED\u97F3\u8F6C\u5199\u6D88\u606F\u3002": "Currently only text, images, and voice transcription messages are supported.",
-  "\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002": "The connection between the Enterprise WeChat bot and DeepSeek Harness is working.",
+  "\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002": "The connection between the Enterprise WeChat bot and ClawClaw is working.",
   "\u6B63\u5728\u601D\u8003\u4E2D\u2026": "Thinking\u2026",
   "\u4F01\u4E1A\u5FAE\u4FE1\u4EA4\u4E92\u95EE\u9898\u53D1\u9001\u5931\u8D25\u3002": "Failed to send the Enterprise WeChat interaction question.",
   // Provisioning, status, and errors (wecom-controller.mjs)
@@ -24622,9 +24622,9 @@ var wecom_app_default = {
   "\u56DE\u8C03\u5BC6\u94A5\u5DF2\u91CD\u7F6E\uFF0C\u4F46\u673A\u5668\u4EBA\u91CD\u542F\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u91CD\u8FDE\u3002": "The callback secret was reset, but the bot failed to restart; please reconnect manually.",
   "\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u4EA4\u4E92\u95EE\u9898\u53D1\u9001\u5931\u8D25\u3002": "Failed to send the WeCom app interaction question.",
   "\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u76EE\u524D\u652F\u6301\u6587\u5B57\u548C\u56FE\u7247\u6D88\u606F\u3002": "The WeCom app currently supports text and image messages.",
-  "\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u5DF2\u8FDE\u63A5 DeepSeek Harness\uFF0C\u53EF\u5728\u5FAE\u4FE1\u4E2D\u76F4\u63A5\u4F7F\u7528\u3002": "The WeCom app is connected to DeepSeek Harness and works directly inside WeChat.",
-  "\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u6216\u56FE\u7247\u5373\u53EF\u5F00\u59CB\uFF0C\u53D1\u9001 /help \u67E5\u770B\u53EF\u7528\u547D\u4EE4\u3002": "The WeCom app is connected to DeepSeek Harness. Send text or images to start, or send /help for available commands.",
-  "\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002": "The WeCom app and DeepSeek Harness are connected.",
+  "\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u5DF2\u8FDE\u63A5 ClawClaw\uFF0C\u53EF\u5728\u5FAE\u4FE1\u4E2D\u76F4\u63A5\u4F7F\u7528\u3002": "The WeCom app is connected to ClawClaw and works directly inside WeChat.",
+  "\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u5DF2\u8FDE\u63A5 ClawClaw\u3002\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u6216\u56FE\u7247\u5373\u53EF\u5F00\u59CB\uFF0C\u53D1\u9001 /help \u67E5\u770B\u53EF\u7528\u547D\u4EE4\u3002": "The WeCom app is connected to ClawClaw. Send text or images to start, or send /help for available commands.",
+  "\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002": "The WeCom app and ClawClaw are connected.",
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u5F53\u524D\u6CA1\u6709\u6587\u4EF6\u6D88\u606F\u53D1\u9001\u6743\u9650\uFF0C\u8BF7\u68C0\u67E5\u5E94\u7528\u7684\u6587\u4EF6\u53D1\u9001\u80FD\u529B\u3002": 'The result file "{name}" was generated, but the WeCom app currently lacks file-message permission; check the app file capability.',
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u8D85\u8FC7\u4F01\u4E1A\u5FAE\u4FE1\u53EF\u53D1\u9001\u7684\u6587\u4EF6\u5927\u5C0F\uFF0C\u672A\u53D1\u9001\u3002": 'The result file "{name}" exceeds the WeCom file size limit and was not sent.',
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u4F01\u4E1A\u5FAE\u4FE1\u62D2\u7EDD\u4E86\u8BE5\u6587\u4EF6\u6D88\u606F\u3002": 'The result file "{name}" was generated, but WeCom rejected the file message.',
@@ -24672,7 +24672,7 @@ var qq_default = {
   "\u5F53\u524D\u6B63\u5728\u6279\u91CF\u8F93\u5165\uFF0C\u8BF7\u5148\u53D1\u9001 /send \u6216 /cancel\uFF0C\u518D\u6253\u5F00\u83DC\u5355\u3002": "Batch input is active. Send /send or /cancel before opening the menu.",
   "\u83DC\u5355\u547D\u4EE4\u65E0\u6548\uFF0C\u8BF7\u53D1\u9001 /m \u91CD\u65B0\u6253\u5F00\u3002": "Invalid menu command. Send /m to reopen the menu.",
   "\u5F53\u524D\u4EFB\u52A1\u4ECD\u5728\u8FD0\u884C\uFF0C\u8BF7\u5148\u505C\u6B62\u4EFB\u52A1\u6216\u7B49\u5F85\u4EFB\u52A1\u5B8C\u6210\u540E\u518D\u6267\u884C\u6B64\u64CD\u4F5C\u3002": "A task is still running. Stop it or wait for it to finish before performing this action.",
-  "QQ \u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002": "The QQ bot is connected to DeepSeek Harness.",
+  "QQ \u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 ClawClaw\u3002": "The QQ bot is connected to ClawClaw.",
   "\u56DE\u7B54\u8F83\u957F\uFF0C\u540E\u7EED\u5185\u5BB9\u672A\u80FD\u901A\u8FC7 QQ \u5B8C\u6574\u53D1\u9001\uFF0C\u8BF7\u56DE\u590D\u201C\u7EE7\u7EED\u201D\u3002": "The answer is long and the rest could not be sent fully through QQ. Reply \u201C\u7EE7\u7EED\u201D (continue) to receive it.",
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46 QQ \u4ECA\u65E5\u6587\u4EF6\u4E0A\u4F20\u989D\u5EA6\u5DF2\u7528\u5B8C\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": `The result file "{name}" was generated, but QQ's daily file upload quota is used up. Please try again later.`,
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u5F53\u524D QQ \u673A\u5668\u4EBA\u6CA1\u6709\u6587\u4EF6\u6D88\u606F\u6743\u9650\u3002": 'The result file "{name}" was generated, but the current QQ bot does not have file message permission.',
@@ -24681,7 +24681,7 @@ var qq_default = {
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u6682\u65F6\u88AB QQ \u9650\u6D41\uFF0C\u672A\u80FD\u53D1\u9001\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": 'The result file "{name}" was temporarily rate-limited by QQ and was not sent. Please try again later.',
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46 QQ \u62D2\u7EDD\u4E86\u8BE5\u6587\u4EF6\u6216\u6587\u4EF6\u6D88\u606F\u3002": 'The result file "{name}" was generated, but QQ rejected the file or file message.',
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u6682\u65F6\u672A\u80FD\u901A\u8FC7 QQ \u53D1\u9001\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": 'The result file "{name}" was generated but could not be sent via QQ right now. Please try again later.',
-  "QQ \u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002": "The QQ bot is connected to DeepSeek Harness normally.",
+  "QQ \u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002": "The QQ bot is connected to ClawClaw normally.",
   "QQ \u4EA4\u4E92\u95EE\u9898\u53D1\u9001\u5931\u8D25\u3002": "Failed to send the QQ interaction question.",
   "QQ \u673A\u5668\u4EBA\u51ED\u636E\u7F3A\u5931\uFF0C\u8BF7\u79FB\u9664\u540E\u91CD\u65B0\u626B\u7801\u3002": "The QQ bot credentials are missing. Remove the bot and scan the QR code again.",
   "QQ \u8FDE\u63A5\u672A\u5C31\u7EEA\uFF0C\u63D2\u4EF6\u4F1A\u81EA\u52A8\u91CD\u8BD5\u3002": "The QQ connection is not ready; the plugin will retry automatically.",
@@ -24819,14 +24819,14 @@ var connection_error_en_default = {
 var weixin_default = {
   ...connection_error_en_default,
   // weixin-bridge.mjs
-  "\u5FAE\u4FE1\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002": "WeChat is connected to DeepSeek Harness.",
+  "\u5FAE\u4FE1\u5DF2\u8FDE\u63A5 ClawClaw\u3002": "WeChat is connected to ClawClaw.",
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u5FAE\u4FE1\u673A\u5668\u4EBA\u5F53\u524D\u6CA1\u6709\u6587\u4EF6\u6D88\u606F\u53D1\u9001\u6743\u9650\uFF0C\u8BF7\u68C0\u67E5\u673A\u5668\u4EBA\u6587\u4EF6\u6D88\u606F\u80FD\u529B\u3002": `The result file "{name}" was generated, but the WeChat bot currently has no permission to send file messages. Please check the bot's file messaging capability.`,
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u8D85\u8FC7\u5F53\u524D\u5FAE\u4FE1\u4F1A\u8BDD\u53EF\u53D1\u9001\u7684\u6587\u4EF6\u5927\u5C0F\uFF0C\u672A\u53D1\u9001\u3002": 'The result file "{name}" exceeds the file size limit of the current WeChat conversation and was not sent.',
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u6682\u65F6\u88AB\u5FAE\u4FE1\u9650\u6D41\uFF0C\u672A\u80FD\u53D1\u9001\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": 'The result file "{name}" was temporarily rate-limited by WeChat and was not sent. Please try again later.',
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u5FAE\u4FE1\u62D2\u7EDD\u4E86\u8BE5\u6587\u4EF6\u6D88\u606F\u3002": 'The result file "{name}" was generated, but WeChat rejected the file message.',
   "\u7ED3\u679C\u6587\u4EF6\u300C{name}\u300D\u5DF2\u751F\u6210\uFF0C\u4F46\u6682\u65F6\u672A\u80FD\u901A\u8FC7\u5FAE\u4FE1\u53D1\u9001\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": 'The result file "{name}" was generated but could not be sent via WeChat right now. Please try again later.',
   "\u76EE\u524D\u652F\u6301\u6587\u5B57\u3001\u56FE\u7247\uFF0C\u4EE5\u53CA\u5FAE\u4FE1\u5DF2\u8F6C\u6210\u6587\u5B57\u7684\u8BED\u97F3\u6D88\u606F\u3002": "Currently supports text, images, and voice messages that WeChat has converted to text.",
-  "\u5FAE\u4FE1\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002": "WeChat is connected to DeepSeek Harness normally.",
+  "\u5FAE\u4FE1\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002": "WeChat is connected to ClawClaw normally.",
   "\u5FAE\u4FE1\u4EA4\u4E92\u95EE\u9898\u53D1\u9001\u5931\u8D25\u3002": "Failed to send the WeChat interaction question.",
   "\u56DE\u590D\u5DF2\u7ECF\u751F\u6210\uFF0C\u4F46\u5FAE\u4FE1\u53D1\u9001\u5931\u8D25\uFF0C\u53EF\u80FD\u53EA\u6536\u5230\u90E8\u5206\u5185\u5BB9\u3002\u8BF7\u5C06\u4E0B\u9762\u7684\u8BCA\u65AD\u4FE1\u606F\u5B8C\u6574\u53CD\u9988\u7ED9\u7BA1\u7406\u5458\u3002": "The reply was generated, but WeChat delivery failed and only part of it may have arrived. Please send the complete diagnostic below to the administrator.",
   "\u5FAE\u4FE1\u53D1\u9001\u8BCA\u65AD\uFF1A{diagnostic}": "WeChat delivery diagnostic: {diagnostic}",
@@ -24980,7 +24980,7 @@ var office_default = {
   "Office Job \u5DF2\u88AB\u9886\u53D6\u3001\u53D6\u6D88\u6216\u7ED3\u675F\u3002": "The Office Job has already been claimed, cancelled, or finished.",
   "\u672C\u673A Harness \u672A\u80FD\u5B8C\u6210\u4EFB\u52A1\uFF1B\u8BF7\u68C0\u67E5 Harness \u4F1A\u8BDD\u540E\u91CD\u8BD5\u3002": "The local Harness could not complete the task; check the Harness Session and try again.",
   "Office Job \u5F15\u7528\u4E86\u672C\u673A\u672A\u914D\u7F6E\u7684 Workspace/Preset alias\u3002": "The Office Job references a Workspace/Preset alias that is not configured locally.",
-  "\u4F60\u6B63\u5728\u672C\u673A DeepSeek Harness \u4E2D\u7EE7\u7EED\u4E00\u4E2A\u6765\u81EA AI Office \u7684\u4EFB\u52A1\u3002": "You are continuing an AI Office task inside the local DeepSeek Harness.",
+  "\u4F60\u6B63\u5728\u672C\u673A ClawClaw \u4E2D\u7EE7\u7EED\u4E00\u4E2A\u6765\u81EA AI Office \u7684\u4EFB\u52A1\u3002": "You are continuing an AI Office task inside the local ClawClaw.",
   "\u53EA\u5728\u5F53\u524D Workspace \u5185\u884C\u52A8\u3002\u5B8C\u6210\u540E\u5FC5\u987B\u8FD4\u56DE\uFF1A\u7ED3\u679C\u6458\u8981\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u8BC1\u636E\u3001\u672A\u89E3\u51B3\u98CE\u9669\u3002": "Act only within the current Workspace. When finished you must return: a result summary, changed files, verification evidence, and unresolved risks.",
   "## \u672C\u673A Instruction Preset": "## Local Instruction Preset",
   "## \u672C\u8F6E\u8865\u5145\u6307\u4EE4": "## Additional Instructions for This Round",
@@ -25523,7 +25523,7 @@ function connectionTestTarget(state) {
 }
 function connectionTestMessage(botName, channelLabel = t("\u673A\u5668\u4EBA")) {
   const name2 = cleanText(botName) ?? channelLabel;
-  return `${t("\u2705 DeepSeek Harness \u8FDE\u63A5\u6D4B\u8BD5\u6210\u529F")}
+  return `${t("\u2705 ClawClaw \u8FDE\u63A5\u6D4B\u8BD5\u6210\u529F")}
 ${t("\u8FD9\u6761\u6D88\u606F\u7531\u300CIM\u673A\u5668\u4EBA\u300D\u8BBE\u7F6E\u9875\u4E2D\u7684\u201C{name}\u201D\u673A\u5668\u4EBA\u5361\u7247\u53D1\u51FA\u3002", { name: name2 })}`;
 }
 function connectionTestTargetUnavailable(channelLabel = t("\u673A\u5668\u4EBA")) {
@@ -25568,12 +25568,12 @@ var PROVIDER_FAILURES = Object.freeze({
   UNSUPPORTED_CONTENT: "MODEL_CONFIG"
 });
 var FAILURE_MESSAGES = Object.freeze({
-  HARNESS_CONNECT: "\u65E0\u6CD5\u8FDE\u63A5\u5904\u7406\u670D\u52A1\uFF0C\u6D88\u606F\u5C1A\u672A\u63D0\u4EA4\u3002\u8BF7\u786E\u8BA4 DeepSeek Harness \u6B63\u5728\u8FD0\u884C\u540E\u91CD\u8BD5\u3002",
+  HARNESS_CONNECT: "\u65E0\u6CD5\u8FDE\u63A5\u5904\u7406\u670D\u52A1\uFF0C\u6D88\u606F\u5C1A\u672A\u63D0\u4EA4\u3002\u8BF7\u786E\u8BA4 ClawClaw \u6B63\u5728\u8FD0\u884C\u540E\u91CD\u8BD5\u3002",
   HARNESS_TIMEOUT: "\u5904\u7406\u670D\u52A1\u54CD\u5E94\u8D85\u65F6\uFF0C\u6D88\u606F\u5C1A\u672A\u5F00\u59CB\u5904\u7406\u3002\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002",
   HARNESS_RESULT_UNCERTAIN: "\u6682\u65F6\u65E0\u6CD5\u786E\u8BA4\u4EFB\u52A1\u72B6\u6001\uFF0C\u4EFB\u52A1\u53EF\u80FD\u5DF2\u7ECF\u5F00\u59CB\u3002\u8BF7\u5148\u7B49\u5F85\u6216\u53D1\u9001 /stop\uFF0C\u4E0D\u8981\u7ACB\u5373\u91CD\u590D\u63D0\u4EA4\u3002",
   HARNESS_ACCESS: "\u5904\u7406\u670D\u52A1\u62D2\u7EDD\u4E86\u673A\u5668\u4EBA\u8FDE\u63A5\u3002\u8BF7\u7BA1\u7406\u5458\u68C0\u67E5 Harness \u5730\u5740\u3001\u4EE3\u7406\u6216\u8BBF\u95EE\u914D\u7F6E\u540E\u91CD\u8BD5\u3002",
-  HARNESS_PROTOCOL: "\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u7684\u63A5\u53E3\u4E0D\u517C\u5BB9\u3002\u8BF7\u7BA1\u7406\u5458\u68C0\u67E5 Harness \u5730\u5740\u5E76\u66F4\u65B0\u76F8\u5173\u7248\u672C\u3002",
-  HARNESS_SERVICE: "DeepSeek Harness \u6682\u65F6\u65E0\u6CD5\u5B8C\u6210\u8BF7\u6C42\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002",
+  HARNESS_PROTOCOL: "\u673A\u5668\u4EBA\u4E0E ClawClaw \u7684\u63A5\u53E3\u4E0D\u517C\u5BB9\u3002\u8BF7\u7BA1\u7406\u5458\u68C0\u67E5 Harness \u5730\u5740\u5E76\u66F4\u65B0\u76F8\u5173\u7248\u672C\u3002",
+  HARNESS_SERVICE: "ClawClaw \u6682\u65F6\u65E0\u6CD5\u5B8C\u6210\u8BF7\u6C42\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002",
   MODEL_REPLY_TIMEOUT: "\u7B49\u5F85\u6A21\u578B\u56DE\u590D\u8D85\u65F6\uFF0C\u4EFB\u52A1\u53EF\u80FD\u4ECD\u5728\u8FD0\u884C\u3002\u8BF7\u5148\u7B49\u5F85\u6216\u53D1\u9001 /stop\uFF0C\u4E0D\u8981\u7ACB\u5373\u91CD\u590D\u63D0\u4EA4\u3002",
   MODEL_AUTH: "\u6A21\u578B\u51ED\u636E\u7F3A\u5931\u6216\u5DF2\u5931\u6548\u3002\u8BF7\u7BA1\u7406\u5458\u68C0\u67E5\u6A21\u578B\u914D\u7F6E\u540E\u91CD\u8BD5\u3002",
   MODEL_QUOTA: "\u6A21\u578B\u989D\u5EA6\u6216\u4F59\u989D\u4E0D\u8DB3\uFF0C\u672C\u6B21\u4EFB\u52A1\u672A\u5B8C\u6210\u3002\u8BF7\u7BA1\u7406\u5458\u8865\u5145\u989D\u5EA6\u6216\u5207\u6362\u6A21\u578B\u540E\u91CD\u8BD5\u3002",
@@ -25588,7 +25588,7 @@ var FAILURE_MESSAGES = Object.freeze({
   MODEL_EMPTY_REPLY: "\u6A21\u578B\u6CA1\u6709\u8FD4\u56DE\u53EF\u663E\u793A\u7684\u5185\u5BB9\u3002\u8BF7\u91CD\u8BD5\uFF1B\u82E5\u6301\u7EED\u53D1\u751F\uFF0C\u8BF7\u5207\u6362\u6A21\u578B\u3002",
   MODEL_CONTENT_REJECTED: "\u6A21\u578B\u62D2\u7EDD\u5904\u7406\u5F53\u524D\u5185\u5BB9\u3002\u8BF7\u8C03\u6574\u95EE\u9898\u5185\u5BB9\u540E\u91CD\u8BD5\u3002",
   MODEL_OUTPUT_LIMIT: "\u6A21\u578B\u8FBE\u5230\u8F93\u51FA\u957F\u5EA6\u4E0A\u9650\uFF0C\u4F46\u6CA1\u6709\u751F\u6210\u53EF\u663E\u793A\u7684\u7ED3\u679C\u3002\u8BF7\u7F29\u5C0F\u4EFB\u52A1\u8303\u56F4\u540E\u91CD\u8BD5\u3002",
-  TURN_BLOCKED: "\u4EFB\u52A1\u6B63\u5728\u7B49\u5F85\u65E0\u6CD5\u5728\u5F53\u524D\u6E20\u9053\u5B8C\u6210\u7684\u64CD\u4F5C\u3002\u8BF7\u5728 DeepSeek Harness \u4E2D\u5904\u7406\u540E\u518D\u8BD5\u3002",
+  TURN_BLOCKED: "\u4EFB\u52A1\u6B63\u5728\u7B49\u5F85\u65E0\u6CD5\u5728\u5F53\u524D\u6E20\u9053\u5B8C\u6210\u7684\u64CD\u4F5C\u3002\u8BF7\u5728 ClawClaw \u4E2D\u5904\u7406\u540E\u518D\u8BD5\u3002",
   TURN_INTERRUPTED: "\u4EFB\u52A1\u88AB\u610F\u5916\u4E2D\u65AD\uFF0C\u672C\u6B21\u672A\u5B8C\u6210\u3002\u8BF7\u91CD\u8BD5\u3002",
   SESSION_NOT_FOUND: "\u5F53\u524D\u4F1A\u8BDD\u5DF2\u4E0D\u5B58\u5728\u3002\u8BF7\u53D1\u9001 /new \u521B\u5EFA\u65B0\u4F1A\u8BDD\u540E\u91CD\u8BD5\u3002",
   SESSION_BUSY: "\u5F53\u524D\u4F1A\u8BDD\u4ECD\u5728\u5904\u7406\u4E0A\u4E00\u9879\u4EFB\u52A1\u3002\u8BF7\u7B49\u5F85\u5B8C\u6210\uFF0C\u6216\u53D1\u9001 /stop \u540E\u91CD\u8BD5\u3002",
@@ -32065,7 +32065,7 @@ function validHarnessQuestion(question) {
 function harnessQuestionText(question, index, total, { requiresMention = false } = {}) {
   const lines = [];
   const progress = total > 1 ? `\uFF08${index + 1}/${total}\uFF09` : "";
-  lines.push(t("DeepSeek Harness \u9700\u8981\u4F60\u8865\u5145\u4FE1\u606F{progress}\uFF1A", { progress }));
+  lines.push(t("ClawClaw \u9700\u8981\u4F60\u8865\u5145\u4FE1\u606F{progress}\uFF1A", { progress }));
   if (nonEmptyString3(question.header)) lines.push("", question.header.trim());
   lines.push("", nonEmptyString3(question.question) ?? t("\u8BF7\u8F93\u5165\u4F60\u7684\u56DE\u7B54\u3002"));
   if (nonEmptyString3(question.detail)) lines.push("", question.detail.trim());
@@ -32178,7 +32178,7 @@ function harnessApprovalText(payload, {
   const operation = toolArguments(toolCall);
   if (!operation || operation.length > maxArgumentsLength) return null;
   const lines = [
-    t("DeepSeek Harness \u9700\u8981\u4F60\u7684\u5BA1\u6279\uFF1A"),
+    t("ClawClaw \u9700\u8981\u4F60\u7684\u5BA1\u6279\uFF1A"),
     "",
     t("\u5DE5\u5177\uFF1A{tool}", { tool: printableText(payload.toolName) }),
     t("\u64CD\u4F5C\u53C2\u6570\uFF1A"),
@@ -32815,172 +32815,7 @@ async function runHistoryCommand(text, harness, state, key, {
 }
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/package.json
-var package_default = {
-  name: "@xmanrui/dsh-im",
-  version: "4.20.2",
-  description: "\u628A\u5341\u4E00\u79CD IM \u6E20\u9053\u548C\u516C\u7F51 AI Office \u63A5\u5165\u672C\u673A DeepSeek Harness\u3002 Connect eleven IM channels and a public AI Office to a local DeepSeek Harness.",
-  keywords: [
-    "deepseek-harness",
-    "dsh",
-    "dsh-plugin",
-    "ai-agent",
-    "im",
-    "instant-messaging",
-    "chatbot",
-    "feishu",
-    "lark",
-    "wechat",
-    "wecom",
-    "dingtalk",
-    "qq",
-    "slack",
-    "telegram",
-    "discord",
-    "whatsapp",
-    "imessage",
-    "ai-office"
-  ],
-  author: "xmanrui (https://github.com/xmanrui)",
-  contributors: [
-    {
-      name: "C3H3-AI",
-      url: "https://github.com/C3H3-AI"
-    },
-    {
-      name: "divingleee",
-      url: "https://github.com/divingleee"
-    },
-    {
-      name: "Chan-0312",
-      url: "https://github.com/Chan-0312"
-    },
-    {
-      name: "BuvkB",
-      url: "https://github.com/BuvkB"
-    },
-    {
-      name: "masucc",
-      url: "https://github.com/masucc"
-    },
-    {
-      name: "cherryFloris",
-      url: "https://github.com/cherryFloris"
-    },
-    {
-      name: "geekyfoxlab",
-      url: "https://github.com/geekyfoxlab"
-    },
-    {
-      name: "grloper",
-      url: "https://github.com/grloper"
-    },
-    {
-      name: "baijian",
-      url: "https://github.com/baijian"
-    },
-    {
-      name: "lyzhu86",
-      url: "https://github.com/lyzhu86"
-    }
-  ],
-  license: "MIT",
-  type: "module",
-  repository: {
-    type: "git",
-    url: "git+https://github.com/xmanrui/dsh-im.git"
-  },
-  homepage: "https://github.com/xmanrui/dsh-im#readme",
-  bugs: {
-    url: "https://github.com/xmanrui/dsh-im/issues"
-  },
-  publishConfig: {
-    access: "public"
-  },
-  bin: {
-    "dsh-im": "bin/dsh-im.mjs"
-  },
-  main: "./lib/index.js",
-  exports: {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
-    "./package.json": "./package.json"
-  },
-  files: [
-    "assets",
-    "bin",
-    "cordis.patch.yml",
-    "lib",
-    "plugin-src",
-    "scripts",
-    "src",
-    "PROACTIVE_DELIVERY.md",
-    "PROACTIVE_DELIVERY.en.md",
-    "LICENSE",
-    "README.md",
-    "README.en.md",
-    "THIRD_PARTY_NOTICES.md"
-  ],
-  dsh: {
-    bundle: {
-      patch: "./cordis.patch.yml"
-    },
-    client: {
-      inject: [
-        "@deepseek-ai/dsh-client-connection",
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-locale"
-      ],
-      platform: "web"
-    },
-    compatibility: {
-      dsh: "0.1.2-alpha.4 || 0.1.2-alpha.5 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1",
-      dshReleases: {
-        "0.1.2-alpha.4": "compatible",
-        "0.1.2-alpha.5": "compatible",
-        "0.1.2-rc.1": "compatible",
-        "0.1.3-alpha.1": "compatible",
-        "0.1.5-alpha.1": "compatible"
-      },
-      profiles: [
-        "web"
-      ]
-    }
-  },
-  scripts: {
-    build: "node plugin-src/client/build.mjs && node plugin-src/host/build.mjs",
-    test: "node --test test/*.test.mjs test/channels/*/*.test.mjs",
-    check: "npm run build && npm test && node scripts/verify-package.mjs"
-  },
-  engines: {
-    node: ">=22.19"
-  },
-  dependencies: {
-    "@tencent-connect/qqbot-connector": "1.2.0",
-    "@tencent-connect/qqbot-nodejs": "1.0.4",
-    "@wecom/aibot-node-sdk": "1.0.7",
-    "dingtalk-stream": "2.1.4",
-    qrcode: "1.5.4",
-    undici: "7.29.0"
-  },
-  devDependencies: {
-    "@deepseek-ai/cordis": "4.0.1",
-    "@larksuiteoapi/node-sdk": "1.73.0",
-    "@whiskeysockets/baileys": "7.0.0-rc14",
-    esbuild: "0.25.9",
-    "https-proxy-agent": "5.0.1",
-    react: "18.3.1",
-    "react-dom": "18.3.1",
-    "react-test-renderer": "18.3.1",
-    semver: "7.8.5"
-  },
-  directories: {
-    doc: "docs",
-    lib: "lib",
-    test: "test"
-  }
-};
+var package_default = { name: "@xmanrui/dsh-im", version: "4.20.2", description: "\u628A\u5341\u4E00\u79CD IM \u6E20\u9053\u548C\u516C\u7F51 AI Office \u63A5\u5165\u672C\u673A ClawClaw\u3002 Connect eleven IM channels and a public AI Office to a local ClawClaw.", keywords: ["deepseek-harness", "dsh", "dsh-plugin", "ai-agent", "im", "instant-messaging", "chatbot", "feishu", "lark", "wechat", "wecom", "dingtalk", "qq", "slack", "telegram", "discord", "whatsapp", "imessage", "ai-office"], author: "xmanrui (https://github.com/xmanrui)", contributors: [{ name: "C3H3-AI", url: "https://github.com/C3H3-AI" }, { name: "divingleee", url: "https://github.com/divingleee" }, { name: "Chan-0312", url: "https://github.com/Chan-0312" }, { name: "BuvkB", url: "https://github.com/BuvkB" }, { name: "masucc", url: "https://github.com/masucc" }, { name: "cherryFloris", url: "https://github.com/cherryFloris" }, { name: "geekyfoxlab", url: "https://github.com/geekyfoxlab" }, { name: "grloper", url: "https://github.com/grloper" }, { name: "baijian", url: "https://github.com/baijian" }, { name: "lyzhu86", url: "https://github.com/lyzhu86" }], license: "MIT", type: "module", repository: { type: "git", url: "git+https://github.com/xmanrui/dsh-im.git" }, homepage: "https://github.com/xmanrui/dsh-im#readme", bugs: { url: "https://github.com/xmanrui/dsh-im/issues" }, publishConfig: { access: "public" }, bin: { "dsh-im": "bin/dsh-im.mjs" }, main: "./lib/index.js", exports: { ".": "./lib/index.js", "./client": "./lib/client.js", "./package.json": "./package.json" }, files: ["assets", "bin", "cordis.patch.yml", "lib", "plugin-src", "scripts", "src", "PROACTIVE_DELIVERY.md", "PROACTIVE_DELIVERY.en.md", "LICENSE", "README.md", "README.en.md", "THIRD_PARTY_NOTICES.md"], dsh: { bundle: { patch: "./cordis.patch.yml" }, client: { inject: ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-slots", "@deepseek-ai/dsh-client-locale"], platform: "web" }, compatibility: { dsh: "0.1.2-alpha.4 || 0.1.2-alpha.5 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1", dshReleases: { "0.1.2-alpha.4": "compatible", "0.1.2-alpha.5": "compatible", "0.1.2-rc.1": "compatible", "0.1.3-alpha.1": "compatible", "0.1.5-alpha.1": "compatible" }, profiles: ["web"] } }, scripts: { build: "node plugin-src/client/build.mjs && node plugin-src/host/build.mjs", test: "node --test test/*.test.mjs test/channels/*/*.test.mjs", check: "npm run build && npm test && node scripts/verify-package.mjs" }, engines: { node: ">=22.19" }, dependencies: { "@tencent-connect/qqbot-connector": "1.2.0", "@tencent-connect/qqbot-nodejs": "1.0.4", "@wecom/aibot-node-sdk": "1.0.7", "dingtalk-stream": "2.1.4", qrcode: "1.5.4", undici: "7.29.0" }, devDependencies: { "@deepseek-ai/cordis": "4.0.1", "@larksuiteoapi/node-sdk": "1.73.0", "@whiskeysockets/baileys": "7.0.0-rc14", esbuild: "0.25.9", "https-proxy-agent": "5.0.1", react: "18.3.1", "react-dom": "18.3.1", "react-test-renderer": "18.3.1", semver: "7.8.5" }, directories: { doc: "docs", lib: "lib", test: "test" } };
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/src/channels/shared/control-command.mjs
 var CONTROL_COMMAND = /^\/(?:stop|steer|version)(?=$|\s)/iu;
@@ -35463,10 +35298,10 @@ function evaluateInboundAccess(accessPolicy, {
 }
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/src/channels/dingtalk/dingtalk-bridge.mjs
-var CARD_INITIAL_TEXT = "\u5DF2\u8FDE\u63A5 DeepSeek Harness\uFF0C\u6B63\u5728\u601D\u8003\u2026";
+var CARD_INITIAL_TEXT = "\u5DF2\u8FDE\u63A5 ClawClaw\uFF0C\u6B63\u5728\u601D\u8003\u2026";
 var INTERACTION_RESOLVED_TEXT = "\u8FD9\u4E2A\u95EE\u9898\u5DF2\u5728\u5176\u4ED6\u5BA2\u6237\u7AEF\u5904\u7406\uFF0C\u65E0\u9700\u518D\u6B21\u56DE\u7B54\u3002";
 var HELP_TEXT_LINES = [
-  "\u9489\u9489\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002",
+  "\u9489\u9489\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 ClawClaw\u3002",
   "",
   "\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u3001\u56FE\u7247\u6216\u6587\u4EF6\u5373\u53EF\u7EE7\u7EED\u5F53\u524D\u4F1A\u8BDD\u3002",
   "/m \u6216 /menu  \u6253\u5F00\u4E0B\u62C9\u64CD\u4F5C\u83DC\u5355",
@@ -36194,7 +36029,7 @@ var DingtalkHarnessBridge = class {
       result2 = { message: t("\u5DF2\u5F00\u542F\u65B0\u4F1A\u8BDD\u3002\u8BF7\u53D1\u9001\u4F60\u7684\u95EE\u9898\u3002") };
     } else if (command2 === "/status") {
       await this.#harness.ensureRunning({ signal: this.#signal });
-      result2 = { message: t("\u9489\u9489\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002") };
+      result2 = { message: t("\u9489\u9489\u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002") };
     } else if (command2 === "/help") {
       result2 = { message: helpText() };
     } else {
@@ -36532,7 +36367,7 @@ var DingtalkHarnessBridge = class {
       }
       if (isPlainText && !hasImages && !hasFiles && command2 === "/status") {
         await this.#harness.ensureRunning({ signal: this.#signal });
-        await this.#send(sessionWebhook, t("\u9489\u9489\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002"), this.#atUsersFor(message));
+        await this.#send(sessionWebhook, t("\u9489\u9489\u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002"), this.#atUsersFor(message));
         return;
       }
       if (isPlainText && !hasImages && !hasFiles && command2 === "/new") {
@@ -43732,7 +43567,7 @@ var TextHarnessBridge = class {
       const command2 = text.toLowerCase();
       if (!hasImages && !hasFiles && command2 === "/help") {
         await this.#bot.sendText(target, [
-          t("{label}\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002", { label: this.#descriptor.label }),
+          t("{label}\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 ClawClaw\u3002", { label: this.#descriptor.label }),
           "",
           t("\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u3001\u56FE\u7247\u6216\u6587\u4EF6\u5373\u53EF\u7EE7\u7EED\u5F53\u524D\u4F1A\u8BDD\u3002"),
           ...commandHelpLines(this.#descriptor.key)
@@ -43741,7 +43576,7 @@ var TextHarnessBridge = class {
       }
       if (!hasImages && !hasFiles && command2 === "/status") {
         await this.#harness.ensureRunning({ signal: this.#signal });
-        await this.#bot.sendText(target, t("{label}\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002", { label: this.#descriptor.label }));
+        await this.#bot.sendText(target, t("{label}\u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002", { label: this.#descriptor.label }));
         return;
       }
       const workspaceCommand = !hasImages && !hasFiles ? await runWorkspaceCommand(text, this.#harness, conversationKey7) : null;
@@ -44580,7 +44415,7 @@ function stripBotMention(text, botId) {
   return text.replace(new RegExp(`<@!?${botId}>`, "g"), "").trim();
 }
 function cleanThreadName(message, botId) {
-  const name2 = stripBotMention(message?.content ?? "", botId).replace(/\s+/g, " ").trim() || "DeepSeek Harness";
+  const name2 = stripBotMention(message?.content ?? "", botId).replace(/\s+/g, " ").trim() || "ClawClaw";
   return [...name2].slice(0, 100).join("");
 }
 function isThreadChannel(channel) {
@@ -157534,7 +157369,7 @@ ${error.batchInputMessage}` : messageFailureText(failure);
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/src/channels/feishu/feishu-channel.mjs
 import { createHash as createHash5 } from "node:crypto";
 var STREAM_ELEMENT_ID = "stream_md";
-var DEFAULT_INITIAL_TEXT = "\u5DF2\u8FDE\u63A5 DeepSeek Harness\uFF0C\u6B63\u5728\u601D\u8003\u2026";
+var DEFAULT_INITIAL_TEXT = "\u5DF2\u8FDE\u63A5 ClawClaw\uFF0C\u6B63\u5728\u601D\u8003\u2026";
 var MAX_STREAM_CHARS = 28e3;
 var MAX_FILE_OPERATION_TIMEOUT_MS = 12e4;
 var FILE_DELIVERY_ERRORS = /* @__PURE__ */ new Map([
@@ -158482,7 +158317,7 @@ var FeishuRuntime = class {
       this.#client = client;
       const channel = new VerifiedFeishuChannel({
         client,
-        initialText: t("\u5DF2\u8FDE\u63A5 DeepSeek Harness\uFF0C\u6B63\u5728\u601D\u8003\u2026")
+        initialText: t("\u5DF2\u8FDE\u63A5 ClawClaw\uFF0C\u6B63\u5728\u601D\u8003\u2026")
       });
       const bridge = new FeishuHarnessBridge({
         client,
@@ -159725,7 +159560,7 @@ var MultiBotDshFeishuController = class {
       createOnly: true,
       appPreset: {
         name: "{user} \u7684\u5317\u6C47\u661F\u6CB3 AI \u52A9\u624B",
-        desc: "\u8FDE\u63A5\u98DE\u4E66\u4E0E DeepSeek Harness\uFF0C\u5728\u804A\u5929\u4E2D\u4F7F\u7528\u4F01\u4E1A AI \u52A9\u624B\u3002"
+        desc: "\u8FDE\u63A5\u98DE\u4E66\u4E0E ClawClaw\uFF0C\u5728\u804A\u5929\u4E2D\u4F7F\u7528\u4F01\u4E1A AI \u52A9\u624B\u3002"
       },
       addons: {
         preset: false,
@@ -161018,14 +160853,14 @@ var EN2 = Object.freeze({
   "\u542F\u7528 macOS \u539F\u751F iMessage": "Enable native macOS iMessage",
   "\u652F\u6301\u540C\u8D26\u53F7\u81EA\u804A\uFF1A\u5728 iPhone \u6216 Mac \u4E0A\u7ED9\u81EA\u5DF1\u5DF2\u767B\u5F55\u7684 iMessage \u90AE\u7BB1\u6216\u53F7\u7801\u53D1\u6307\u4EE4\u3002AI \u56DE\u590D\u4EE5 \u{1F916} DSH \u5F00\u5934\uFF0C\u4E0D\u4F1A\u518D\u6B21\u89E6\u53D1\u673A\u5668\u4EBA\u3002": "Self-chat is supported: send instructions from your iPhone or Mac to your signed-in iMessage email or phone number. AI replies start with \u{1F916} DSH and do not trigger the bot again.",
   "\u68C0\u67E5\u6743\u9650\u5E76\u542F\u7528": "Check permissions and enable",
-  "DeepSeek Harness \u901A\u8FC7 macOS Messages.app \u6536\u53D1\u6587\u672C\u6D88\u606F\u3002\u9996\u6B21\u4F7F\u7528\u9700\u8981\u6388\u4E88\u4EE5\u4E0B\u6743\u9650\uFF1A": "DeepSeek Harness sends and receives messages through macOS Messages.app. The following permissions are required the first time:",
+  "ClawClaw \u901A\u8FC7 macOS Messages.app \u6536\u53D1\u6587\u672C\u6D88\u606F\u3002\u9996\u6B21\u4F7F\u7528\u9700\u8981\u6388\u4E88\u4EE5\u4E0B\u6743\u9650\uFF1A": "ClawClaw sends and receives messages through macOS Messages.app. The following permissions are required the first time:",
   "\u2713 \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u5DF2\u6388\u4E88": "\u2713 Full Disk Access granted",
   "1. \u6388\u4E88\u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650": "1. Grant Full Disk Access",
-  "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u201D\u4E2D\uFF0C\u6253\u5F00\u8FD0\u884C DeepSeek Harness \u7684\u7EC8\u7AEF\u6216\u5E94\u7528\u3002": "In System Settings \u2192 Privacy & Security \u2192 Full Disk Access, enable the terminal or app running DeepSeek Harness.",
+  "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u201D\u4E2D\uFF0C\u6253\u5F00\u8FD0\u884C ClawClaw \u7684\u7EC8\u7AEF\u6216\u5E94\u7528\u3002": "In System Settings \u2192 Privacy & Security \u2192 Full Disk Access, enable the terminal or app running ClawClaw.",
   "\u6253\u5F00\u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u8BBE\u7F6E": "Open Full Disk Access settings",
   "\u2713 Messages \u81EA\u52A8\u5316\u6743\u9650\u5DF2\u6388\u4E88": "\u2713 Messages automation granted",
   "2. \u5141\u8BB8\u81EA\u52A8\u5316\u63A7\u5236 Messages": "2. Allow automation control of Messages",
-  "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u81EA\u52A8\u5316\u201D\u4E2D\uFF0C\u5141\u8BB8\u8FD0\u884C DeepSeek Harness \u7684\u5E94\u7528\u63A7\u5236 Messages\u3002": "In System Settings \u2192 Privacy & Security \u2192 Automation, allow the app running DeepSeek Harness to control Messages.",
+  "\u5728\u201C\u7CFB\u7EDF\u8BBE\u7F6E \u2192 \u9690\u79C1\u4E0E\u5B89\u5168\u6027 \u2192 \u81EA\u52A8\u5316\u201D\u4E2D\uFF0C\u5141\u8BB8\u8FD0\u884C ClawClaw \u7684\u5E94\u7528\u63A7\u5236 Messages\u3002": "In System Settings \u2192 Privacy & Security \u2192 Automation, allow the app running ClawClaw to control Messages.",
   "\u6253\u5F00\u81EA\u52A8\u5316\u8BBE\u7F6E": "Open Automation settings",
   "\u6B63\u5728\u68C0\u67E5\u2026": "Checking\u2026",
   "\u63A5\u5165 macOS \u539F\u751F iMessage": "Connect native macOS iMessage",
@@ -161091,7 +160926,7 @@ var EN2 = Object.freeze({
   "\u7FA4\u6210\u5458\u7535\u8BDD\u53F7\u7801\u6216 JID": "Group member phone number or JID",
   "8613800000000 \u6216\u5B8C\u6574 JID": "8613800000000 or a full JID",
   "IM \u6E20\u9053": "IM channels",
-  "\u8BA9 DeepSeek Harness \u89E6\u624B\u53EF\u53CA": "Connecting DeepSeek Harness",
+  "\u8BA9 ClawClaw \u89E6\u624B\u53EF\u53CA": "Connecting ClawClaw",
   "\u5F53\u524D\u7248\u672C": "Current version",
   "DSH-IM \u66F4\u65B0": "DSH-IM update",
   "\u68C0\u67E5\u66F4\u65B0": "Check for updates",
@@ -161626,7 +161461,7 @@ var EN2 = Object.freeze({
   "\u7B49\u5F85 WhatsApp \u626B\u7801": "Waiting for WhatsApp scan",
   "\u5DF2\u626B\u7801\uFF0C\u6B63\u5728\u8FDE\u63A5 WhatsApp": "Scanned. Connecting WhatsApp",
   "\u6B63\u5728\u5EFA\u7ACB\u5B89\u5168\u7684\u5173\u8054\u8BBE\u5907\u4F1A\u8BDD\u3002": "Creating a secure linked-device session.",
-  "\u5173\u8054\u8BBE\u5907\u6B63\u5728\u63A5\u5165 DeepSeek Harness\u3002": "Linking the device to DeepSeek Harness.",
+  "\u5173\u8054\u8BBE\u5907\u6B63\u5728\u63A5\u5165 ClawClaw\u3002": "Linking the device to ClawClaw.",
   "WhatsApp Web \u5173\u8054\u8BBE\u5907\u8FD0\u884C\u6B63\u5E38": "WhatsApp linked device is healthy",
   "\u67E5\u770B WhatsApp \u8BBF\u95EE\u6A21\u5F0F\u8BF4\u660E": "View WhatsApp access mode details",
   "WhatsApp \u8BBF\u95EE\u6A21\u5F0F": "WhatsApp access mode",
@@ -161722,8 +161557,8 @@ var EN2 = Object.freeze({
   "\u626B\u7801\u8D26\u53F7\u5FC5\u987B\u5DF2\u52A0\u5165\u4F01\u4E1A/\u7EC4\u7EC7\u3002\u5982\u679C\u9489\u9489\u63D0\u793A\u5C1A\u672A\u52A0\u5165\u7EC4\u7EC7\uFF0C\u8BF7\u5728\u63D0\u793A\u9875\u521B\u5EFA\u7EC4\u7EC7\uFF0C\u6216\u6362\u7528\u5DF2\u52A0\u5165\u7EC4\u7EC7\u7684\u8D26\u53F7\u3002": "The DingTalk account must belong to an organization. If prompted, create an organization or use an account that already belongs to one.",
   "\u8BF7\u5728\u624B\u673A\u4E0A\u6838\u5BF9\u5E76\u786E\u8BA4\u6388\u6743\u3002\u90E8\u5206\u8D26\u53F7\u4F1A\u989D\u5916\u663E\u793A\u4E00\u4E2A\u914D\u5BF9\u6570\u5B57\uFF0C\u9875\u9762\u4F1A\u5728\u9700\u8981\u65F6\u63D0\u793A\u8F93\u5165\u3002": "Review and confirm authorization on your phone. Some accounts may also require a pairing number.",
   "\u6388\u6743\u7531\u9489\u9489\u5B98\u65B9\u9875\u9762\u5B8C\u6210\u3002\u626B\u7801\u8D26\u53F7\u5FC5\u987B\u5DF2\u52A0\u5165\u4E00\u4E2A\u4F01\u4E1A/\u7EC4\u7EC7\u5E76\u6709\u6743\u521B\u5EFA\u673A\u5668\u4EBA\uFF1B\u521B\u5EFA\u6210\u529F\u540E\uFF0C\u5E94\u7528\u51ED\u636E\u4F1A\u76F4\u63A5\u5199\u5165 Harness Host\u3002": "Authorization is completed on DingTalk\u2019s official page. The account must belong to an organization and be allowed to create bots. Credentials are written directly to the Harness Host.",
-  "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 AppID \u6216 AppSecret\u3002\u626B\u7801\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 DeepSeek Harness\u3002": "Scanning is completed on Tencent\u2019s official page. No AppID or AppSecret is required, and the bot connects automatically.",
-  "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 Bot ID \u6216 Secret\u3002\u521B\u5EFA\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 DeepSeek Harness\u3002": "Scanning is completed on Tencent\u2019s official page. No Bot ID or Secret is required, and the bot connects automatically.",
+  "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 AppID \u6216 AppSecret\u3002\u626B\u7801\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 ClawClaw\u3002": "Scanning is completed on Tencent\u2019s official page. No AppID or AppSecret is required, and the bot connects automatically.",
+  "\u626B\u7801\u7531\u817E\u8BAF\u5B98\u65B9\u9875\u9762\u5B8C\u6210\uFF0C\u4E0D\u9700\u8981\u624B\u52A8\u586B\u5199 Bot ID \u6216 Secret\u3002\u521B\u5EFA\u6210\u529F\u540E\uFF0C\u673A\u5668\u4EBA\u4F1A\u81EA\u52A8\u8FDE\u63A5 ClawClaw\u3002": "Scanning is completed on Tencent\u2019s official page. No Bot ID or Secret is required, and the bot connects automatically.",
   "\u817E\u8BAF\u9875\u9762\u4F1A\u521B\u5EFA\u6216\u7ED1\u5B9A\u4E00\u4E2A QQ \u673A\u5668\u4EBA\uFF0C\u5E76\u628A\u8FDE\u63A5\u51ED\u636E\u5B89\u5168\u4EA4\u7ED9\u672C\u673A Harness Host\u3002": "Tencent will create or connect a QQ bot and securely deliver its credentials to the local Harness Host.",
   "\u4F01\u4E1A\u5FAE\u4FE1\u5B98\u65B9\u9875\u9762\u4F1A\u521B\u5EFA\u4E00\u4E2A\u667A\u80FD\u673A\u5668\u4EBA\uFF0C\u5E76\u628A\u8FDE\u63A5\u51ED\u636E\u5B89\u5168\u4EA4\u7ED9\u672C\u673A Harness Host\u3002": "WeCom will create an AI bot and securely deliver its credentials to the local Harness Host.",
   "\u4ECE\u6B64 Harness \u79FB\u9664\u8FD9\u4E2A\u5FAE\u4FE1\u8D26\u53F7\uFF1F": "Remove this WeChat account from Harness?",
@@ -161737,13 +161572,13 @@ var EN2 = Object.freeze({
   "\u6B63\u5728\u8BFB\u53D6\u98DE\u4E66\u8FDE\u63A5\u72B6\u6001\u2026": "Loading Feishu connection status\u2026",
   "\u6B63\u5728\u8BFB\u53D6\u5FAE\u4FE1\u8FDE\u63A5\u72B6\u6001\u2026": "Loading WeChat connection status\u2026",
   "\u6B63\u5728\u8BFB\u53D6\u9489\u9489\u8FDE\u63A5\u72B6\u6001\u2026": "Loading DingTalk connection status\u2026",
-  "\u901A\u8FC7\u626B\u7801\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 DeepSeek Harness": "Connect a DingTalk bot to DeepSeek Harness by QR code",
+  "\u901A\u8FC7\u626B\u7801\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 ClawClaw": "Connect a DingTalk bot to ClawClaw by QR code",
   "\u9489\u9489\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u626B\u7801\u7ED1\u5B9A\u8FDB\u5EA6": "DingTalk did not return QR setup progress",
   "\u9489\u9489\u626B\u7801\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u7ED1\u5B9A\u4EFB\u52A1": "DingTalk did not return a valid setup attempt",
   "\u9489\u9489 Stream \u957F\u8FDE\u63A5\u8FD0\u884C\u6B63\u5E38": "DingTalk Stream connection is healthy",
   "\u9489\u9489\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u673A\u5668\u4EBA\u5217\u8868": "DingTalk did not return a valid bot list",
   "${totals.connected} / ${totals.configured} \u5728\u7EBF": "${totals.connected} / ${totals.configured} online",
-  "\u7528\u4E8E\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 DeepSeek Harness \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801": "One-time QR code for connecting a DingTalk bot to DeepSeek Harness",
+  "\u7528\u4E8E\u628A\u9489\u9489\u673A\u5668\u4EBA\u63A5\u5165 ClawClaw \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801": "One-time QR code for connecting a DingTalk bot to ClawClaw",
   "\u4E8C\u7EF4\u7801\u5DF2\u8FC7\u671F\\n\u8BF7\u91CD\u65B0\u751F\u6210": "QR code expired\\nGenerate a new one",
   "\u673A\u5668\u4EBA\u5DF2\u521B\u5EFA\uFF0C\u6B63\u5728\u5EFA\u7ACB\u6D88\u606F\u8FDE\u63A5": "Bot created. Starting the message connection",
   "\u9489\u9489\u626B\u7801\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u5B89\u5168\u7684\u4E8C\u7EF4\u7801": "DingTalk did not return a secure QR code",
@@ -161760,7 +161595,7 @@ var EN2 = Object.freeze({
   "\u98DE\u4E66\u670D\u52A1\u8FD4\u56DE\u4E86\u672A\u77E5\u7684\u521B\u5EFA\u72B6\u6001": "Feishu returned an unknown creation status",
   "\u5DF2\u63A5\u5165 ${totals.configured} \u4E2A\u673A\u5668\u4EBA\uFF0C\u5176\u4E2D ${totals.connected} \u4E2A\u5728\u7EBF": "${totals.connected} of ${totals.configured} bots online",
   "\u5C1A\u672A\u63A5\u5165\u673A\u5668\u4EBA": "No bot connected yet",
-  "\u7528\u4E8E\u65B0\u589E DeepSeek Harness \u98DE\u4E66\u673A\u5668\u4EBA\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801": "One-time authorization QR code for adding a Feishu bot to DeepSeek Harness",
+  "\u7528\u4E8E\u65B0\u589E ClawClaw \u98DE\u4E66\u673A\u5668\u4EBA\u7684\u4E00\u6B21\u6027\u6388\u6743\u4E8C\u7EF4\u7801": "One-time authorization QR code for adding a Feishu bot to ClawClaw",
   "\u8BF7\u5237\u65B0\u540E\u91CD\u65B0\u626B\u7801": "Refresh and scan again",
   '${connected ? "\u68C0\u67E5\u8FDE\u63A5" : "\u91CD\u8BD5\u8FDE\u63A5"}${bot.name}': '${connected ? "Check connection" : "Reconnect"} ${bot.name}',
   "\u65E0\u6CD5\u8BFB\u53D6\u98DE\u4E66\u673A\u5668\u4EBA": "Could not load Feishu bots",
@@ -161769,7 +161604,7 @@ var EN2 = Object.freeze({
   "\u5DF2\u53D6\u6D88\u6DFB\u52A0\u673A\u5668\u4EBA\u3002": "Adding the bot was cancelled.",
   "${newBot.bot.name}\u5DF2\u8FDE\u63A5\uFF0C\u53EF\u4EE5\u5728\u98DE\u4E66\u4E2D\u5F00\u59CB\u804A\u5929\u3002": "${newBot.bot.name} is connected and ready to chat in Feishu.",
   "${bot.name}\u64CD\u4F5C\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u673A\u5668\u4EBA\u72B6\u6001\u3002": "${bot.name} operation failed. Check the bot status.",
-  "${bot.name}\u5DF2\u4ECE\u6B64 DeepSeek Harness \u79FB\u9664\uFF1B\u98DE\u4E66\u5F00\u653E\u5E73\u53F0\u4E2D\u7684\u5E94\u7528\u672A\u88AB\u5220\u9664\u3002": "${bot.name} was removed from this DeepSeek Harness. The app in Feishu Open Platform was not deleted.",
+  "${bot.name}\u5DF2\u4ECE\u6B64 ClawClaw \u79FB\u9664\uFF1B\u98DE\u4E66\u5F00\u653E\u5E73\u53F0\u4E2D\u7684\u5E94\u7528\u672A\u88AB\u5220\u9664\u3002": "${bot.name} was removed from this ClawClaw. The app in Feishu Open Platform was not deleted.",
   "\u65E0\u6CD5\u8BFB\u53D6\u8FDE\u63A5\u72B6\u6001": "Could not load connection status",
   "QQ \u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u626B\u7801\u7ED1\u5B9A\u8FDB\u5EA6": "QQ did not return QR setup progress",
   "QQ \u626B\u7801\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u7ED1\u5B9A\u4EFB\u52A1": "QQ did not return a valid setup attempt",
@@ -161811,7 +161646,7 @@ var EN2 = Object.freeze({
   "\u6D88\u606F\u5904\u7406\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002": "Message processing failed. Try again later.",
   "\u5FAE\u4FE1\u670D\u52A1\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u8D26\u53F7\u5217\u8868": "WeChat did not return a valid account list",
   "\u5C1A\u672A\u7ED1\u5B9A\u5FAE\u4FE1": "No WeChat account connected yet",
-  "\u7528\u4E8E\u628A\u5FAE\u4FE1\u673A\u5668\u4EBA\u7ED1\u5B9A\u5230 DeepSeek Harness \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801": "One-time QR code for connecting a WeChat bot to DeepSeek Harness",
+  "\u7528\u4E8E\u628A\u5FAE\u4FE1\u673A\u5668\u4EBA\u7ED1\u5B9A\u5230 ClawClaw \u7684\u4E00\u6B21\u6027\u4E8C\u7EF4\u7801": "One-time QR code for connecting a WeChat bot to ClawClaw",
   "\u4FDD\u6301\u672C\u9875\u6253\u5F00\uFF0C\u7B49\u5F85\u6D88\u606F\u957F\u8F6E\u8BE2\u53D8\u4E3A\u5728\u7EBF": "Keep this page open until long polling is online",
   "\u5FAE\u4FE1\u4E8C\u7EF4\u7801\u5DF2\u751F\u6210\uFF0C\u8BF7\u4F7F\u7528\u624B\u673A\u5FAE\u4FE1\u626B\u63CF\u3002": "WeChat QR code generated. Scan it with WeChat on your phone.",
   "\u79FB\u9664\u5931\u8D25\uFF1A${presentError(error).message}": "Removal failed: ${presentError(error).message}",
@@ -162882,7 +162717,7 @@ var MacOSMessagesApi = class {
       return decodeRows(stdout);
     } catch (error) {
       if (/authorization denied|not authorized|unable to open database/i.test(String(error?.stderr ?? error))) {
-        throw permissionError("messages-database-permission-required", "\u8BF7\u5728\u7CFB\u7EDF\u8BBE\u7F6E\u4E2D\u6388\u4E88 DeepSeek Harness \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u3002", error);
+        throw permissionError("messages-database-permission-required", "\u8BF7\u5728\u7CFB\u7EDF\u8BBE\u7F6E\u4E2D\u6388\u4E88 ClawClaw \u5B8C\u5168\u78C1\u76D8\u8BBF\u95EE\u6743\u9650\u3002", error);
       }
       throw error;
     }
@@ -162921,7 +162756,7 @@ var MacOSMessagesApi = class {
       return { sent: true };
     } catch (error) {
       if (/not authorized|(-1743)|assistive/i.test(String(error?.stderr ?? error))) {
-        throw permissionError("messages-automation-permission-required", "\u8BF7\u5728\u7CFB\u7EDF\u8BBE\u7F6E\u4E2D\u5141\u8BB8 DeepSeek Harness \u81EA\u52A8\u5316\u63A7\u5236 Messages\u3002", error);
+        throw permissionError("messages-automation-permission-required", "\u8BF7\u5728\u7CFB\u7EDF\u8BBE\u7F6E\u4E2D\u5141\u8BB8 ClawClaw \u81EA\u52A8\u5316\u63A7\u5236 Messages\u3002", error);
       }
       throw error;
     }
@@ -163606,7 +163441,7 @@ function renderPrompt(job, preset) {
   return [
     "# AI Office Handoff",
     "",
-    t("\u4F60\u6B63\u5728\u672C\u673A DeepSeek Harness \u4E2D\u7EE7\u7EED\u4E00\u4E2A\u6765\u81EA AI Office \u7684\u4EFB\u52A1\u3002"),
+    t("\u4F60\u6B63\u5728\u672C\u673A ClawClaw \u4E2D\u7EE7\u7EED\u4E00\u4E2A\u6765\u81EA AI Office \u7684\u4EFB\u52A1\u3002"),
     t("\u53EA\u5728\u5F53\u524D Workspace \u5185\u884C\u52A8\u3002\u5B8C\u6210\u540E\u5FC5\u987B\u8FD4\u56DE\uFF1A\u7ED3\u679C\u6458\u8981\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u8BC1\u636E\u3001\u672A\u89E3\u51B3\u98CE\u9669\u3002"),
     "",
     t("## \u672C\u673A Instruction Preset"),
@@ -165499,7 +165334,7 @@ async function qqMenuView(name2, harness, state, key, { signal, busy = false } =
     const preset = settings2?.agentPresetCatalog?.items?.find((item) => item.id === presetId);
     const model = catalog?.groups?.find((group) => group.id === catalog.current?.provider)?.models?.find((item) => item.id === catalog.current?.model);
     const detail = [
-      name2 === "status" ? t("QQ \u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002") : "",
+      name2 === "status" ? t("QQ \u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002") : "",
       t("\u5DE5\u4F5C\u533A\uFF1A{workspace}", { workspace: clean3(workspace) || t("\u672A\u8BBE\u7F6E") }),
       t("\u5F53\u524D\u4F1A\u8BDD\uFF1A{session}", { session: clean3(bound?.title || sessionId) || t("\u65B0\u4F1A\u8BDD") }),
       t("\u6A21\u5F0F\uFF0F\u9884\u8BBE\uFF1A{preset}", { preset: clean3(preset?.label || presetId) || t("\u8DDF\u968F Host \u9ED8\u8BA4") }),
@@ -165635,7 +165470,7 @@ var QQ_IMAGE_HOSTS = Object.freeze([
 var QQ_IMAGE_FILENAME = /\.(?:gif|jpe?g|png|webp)$/i;
 function helpText2() {
   return [
-    t("QQ \u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002"),
+    t("QQ \u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 ClawClaw\u3002"),
     "",
     t("\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u3001\u56FE\u7247\u6216\u6587\u4EF6\u5373\u53EF\u7EE7\u7EED\u5F53\u524D\u4F1A\u8BDD\u3002"),
     t("/menu \u6216 /m  \u6253\u5F00\u53EF\u70B9\u51FB\u7684\u529F\u80FD\u83DC\u5355"),
@@ -166400,7 +166235,7 @@ var QqHarnessBridge = class {
       }
       if (!hasImages && !hasFiles && command2 === "/status") {
         await this.#harness.ensureRunning({ signal: this.#signal });
-        await this.#bot.sendText(target, t("QQ \u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002"));
+        await this.#bot.sendText(target, t("QQ \u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002"));
         await markMessageSeen();
         return;
       }
@@ -168407,7 +168242,7 @@ async function inspectSlackCredentials({ botToken, appToken }, options = {}) {
   }
   return {
     platformId: `${identity2.team_id}:${identity2.user_id}`,
-    name: cleanString14(identity2.user) ?? "DeepSeek Harness",
+    name: cleanString14(identity2.user) ?? "ClawClaw",
     username: cleanString14(identity2.user),
     teamId: String(identity2.team_id),
     teamName: cleanString14(identity2.team)
@@ -172398,7 +172233,7 @@ function wecomMenuText(menu) {
 var DEFAULT_FILE_UPLOAD_TIMEOUT_MS5 = 12e4;
 function helpText3() {
   return [
-    t("\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002"),
+    t("\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u5DF2\u8FDE\u63A5 ClawClaw\u3002"),
     "",
     t("\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u3001\u56FE\u7247\u6216\u6587\u4EF6\u5373\u53EF\u7EE7\u7EED\u5F53\u524D\u4F1A\u8BDD\u3002"),
     t("/menu \u6216 /m  \u6253\u5F00\u53EF\u70B9\u51FB\u7684\u529F\u80FD\u83DC\u5355"),
@@ -173103,7 +172938,7 @@ var WecomHarnessBridge = class {
     if (command2 === "/help") return { message: helpText3() };
     if (command2 === "/status") {
       await this.#harness.ensureRunning(options);
-      return { message: t("\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002") };
+      return { message: t("\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002") };
     }
     if (this.#queues.has(key) || this.#pendingInteractions.has(key) || this.#approvals.hasPending(key) || this.#batchInputs.status(key).phase !== "idle") {
       return { message: t("\u5F53\u524D\u4EFB\u52A1\u4ECD\u5728\u8FD0\u884C\uFF0C\u8BF7\u5148\u505C\u6B62\u4EFB\u52A1\u6216\u7B49\u5F85\u4EFB\u52A1\u5B8C\u6210\u540E\u518D\u5F00\u542F\u65B0\u4F1A\u8BDD\u3002") };
@@ -173497,7 +173332,7 @@ var WecomHarnessBridge = class {
       }
       if (!hasImages && !hasFiles && command2 === "/status") {
         await this.#harness.ensureRunning({ signal: this.#signal });
-        await this.#sendImmediate(frame, chatId, t("\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002"));
+        await this.#sendImmediate(frame, chatId, t("\u4F01\u4E1A\u5FAE\u4FE1\u673A\u5668\u4EBA\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002"));
         await this.#state.markSeen(messageId);
         return;
       }
@@ -175832,7 +175667,7 @@ var INTERACTION_RESOLVED_TEXT4 = () => t("\u8FD9\u4E2A\u95EE\u9898\u5DF2\u5728\u
 var MAX_IMAGE_BYTES2 = 5 * 1024 * 1024;
 var UNSUPPORTED_INBOUND_TEXT = () => t("\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u76EE\u524D\u652F\u6301\u6587\u5B57\u548C\u56FE\u7247\u6D88\u606F\u3002");
 var HELP_TEXT = () => [
-  t("\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u5DF2\u8FDE\u63A5 DeepSeek Harness\uFF0C\u53EF\u5728\u5FAE\u4FE1\u4E2D\u76F4\u63A5\u4F7F\u7528\u3002"),
+  t("\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u5DF2\u8FDE\u63A5 ClawClaw\uFF0C\u53EF\u5728\u5FAE\u4FE1\u4E2D\u76F4\u63A5\u4F7F\u7528\u3002"),
   "",
   t("\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u6216\u56FE\u7247\u5373\u53EF\u7EE7\u7EED\u5F53\u524D\u4F1A\u8BDD\u3002"),
   t("/new  \u5F00\u542F\u4E00\u4E2A\u5168\u65B0\u4F1A\u8BDD"),
@@ -175862,7 +175697,7 @@ var HELP_TEXT = () => [
   t("/version  \u67E5\u770B\u63D2\u4EF6\u7248\u672C"),
   t("/help  \u663E\u793A\u672C\u5E2E\u52A9")
 ].join("\n");
-var WELCOME_TEXT = () => t("\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u6216\u56FE\u7247\u5373\u53EF\u5F00\u59CB\uFF0C\u53D1\u9001 /help \u67E5\u770B\u53EF\u7528\u547D\u4EE4\u3002");
+var WELCOME_TEXT = () => t("\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u5DF2\u8FDE\u63A5 ClawClaw\u3002\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u6216\u56FE\u7247\u5373\u53EF\u5F00\u59CB\uFF0C\u53D1\u9001 /help \u67E5\u770B\u53EF\u7528\u547D\u4EE4\u3002");
 function conversationKey5(userId) {
   return `p2p:${userId}`;
 }
@@ -176263,7 +176098,7 @@ var WecomAppBridge = class {
       }
       if (!hasImages && !hasFiles && command2 === "/status") {
         await this.#harness.ensureRunning({ signal: this.#signal });
-        await this.#send(sender, t("\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002"));
+        await this.#send(sender, t("\u4F01\u4E1A\u5FAE\u4FE1\u5E94\u7528\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002"));
         await this.#state.markSeen(messageId);
         return;
       }
@@ -179953,7 +179788,7 @@ var WEIXIN_REPLY_HISTORY_MAX_PAGES = 3;
 var WEIXIN_REPLY_HISTORY_TIMEOUT_MS = 5e3;
 var WEIXIN_REPLY_HISTORY_MATCH_TOLERANCE_MS = 15e3;
 var HELP_TEXT2 = () => [
-  t("\u5FAE\u4FE1\u5DF2\u8FDE\u63A5 DeepSeek Harness\u3002"),
+  t("\u5FAE\u4FE1\u5DF2\u8FDE\u63A5 ClawClaw\u3002"),
   "",
   t("\u76F4\u63A5\u53D1\u9001\u6587\u5B57\u3001\u56FE\u7247\u3001\u6587\u4EF6\u6216\u5E26\u6587\u5B57\u8BC6\u522B\u7ED3\u679C\u7684\u8BED\u97F3\u5373\u53EF\u7EE7\u7EED\u5F53\u524D\u4F1A\u8BDD\u3002"),
   t("/new  \u5F00\u542F\u4E00\u4E2A\u5168\u65B0\u4F1A\u8BDD"),
@@ -180549,7 +180384,7 @@ var WeixinHarnessBridge = class {
       }
       if (!hasImages && !hasFiles && command2 === "/status") {
         await this.#harness.ensureRunning({ signal: this.#signal });
-        await this.#send(sender, t("\u5FAE\u4FE1\u4E0E DeepSeek Harness \u8FDE\u63A5\u6B63\u5E38\u3002"), contextToken, runId);
+        await this.#send(sender, t("\u5FAE\u4FE1\u4E0E ClawClaw \u8FDE\u63A5\u6B63\u5E38\u3002"), contextToken, runId);
         await this.#state.markSeen(messageId);
         return;
       }
@@ -182969,14 +182804,14 @@ async function createWhatsappWebSession({
     settleFailure(abortError6());
     await restartTask?.catch(() => void 0);
     await saveQueue.catch(() => void 0);
-    await socket?.logout("Removed from DeepSeek Harness").catch(() => void 0);
+    await socket?.logout("Removed from ClawClaw").catch(() => void 0);
   };
   const startSocket = () => {
     const generation = ++socketGeneration;
     let connectionOpen = false;
     const nextSocket = makeSocket({
       auth: state,
-      browser: Browsers.macOS("DeepSeek Harness"),
+      browser: Browsers.macOS("ClawClaw"),
       logger: SILENT_LOGGER,
       markOnlineOnConnect: false,
       syncFullHistory: false,

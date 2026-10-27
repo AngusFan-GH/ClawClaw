@@ -5,6 +5,7 @@ import { build } from 'esbuild'
 import { channelDirectoryPickerPatch } from './channel-directory-picker-patch.mjs'
 import { channelHarnessPeerPatch, channelHttpsProxyAgentPatch } from './channel-harness-peer-patch.mjs'
 import { channelSessionArchivePatch } from './channel-session-archive-patch.mjs'
+import { channelBrandCopyPatch } from './channel-brand-copy-patch.mjs'
 import { larkSdkHandshakePatch } from '../node_modules/@xmanrui/dsh-im/plugin-src/host/lark-sdk-handshake-patch.mjs'
 
 await import('./generate-channel-icon-data.mjs')
@@ -37,7 +38,7 @@ await build({
     'undici',
     'undici/*',
   ],
-  plugins: [larkSdkHandshakePatch, channelSessionArchivePatch, channelHarnessPeerPatch, channelHttpsProxyAgentPatch],
+  plugins: [larkSdkHandshakePatch, channelSessionArchivePatch, channelHarnessPeerPatch, channelHttpsProxyAgentPatch, channelBrandCopyPatch],
   banner: {
     js: [
       "import { createRequire as __clawCreateRequire } from 'node:module';",
@@ -58,7 +59,7 @@ const client = await build({
   platform: 'browser',
   target: ['chrome100'],
   external: ['react', 'react-dom'],
-  plugins: [channelDirectoryPickerPatch],
+  plugins: [channelDirectoryPickerPatch, channelBrandCopyPatch],
   write: false,
   legalComments: 'none',
 })
