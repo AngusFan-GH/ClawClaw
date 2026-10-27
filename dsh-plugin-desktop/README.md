@@ -26,6 +26,8 @@ Sandboxed Electron preloads are built as independent bundles without local chunk
 
 Git workspaces expose a branch menu in blank Sessions, with local branch search/create/switch, a read-only commit graph, and managed worktree Sessions. Automatic worktree isolation and the Agent tool are disabled by default. The Git UI follows the Desktop theme. See the [integration and validation report](../docs/evidence/desktop-git-graph-integration-audit.md) for data protection and verification details.
 
+The Plugins page offers all 12 optional upstream bundles, including Agent Teams, voice input, Auto authorization review, developer tools, and the Git worktree tool. They ship disabled by default; changes apply after restarting ClawClaw. Enabling Auto review adds Auto to the current-session permission menu; disabling it removes that option after restart. Auto is not a default permission for new sessions. Voice input retains upstream's first-use dependency installation.
+
 ## Commands
 
 Run all commands at repository root:

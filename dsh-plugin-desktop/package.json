@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-desktop",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "description": "ClawClaw desktop agent application",
   "license": "MIT",
   "publishConfig": {
@@ -483,7 +483,29 @@
     "@deepseek-ai/dsh-client-ui-settings-session-log": "0.2.1-rc.2",
     "@deepseek-ai/dsh-tool-schedule": "0.2.1-rc.2",
     "@deepseek-ai/dsh-plugin-market": "0.2.1-rc.2",
-    "@linxin666/dsh-client-ui-git-graph": "0.4.8"
+    "@linxin666/dsh-client-ui-git-graph": "0.4.8",
+    "@deepseek-ai/dsh-experimental-session-search": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-ralph-bundle": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-terminal-bundle": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-badge-skill-bundle": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-session-titles-bundle": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-agent-team-profile": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-voice-input-bundle": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-cot-translation-bundle": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-auto-review": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-inspector-profile": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-plugin-market-bundle": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-tool-worktree": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tool-session-query": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tool-terminal": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session-title-all-prompts-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-tool-agent-team": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-client-ui-agent-team": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-client-ui-voice-input": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-client-ui-cot-translation": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-inspector": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-experimental-session-inspector": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-plugin-market": "0.2.1-rc.2"
   },
   "optionalDependencies": {
     "@deepseek-ai/node-addon-system-darwin-arm64": "0.1.2",

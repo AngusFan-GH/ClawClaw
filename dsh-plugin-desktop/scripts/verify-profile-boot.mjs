@@ -27,6 +27,7 @@ import { importLegacyDesktopSetupWizardSettings } from '../lib/setup-wizard-sett
 import { verifyChannelHarness } from './verify-channel-harness.mjs'
 import { verifyGitGraph } from './verify-git-graph.mjs'
 import { verifyUpgradeExpertRun, verifyDesktopSchedule } from './verify-upgrade-agent.mjs'
+import { selectOptionalBundles, verifyOptionalInventory, verifyAutoSelection, verifyOptionalRenderer } from './verify-optional-plugins.mjs'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
 const HOST_SERVICE_PLUGIN_NAME = 'dsh-desktop-host-services-smoke-plugin'
@@ -537,6 +538,7 @@ try {
     '@deepseek-ai/dsh-client-ui-layout',
     '@deepseek-ai/dsh-client-ui-conversation',
     '@deepseek-ai/dsh-client-ui-sidebar',
+    '@deepseek-ai/dsh-client-ui-permission-presets',
     '@deepseek-ai/dsh-client-ui-directory-picker-browse',
   ]) {
     if (!ids.has(id)) {
@@ -552,6 +554,8 @@ try {
   }
 
   const beforeRestart = await ctx.desktopCronTasksController.read()
+  await verifyOptionalInventory(ctx, false)
+  await selectOptionalBundles(ctx, true)
   const savedJobs = JSON.stringify(beforeRestart.jobs)
   const savedArchive = JSON.stringify(beforeRestart.archivedJobs)
   const scope = createHash('sha256').update(prepared.profile.dir).digest('hex').slice(0, 20)
@@ -571,6 +575,14 @@ try {
     restartGuard = true
     prepared = prepareSmokeProfile()
     ctx = await boot(BIN_NAME, prepared.rootConfig, [hostServicePatch, ...prepared.patches], prepareHost, prepared.bareModuleBaseUrl)
+    await verifyOptionalInventory(ctx, true)
+    if (restart === 0) {
+      await verifyAutoSelection(ctx, home)
+      await runtime.mountScheduled()
+      await verifyOptionalRenderer(mountedSpec.authenticationUrl, {
+        [BROWSER_ACCESS.rendererHeader.name]: BROWSER_ACCESS.rendererHeader.value,
+      }, true)
+    }
     const afterRestart = await ctx.desktopCronTasksController.read()
     assert.deepEqual(JSON.parse(JSON.stringify(afterRestart.jobs)), JSON.parse(savedJobs), 'restart changed task identity, Session or result history')
     assert.deepEqual(JSON.parse(JSON.stringify(afterRestart.archivedJobs)), JSON.parse(savedArchive), 'restart lost deleted-task history')
@@ -587,6 +599,7 @@ try {
     assert.equal(unexpectedRestartRequests, 0, 'restart replayed a stale Schedule delivery')
   }
   console.log('verify-desktop-schedule: two persisted restarts retained tasks, Sessions and archives; stale targets were not replayed')
+  await selectOptionalBundles(ctx, false)
   // Recreate a pre-migration legacy registry using only this disposable fixture's Sessions.
   await ctx.fiber.dispose()
   ctx = undefined
@@ -605,6 +618,13 @@ try {
   for (let repeat = 0; repeat < 2; repeat++) {
     prepared = prepareSmokeProfile()
     ctx = await boot(BIN_NAME, prepared.rootConfig, [hostServicePatch, ...prepared.patches], prepareHost, prepared.bareModuleBaseUrl)
+    await verifyOptionalInventory(ctx, false)
+    if (repeat === 0) {
+      await runtime.mountScheduled()
+      await verifyOptionalRenderer(mountedSpec.authenticationUrl, {
+        [BROWSER_ACCESS.rendererHeader.name]: BROWSER_ACCESS.rendererHeader.value,
+      }, false)
+    }
     const imported = await ctx.desktopCronTasksController.read()
     assert.equal(imported.jobs.length, legacyJobs.length)
     for (const old of legacyJobs) {
@@ -617,6 +637,7 @@ try {
     if (repeat === 0) { await ctx.fiber.dispose(); ctx = undefined }
   }
   console.log('verify-desktop-schedule: legacy first-import and repeat-import retained all 40 history records and original Sessions')
+  console.log('verify-optional-plugins: all shipped bundles offered, enabled, active across two starts and disabled persistently; renderer graphs, Auto permission selection and offline tool review passed')
 
 } finally {
   await ctx?.fiber.dispose()

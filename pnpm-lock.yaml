@@ -992,6 +992,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-plugin-manager':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-client-ui-plugin-manager-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-client-ui-plugin-manager-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)
+      '@deepseek-ai/dsh-client-ui-plugin-market':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-client-ui-plugin-market-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-client-ui-plugin-market-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-client-ui-primitives-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-client-ui-primitives-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@types/react@18.3.31)
@@ -1145,18 +1148,72 @@ importers:
       '@deepseek-ai/dsh-experimental-agent-team':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-agent-team-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-agent-team-0.2.1-rc.2.tgz(5844a4ef15d25e669efe8c4a792c08c0)
+      '@deepseek-ai/dsh-experimental-agent-team-profile':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-agent-team-profile-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-agent-team-profile-0.2.1-rc.2.tgz(8cfce65e99e6e5e03a232f7a50770c7e)
       '@deepseek-ai/dsh-experimental-api-speech-to-text':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-api-speech-to-text-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-api-speech-to-text-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-experimental-speech-to-text@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-speech-to-text-0.2.1-rc.2.tgz(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-settings-0.2.1-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(d30f5b65a0f23779ec938621a113f6de)))(@deepseek-ai/dsh-typert-protocol@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-typert-protocol-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))
+      '@deepseek-ai/dsh-experimental-auto-review':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-auto-review-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-auto-review-0.2.1-rc.2.tgz(e42492e53eb589366e471b90b2e4cac4)
+      '@deepseek-ai/dsh-experimental-badge-skill-bundle':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-badge-skill-bundle-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-badge-skill-bundle-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-skill@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-skill-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-0.2.1-rc.2.tgz(patch_hash=2640d207bf0bd3bed2a66a16bb9e0f3e86f98211ce59d43975356b3508eb0320)(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-scope-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)))
+      '@deepseek-ai/dsh-experimental-client-ui-agent-team':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-client-ui-agent-team-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-client-ui-agent-team-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)
+      '@deepseek-ai/dsh-experimental-client-ui-cot-translation':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-client-ui-cot-translation-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-client-ui-cot-translation-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-experimental-translator@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-translator-0.2.1-rc.2.tgz(955f8829c2ebda002ea494e50344059b))
+      '@deepseek-ai/dsh-experimental-client-ui-voice-input':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-client-ui-voice-input-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-client-ui-voice-input-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)
+      '@deepseek-ai/dsh-experimental-cot-translation-bundle':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-cot-translation-bundle-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-cot-translation-bundle-0.2.1-rc.2.tgz(955f8829c2ebda002ea494e50344059b)
+      '@deepseek-ai/dsh-experimental-inspector':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-inspector-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-inspector-0.2.1-rc.2.tgz(@deepseek-ai/cordis-plugin-group@1.0.5(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-home-paths@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-home-paths-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-launch-environment@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-launch-environment-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))
+      '@deepseek-ai/dsh-experimental-inspector-profile':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-inspector-profile-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-inspector-profile-0.2.1-rc.2.tgz(@deepseek-ai/cordis-plugin-group@1.0.5(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-home-paths@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-home-paths-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-launch-environment@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-launch-environment-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))
+      '@deepseek-ai/dsh-experimental-plugin-market-bundle':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-plugin-market-bundle-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-plugin-market-bundle-0.2.1-rc.2.tgz(aa12f4c239414e3440c8fb2c998863b6)
+      '@deepseek-ai/dsh-experimental-ralph-bundle':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-ralph-bundle-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-ralph-bundle-0.2.1-rc.2.tgz(fcc899aec8af17e1d20b92b47da921b2)
+      '@deepseek-ai/dsh-experimental-session-inspector':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-session-inspector-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-session-inspector-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)
+      '@deepseek-ai/dsh-experimental-session-search':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-session-search-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-session-search-0.2.1-rc.2.tgz(7f6349b6880fb26e291af4f4ca168b76)
+      '@deepseek-ai/dsh-experimental-session-titles-bundle':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-session-titles-bundle-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-session-titles-bundle-0.2.1-rc.2.tgz(c49a9c2c663ebe38dd6b00531f969d08)
       '@deepseek-ai/dsh-experimental-speech-to-text':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-speech-to-text-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-speech-to-text-0.2.1-rc.2.tgz(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-settings-0.2.1-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(d30f5b65a0f23779ec938621a113f6de))
       '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-speech-to-text-sensevoice-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-speech-to-text-sensevoice-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-experimental-speech-to-text@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-speech-to-text-0.2.1-rc.2.tgz(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-settings-0.2.1-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(d30f5b65a0f23779ec938621a113f6de)))(@deepseek-ai/dsh-subprocess@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-subprocess-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-http-proxy@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-http-proxy-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)))
+      '@deepseek-ai/dsh-experimental-terminal-bundle':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-terminal-bundle-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-terminal-bundle-0.2.1-rc.2.tgz(b28b33fa9b2dcf19122347b096664a3f)
+      '@deepseek-ai/dsh-experimental-tool-agent-team':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-tool-agent-team-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-tool-agent-team-0.2.1-rc.2.tgz(3e9b82f71723cd43369c05b216dce0bc)
+      '@deepseek-ai/dsh-experimental-tool-worktree':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-tool-worktree-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-tool-worktree-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-experimental-worktree@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-worktree-0.2.1-rc.2.tgz(4aebdbbd15423f368397ff9fe22f4ae2))(@deepseek-ai/dsh-tools@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tools-0.2.1-rc.2.tgz(d59a0c400521a72650a8cf3922e447c5))
       '@deepseek-ai/dsh-experimental-translator':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-translator-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-translator-0.2.1-rc.2.tgz(955f8829c2ebda002ea494e50344059b)
+      '@deepseek-ai/dsh-experimental-voice-input-bundle':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-voice-input-bundle-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-voice-input-bundle-0.2.1-rc.2.tgz(@deepseek-ai/cordis-plugin-loader@1.0.6)(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-settings-0.2.1-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(d30f5b65a0f23779ec938621a113f6de))(@deepseek-ai/dsh-subprocess@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-subprocess-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-http-proxy@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-http-proxy-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)))(@deepseek-ai/dsh-typert-protocol@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-typert-protocol-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))
       '@deepseek-ai/dsh-experimental-worktree':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-worktree-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-experimental-worktree-0.2.1-rc.2.tgz(4aebdbbd15423f368397ff9fe22f4ae2)
@@ -1370,6 +1427,9 @@ importers:
       '@deepseek-ai/dsh-session-title':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-title-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-title-0.2.1-rc.2.tgz(5fbda9a848f15507e23d128ab4ce4289)
+      '@deepseek-ai/dsh-session-title-all-prompts-llm':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-title-all-prompts-llm-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-title-all-prompts-llm-0.2.1-rc.2.tgz(c49a9c2c663ebe38dd6b00531f969d08)
       '@deepseek-ai/dsh-session-title-first-prompt-llm':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-title-first-prompt-llm-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-title-first-prompt-llm-0.2.1-rc.2.tgz(c49a9c2c663ebe38dd6b00531f969d08)
@@ -1490,6 +1550,9 @@ importers:
       '@deepseek-ai/dsh-tool-schedule':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-schedule-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-schedule-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-0.2.1-rc.2.tgz(patch_hash=2640d207bf0bd3bed2a66a16bb9e0f3e86f98211ce59d43975356b3508eb0320)(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-schedule@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-schedule-0.2.1-rc.2.tgz(af0798c03c5b69a62a8f9eef2036c171))(@deepseek-ai/dsh-subagent@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-subagent-0.2.1-rc.2.tgz(8b0980031664bb19afd8b179b3865c71))(@deepseek-ai/dsh-tools@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tools-0.2.1-rc.2.tgz(d59a0c400521a72650a8cf3922e447c5))
+      '@deepseek-ai/dsh-tool-session-query':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-session-query-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-session-query-0.2.1-rc.2.tgz(6ad7b72a6ee082296a539f2e181a5e74)
       '@deepseek-ai/dsh-tool-skill':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-skill-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-skill-0.2.1-rc.2.tgz(8bc55957d17cd2845484811cf1e67921)
@@ -1499,6 +1562,9 @@ importers:
       '@deepseek-ai/dsh-tool-subagent-control':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-subagent-control-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-subagent-control-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-llm-0.2.1-rc.2.tgz(patch_hash=2640d207bf0bd3bed2a66a16bb9e0f3e86f98211ce59d43975356b3508eb0320)(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-session@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-scope@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-scope-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)))(@deepseek-ai/dsh-subagent@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-subagent-0.2.1-rc.2.tgz(8b0980031664bb19afd8b179b3865c71))(@deepseek-ai/dsh-tools@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tools-0.2.1-rc.2.tgz(d59a0c400521a72650a8cf3922e447c5))
+      '@deepseek-ai/dsh-tool-terminal':
+        specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-terminal-0.2.1-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-terminal-0.2.1-rc.2.tgz(393aed8b834c0e351349a09f8c11b670)
       '@deepseek-ai/dsh-tool-todo':
         specifier: file:../vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-todo-0.2.1-rc.2.tgz
         version: file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tool-todo-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-agent@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-agent-0.2.1-rc.2.tgz(faa1f3f7616899f65e6635f09e144f04))(@deepseek-ai/dsh-session-projection@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-projection-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-session@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-scope@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-scope-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5))))(@deepseek-ai/dsh-session@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-session-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-scope@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-scope-0.2.1-rc.2.tgz(@deepseek-ai/cordis@4.0.5)))(@deepseek-ai/dsh-tools@file:vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-tools-0.2.1-rc.2.tgz(d59a0c400521a72650a8cf3922e447c5))
