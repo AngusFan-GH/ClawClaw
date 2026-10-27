@@ -38,15 +38,15 @@ GitHub 托管的 macOS、Windows Runner 原生构建两个安装包。正式版�
 
 迁移范围只考虑 0.2.8 及以上版本。已安装的 0.2.8–0.2.10 固定请求旧的 HTTPS 443 地址，不能通过 DNS 或 HTTP 跳转自动改用 9528；本方案要求用户先手动安装改用 9528 的新版，之后从新入口自动更新。当前 0.2.11 已使用 9528 正式入口；更早使用 443 的同版本试包不能通过同版本比较自动升级，需手动安装最新包。更早版本不在迁移验证范围内。
 
-服务器为 `192.168.103.220`，下载根目录仍是 `/data/clawclaw/public`，版本目录为 `/data/clawclaw/public/releases/dsh/<version>/`，稳定清单为 `/data/clawclaw/public/updates/dsh/stable/release.json`。`deploy/clawclaw-internal.nginx.conf` 增加 HTTPS 9528，同时保留内网 443；HTTP 80 跳转至显式 9528，不更改 File Browser 的 9527。公网需由网管配置 `218.69.255.22:9528 -> 192.168.103.220:9528`，并将原域名的公网 DNS 指向 `218.69.255.22`；内网可配置分区 DNS 到服务器内网地址。
+服务器为 `<server-host>`，下载根目录仍是 `$UPDATE_REMOTE_ROOT`，版本目录为 `$UPDATE_REMOTE_ROOT/releases/dsh/<version>/`，稳定清单为 `$UPDATE_REMOTE_ROOT/updates/dsh/stable/release.json`。`deploy/clawclaw-internal.nginx.conf` 增加 HTTPS 9528，同时保留内网 443；HTTP 80 跳转至显式 9528，不更改 File Browser 的 9527。公网需由网管配置 `<public-ip>:9528 -> <server-host>:9528`，并将原域名的公网 DNS 指向 `<public-ip>`；内网可配置分区 DNS 到服务器内网地址。
 
-`scripts/upload-update.mjs` 是本机 SSH 上传入口，默认根目录为 `/data/clawclaw/public`。本地 `.env.server.local` 的 `UPDATE_REMOTE_ROOT` 须为该目录；`UPDATE_PORT` 指 SSH 端口，和 HTTPS 下载端口 9528 无关。
+`scripts/upload-update.mjs` 是本机 SSH 上传入口，根目录必须由本地 `UPDATE_REMOTE_ROOT` 配置。本地 `.env.server.local` 的 `UPDATE_REMOTE_ROOT` 须为该目录；`UPDATE_PORT` 指 SSH 端口，和 HTTPS 下载端口 9528 无关。
 
-正式切换前须验证：可信 HTTPS 证书、内网和真实公网的 9528 连通性、DNS、新清单、两个安装包的完整下载及 SHA-512，以及从 0.2.8–0.2.10 手动安装新版后使用新入口检查更新。内网使用 `curl --resolve clawclaw.xzinfra.com:9528:192.168.103.220 https://clawclaw.xzinfra.com:9528/healthz` 可保留域名和证书校验；此测试不能代替真实公网验证。旧服务器和原稳定清单保留至迁移验证完成，不自动改写历史清单中的地址。
+正式切换前须验证：可信 HTTPS 证书、内网和真实公网的 9528 连通性、DNS、新清单、两个安装包的完整下载及 SHA-512，以及从 0.2.8–0.2.10 手动安装新版后使用新入口检查更新。内网使用 `curl --resolve clawclaw.xzinfra.com:9528:<server-host> https://clawclaw.xzinfra.com:9528/healthz` 可保留域名和证书校验；此测试不能代替真实公网验证。旧服务器和原稳定清单保留至迁移验证完成，不自动改写历史清单中的地址。
 
 ## 本机部署
 
-在已忽略的 `.env.server.local` 配置 `UPDATE_HOST=192.168.103.220`、`UPDATE_USER=clawclaw-release`、`UPDATE_PORT=22`、`UPDATE_REMOTE_ROOT=/data/clawclaw/public`，以及现有 `UPDATE_SSH_KEY_FILE` 和 `UPDATE_SSH_KNOWN_HOSTS_FILE` 路径。也可通过 SSH agent 提供私钥；必须保留主机指纹校验。本机 `gh` 需已登录并拥有仓库 Actions 读取权限。
+在已忽略的 `.env.server.local` 配置 `UPDATE_HOST=<server-host>`、`UPDATE_USER=<release-user>`、`UPDATE_PORT=22`、`UPDATE_REMOTE_ROOT=<absolute-release-root>`，以及现有 `UPDATE_SSH_KEY_FILE` 和 `UPDATE_SSH_KNOWN_HOSTS_FILE` 路径。也可通过 SSH agent 提供私钥；必须保留主机指纹校验。本机 `gh` 需已登录并拥有仓库 Actions 读取权限。
 
 ```sh
 # 自动列出可用产物，选择后部署：

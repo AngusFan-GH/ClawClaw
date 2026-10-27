@@ -9,7 +9,6 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const DEFAULT_PORT = '22'
-const DEFAULT_ROOT = '/data/clawclaw/public'
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/u
 const VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u
 
@@ -198,7 +197,7 @@ function main() {
     host: process.env.UPDATE_HOST ?? '',
     user: process.env.UPDATE_USER ?? '',
     port: process.env.UPDATE_PORT ?? DEFAULT_PORT,
-    root: process.env.UPDATE_REMOTE_ROOT ?? DEFAULT_ROOT,
+    root: process.env.UPDATE_REMOTE_ROOT ?? '',
     identityFile: process.env.UPDATE_SSH_KEY_FILE,
     knownHostsFile: process.env.UPDATE_SSH_KNOWN_HOSTS_FILE,
   })

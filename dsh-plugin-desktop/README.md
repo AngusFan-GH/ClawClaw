@@ -10,7 +10,7 @@ This package is part of the root pnpm workspace. Do not install it as a standalo
 
 Electron main starts the Host through `startIsolatedDesktopHost()` by default. `DSH_DESKTOP_ISOLATED_HOST=0` is an in-process diagnostic route. The Host owns Cordis and Web services; Electron main owns native resources. The browser content uses ordinary loopback HTTP/WebSocket and has no general Electron bridge.
 
-MCP connectors using Streamable HTTP or SSE accept HTTP for loopback addresses and private IPv4 ranges `10.0.0.0/8`, `172.16.0.0/12`, and `192.168.0.0/16`. Other hosts require HTTPS. HTTP traffic, including authentication headers, is unencrypted. OAuth issuer, resource, and authorization/token endpoints still require HTTPS.
+MCP connectors using Streamable HTTP or SSE accept HTTP for loopback addresses and private IPv4 ranges `10.0.0.0/8`, `172.16.0.0/12`, and `<company-cidr>`. Other hosts require HTTPS. HTTP traffic, including authentication headers, is unencrypted. OAuth issuer, resource, and authorization/token endpoints still require HTTPS.
 
 The launcher prepares `~/.clawclaw/data` and `~/.clawclaw/workspaces/default` unless saved data-directory configuration, `CLAWCLAW_HOME`, or safe mode selects another path. It never reads, moves, or modifies another application's `~/.dsh` data.
 
@@ -111,12 +111,12 @@ Use a dedicated non-root SSH account for server publication. Store the following
 UPDATE_HOST             SSH hostname or IP of the company update server
 UPDATE_USER             dedicated non-root release account
 UPDATE_PORT             SSH port, default 22, not download port 9528
-UPDATE_REMOTE_ROOT      /data/clawclaw/public
+UPDATE_REMOTE_ROOT      Absolute release directory on the server
 UPDATE_SSH_KEY_FILE     local path to the dedicated private key
 UPDATE_SSH_KNOWN_HOSTS_FILE  path to independently verified known_hosts
 ```
 
-Downloads use HTTPS 9528. Version directories and the feed reside at `/data/clawclaw/public/releases/dsh/<version>/` and `/data/clawclaw/public/updates/dsh/stable/release.json`. Keep SSH host-key verification enabled; keys, passwords, and certificate private keys do not belong in Git.
+Downloads use HTTPS 9528. Version directories and the feed reside at `$UPDATE_REMOTE_ROOT/releases/dsh/<version>/` and `$UPDATE_REMOTE_ROOT/updates/dsh/stable/release.json`. Keep SSH host-key verification enabled; keys, passwords, and certificate private keys do not belong in Git.
 
 ### 5. Run a non-publishing prebuild
 
@@ -189,6 +189,6 @@ Manifest reads are limited to 16 KiB before crossing the Host bridge. Windows pu
 
 The GitHub Actions `Release ClawClaw Desktop` workflow builds both installers from the same commit on hosted macOS and Windows runners. A `clawclaw-v<version>` tag must exactly match `dsh-plugin-desktop/package.json`; a matching tag publishes automatically. Manual dispatch builds and assembles by default, and publishes only when its `publish` input is selected. Official archives use the `github-release` GitHub environment. Daily CI performs checks without producing installers; server publication remains separate.
 
-The dedicated non-root release account needs write access to `/data/clawclaw/public`. Local deployment downloads one successful packaging run, validates provenance and canonical URLs, uploads over LAN SSH, switches the feed last, and verifies public checksums. No timer or public SSH mapping is required.
+The dedicated non-root release account needs write access to `$UPDATE_REMOTE_ROOT`. Local deployment downloads one successful packaging run, validates provenance and canonical URLs, uploads over LAN SSH, switches the feed last, and verifies public checksums. No timer or public SSH mapping is required.
 
 Run `verify:notices` after production dependency changes. Current product context is in the root [README](../README.en.md), [architecture](../docs/architecture.en.md), and [user guide](../docs/user-guide.en.md).

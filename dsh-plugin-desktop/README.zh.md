@@ -10,7 +10,7 @@
 
 Electron main 默认通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKTOP_ISOLATED_HOST=0` 是同进程排查路径。Host 拥有 Cordis 和 Web 服务，Electron main 拥有原生资源。浏览器内容通过普通 loopback HTTP/WebSocket 工作，没有通用 Electron bridge。
 
-Streamable HTTP 和 SSE MCP 连接器允许本机回环地址及内网 IPv4 网段 `10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16` 使用 HTTP，其他主机仍要求 HTTPS。HTTP 流量（包括鉴权请求头）不加密。OAuth 发行方、资源及授权和令牌端点仍要求 HTTPS。
+Streamable HTTP 和 SSE MCP 连接器允许本机回环地址及内网 IPv4 网段 `10.0.0.0/8`、`172.16.0.0/12`、`<company-cidr>` 使用 HTTP，其他主机仍要求 HTTPS。HTTP 流量（包括鉴权请求头）不加密。OAuth 发行方、资源及授权和令牌端点仍要求 HTTPS。
 
 Launcher 默认准备 `~/.clawclaw/data` 与 `~/.clawclaw/workspaces/default`；已保存的数据目录、`CLAWCLAW_HOME` 或安全模式可以覆盖。它不会读取、移动或修改其他应用的 `~/.dsh` 数据。
 
@@ -111,12 +111,12 @@ GitHub 正式存档使用 `github-release` Environment 和 `GITHUB_TOKEN`。在�
 UPDATE_HOST             公司更新服务器的 SSH 域名或 IP
 UPDATE_USER             专用非 root 发布账号
 UPDATE_PORT             SSH 端口，默认 22，不是下载端口 9528
-UPDATE_REMOTE_ROOT      /data/clawclaw/public
+UPDATE_REMOTE_ROOT      服务器上的安装包发布绝对目录
 UPDATE_SSH_KEY_FILE     发布专用私钥的本地路径
 UPDATE_SSH_KNOWN_HOSTS_FILE  经核验的 known_hosts 文件路径
 ```
 
-下载服务使用 HTTPS 9528，版本目录和清单分别位于 `/data/clawclaw/public/releases/dsh/<版本>/` 和 `/data/clawclaw/public/updates/dsh/stable/release.json`。必须保留 SSH 服务器指纹校验；密钥、密码和证书私钥不进入 Git。
+下载服务使用 HTTPS 9528，版本目录和清单分别位于 `$UPDATE_REMOTE_ROOT/releases/dsh/<版本>/` 和 `$UPDATE_REMOTE_ROOT/updates/dsh/stable/release.json`。必须保留 SSH 服务器指纹校验；密钥、密码和证书私钥不进入 Git。
 
 ### 5. 执行不发布的预构建
 
@@ -189,6 +189,6 @@ DSH Desktop 使用 `https://clawclaw.xzinfra.com:9528/updates/dsh/stable/`，并
 
 GitHub Actions 的 `Release ClawClaw Desktop` 工作流会在托管的 macOS 与 Windows Runner 上从同一 commit 构建两个安装包。`clawclaw-v<version>` tag 必须与 `dsh-plugin-desktop/package.json` 完全一致；匹配的 tag 会自动发布。手动运行默认只构建和汇总，只有勾选 `publish` 输入才会正式发布。正式存档使用 `github-release` GitHub Environment。日常 CI 只做检查，不生成安装包；正式 Release 完成后在本机显式执行部署命令；试打包不自动部署。
 
-专用非 root 发布账号须对 `/data/clawclaw/public` 有写权限。本机部署下载指定成功打包运行，校验来源和正式 URL，通过内网 SSH 上传，最后切换清单并验证公网校验值。不需要定时任务或公网 SSH 映射。
+专用非 root 发布账号须对 `$UPDATE_REMOTE_ROOT` 有写权限。本机部署下载指定成功打包运行，校验来源和正式 URL，通过内网 SSH 上传，最后切换清单并验证公网校验值。不需要定时任务或公网 SSH 映射。
 
 生产 dependency 改动后运行 `verify:notices`。产品背景见根 [README](../README.md)、[架构](../docs/architecture.md)和[用户指南](../docs/user-guide.md)。

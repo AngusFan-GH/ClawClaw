@@ -3,10 +3,10 @@ Description=Aggregate ClawClaw download logs
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /opt/clawclaw-download-stats/download-stats.py --logs /var/log/clawclaw-downloads --state /var/lib/clawclaw-download-stats/private --output /var/lib/clawclaw-download-stats/report
+ExecStart=/usr/bin/python3 @@STATS_PROGRAM_DIR@@/download-stats.py --logs @@STATS_LOG_DIR@@ --state @@STATS_PRIVATE_DIR@@ --output @@STATS_REPORT_DIR@@
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/clawclaw-download-stats
+ReadWritePaths=@@STATS_DATA_DIR@@
