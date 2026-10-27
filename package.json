@@ -58,6 +58,7 @@
     "dist:win": "pnpm --filter dsh-plugin-desktop run dist:win",
     "dist:win-portable": "pnpm --filter dsh-plugin-desktop run dist:win-portable",
     "deploy:run": "node --env-file-if-exists=.env.server.local scripts/deploy-from-run.mjs",
+    "deploy:docs": "node --env-file-if-exists=.env.server.local scripts/deploy-installation-docs.mjs",
     "deploy:stats": "node --env-file-if-exists=.env.server.local scripts/deploy-download-stats.mjs",
     "upload:update": "node --env-file-if-exists=.env.server.local scripts/upload-update.mjs",
     "upstream:version": "node scripts/run-upstream.mjs version",

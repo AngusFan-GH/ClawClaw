@@ -6,6 +6,7 @@
 
 | 目的 | 文档 |
 | --- | --- |
+| macOS / Windows 下载、安装、升级与卸载 | [macOS 安装说明](install-macos.md) · [Windows 安装说明](install-windows.md) |
 | 安装、数据目录、工作区、Channels、恢复 | [用户指南](user-guide.md) |
 | 常见问题 | [FAQ](faq.md) |
 | 本地数据、模型、Channels、市场和更新请求 | [隐私与数据处理](../PRIVACY.zh.md) |

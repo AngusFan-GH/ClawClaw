@@ -6,6 +6,7 @@ This directory contains current product documentation. The root [README](../READ
 
 | Goal | Documentation |
 | --- | --- |
+| macOS / Windows downloads, installation, updates, removal | [macOS installation](install-macos.en.md) · [Windows installation](install-windows.en.md) |
 | Installation, paths, workspaces, Channels, recovery | [User guide](user-guide.en.md) |
 | Common questions | [FAQ](faq.en.md) |
 | Local data, models, Channels, markets, updates | [Privacy and data handling](../PRIVACY.md) |

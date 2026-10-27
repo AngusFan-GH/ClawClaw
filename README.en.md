@@ -57,6 +57,7 @@ The default data directory is `~/.clawclaw/data`; the default workspace is `~/.c
 
 | Goal | Documentation |
 | --- | --- |
+| macOS / Windows downloads, installation, updates, removal | [macOS installation](docs/install-macos.en.md) · [Windows installation](docs/install-windows.en.md) |
 | Installation, workspaces, Channels, recovery | [User guide](docs/user-guide.en.md) |
 | Common questions | [FAQ](docs/faq.en.md) |
 | Local data and network requests | [Privacy and data handling](PRIVACY.md) |
