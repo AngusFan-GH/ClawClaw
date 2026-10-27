@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location('stats', Path(__file__).with_name('download-stats.py'))
 stats = importlib.util.module_from_spec(spec)
@@ -19,6 +20,17 @@ def record(number, **changes):
 
 
 class Accounting(unittest.TestCase):
+    def test_accounting_import_without_posix_file_locking(self):
+        isolated = importlib.util.module_from_spec(spec)
+        # Match Windows, where importing fcntl raises ModuleNotFoundError.
+        with mock.patch.dict('sys.modules', {'fcntl': None}):
+            spec.loader.exec_module(isolated)
+            db = isolated.connect(':memory:')
+            try:
+                self.assertEqual(isolated.report(db)['rows'], [])
+            finally:
+                db.close()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)

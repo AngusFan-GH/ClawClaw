@@ -3,7 +3,6 @@
 import argparse
 import collections
 import datetime as dt
-import fcntl
 import gzip
 import hashlib
 import hmac
@@ -146,6 +145,10 @@ def atomic_json(path, value):
 
 
 def main():
+    # File locking belongs to the POSIX server collector; accounting helpers
+    # also run in the Windows desktop release gate.
+    import fcntl
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--logs', type=Path, required=True)
     parser.add_argument('--state', type=Path, required=True)
