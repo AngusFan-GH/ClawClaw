@@ -19,6 +19,7 @@ This directory contains current product documentation. The root [README](../READ
 | Channels | [Implementation reference](../channels/dsh-im/README.md) |
 | Community interoperability proposal | [Fabric Draft](../dsh-community-fabric/README.md) |
 | GitHub packaging, version archives, and server publication boundaries | [Packaging and releases](github-packaging.en.md) |
+| Download metrics, internal dashboard, and server setup | [Download statistics](download-statistics.en.md) |
 
 ## Documentation boundaries
 

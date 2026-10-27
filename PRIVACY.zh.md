@@ -2,8 +2,8 @@
 
 [English](PRIVACY.md)
 
-- **版本：** 2.0
-- **最近更新：** 2026-10-09
+- **版本：** 2.1
+- **最近更新：** 2026-10-27
 
 ClawClaw 是本地优先的开源桌面应用。本说明覆盖此仓库源码与其构建产物已知的本地存储和网络行为；它不是对未部署服务、第三方构建、插件或平台的隐私承诺。项目由 [AngusFan-GH/ClawClaw](https://github.com/AngusFan-GH/ClawClaw) 独立维护，不代表 DeepSeek、Anywhere Labs、SpiritX、npm、GitHub 或消息平台。
 
@@ -27,6 +27,8 @@ ClawClaw 不读取、移动或修改其他应用的 `~/.dsh` 数据，也不会�
 | dshmarket / pnpm | 用户选择的目录来源、npm registry、GitHub 或 package/图片来源；搜索词、包名、版本、目录浏览信息与普通网络元数据可能发送。 |
 | Channels | 对应微信、企业微信、飞书、钉钉、QQ、iMessage、Telegram、WhatsApp、Discord、Slack 服务；凭据、授权/扫码数据、消息内容、附件引用及其协议元数据由平台和配置决定。 |
 | 其他插件和工具 | 插件或用户配置的模型、MCP、网页、registry 和 API；范围以其实现与服务政策为准。 |
+
+项目下载服务器使用安装包请求日志统计版本、平台、传输流量和估算下载会话。专用原始日志含 IP、User-Agent、时间、路径和传输状态，限制管理员访问并保留 30 轮日轮转；既有普通访问日志保持原有轮转规则。统计库长期保存请求事实及 IP 与 User-Agent 组合的带密钥 HMAC 摘要，报表仅提供聚合结果。这是去标识处理，不是下载人数或安装量统计；客户端未因此增加设备标识或完成上报。部署验证请求单独分类。详见[下载统计](docs/download-statistics.md)。
 
 ClawClaw 始终禁用上游反馈命令、消息反馈存储与 Remote API、反馈控件和 session telemetry backend；profile 与机器级 patch 无法重新启用这条收集链。默认 Desktop patch 还会禁用 DeepSeek session log、DeepSeek 模型 API extensions、DeepSeek web search 与官方 package inventory。用户 profile 或插件仍可启用其他网络功能；这些功能应以当前 profile 配置为准。
 

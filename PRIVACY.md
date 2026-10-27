@@ -2,8 +2,8 @@
 
 [中文](PRIVACY.zh.md)
 
-- **Version:** 2.0
-- **Last updated:** 2026-10-09
+- **Version:** 2.1
+- **Last updated:** 2026-10-27
 
 ClawClaw is a local-first open-source desktop application. This notice describes known local storage and network behavior in this repository's source and builds. It is not a privacy promise for undeployed services, third-party builds, plugins, or platforms. The project is independently maintained at [AngusFan-GH/ClawClaw](https://github.com/AngusFan-GH/ClawClaw) and does not represent DeepSeek, Anywhere Labs, SpiritX, npm, GitHub, or messaging platforms.
 
@@ -27,6 +27,8 @@ Connections depend on user choices, profiles, and plugins. Known endpoints in th
 | dshmarket / pnpm | User-selected catalogs, npm registry, GitHub, or package/image sources; searches, package names, versions, browsing data, and normal metadata may be sent. |
 | Channels | Relevant Weixin, WeCom, Feishu, DingTalk, QQ, iMessage, Telegram, WhatsApp, Discord, or Slack services; credentials, authorization/QR data, message content, attachment references, and protocol metadata depend on platform/configuration. |
 | Other plugins/tools | Plugin- or user-configured models, MCP servers, websites, registries, and APIs; their own implementation and policies control scope. |
+
+The project's download server uses installer request logs to measure versions, platforms, traffic and estimated download sessions. Dedicated raw logs contain IP, User-Agent, time, path and transfer status; access is limited to administrators and retention is 30 daily rotations. Existing ordinary access logs retain their existing rotation policy. The statistics database retains request facts and a keyed HMAC of the IP/User-Agent combination long term; reports expose aggregates only. This is de-identification, not a count of people or installations. No device identifier or completion reporting was added to clients for this feature. Deployment verification is classified separately. See [download statistics](docs/download-statistics.en.md).
 
 ClawClaw always disables the upstream feedback command, message-feedback storage and Remote API, feedback controls, and session telemetry backend. Profiles and machine patches cannot re-enable that collection chain. The default Desktop patch also disables DeepSeek session log, DeepSeek model API extensions, DeepSeek web search, and official package inventory. User profiles or plugins can enable other network behavior; inspect the active profile for those features.
 

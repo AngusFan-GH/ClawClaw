@@ -23,7 +23,10 @@ export async function verifyDeployment(manifest, provenance, options = {}) {
   for (const [platform, suffix] of [['darwin', 'universal.dmg'], ['win32', 'x64-Setup.exe']]) {
     assert.equal(manifest.artifacts[platform].url, `${ORIGIN}/releases/dsh/${version}/ClawClaw-${version}-${suffix}`)
   }
-  const get = (url, init = {}) => request(url, { cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15_000), ...init })
+  const get = (url, init = {}) => request(url, {
+    cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15_000), ...init,
+    headers: { 'User-Agent': 'ClawClaw-Release-Verify/1', 'X-ClawClaw-Download-Purpose': 'deployment-verification', ...init.headers },
+  })
   let last = 'not checked'
   let ready = false
   while (now() < deadline) {

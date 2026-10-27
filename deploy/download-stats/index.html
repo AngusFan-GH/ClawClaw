@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ClawClaw · 下载统计</title><link rel="stylesheet" href="dashboard.css"><script src="dashboard.js" defer></script></head>
+<body>
+<div class="site-bar"><div class="site-bar-inner"><span class="brand">ClawClaw<span class="brand-dot" aria-hidden="true">.</span></span><span class="site-label">下载统计</span></div></div>
+<main>
+<header class="page-heading"><div><p class="eyebrow">CLAWCLAW · 下载数据</p><h1>下载概览</h1></div><p id="updated" role="status">正在加载统计数据…</p></header>
+<p id="error" role="alert" hidden></p>
+<section id="cards" class="cards" aria-label="用户下载概览"></section>
+<section class="report" aria-labelledby="report-title">
+<div class="report-heading"><h2 id="report-title">版本分布</h2><button id="export" class="primary" disabled>导出 CSV</button></div>
+<div class="filter-bar"><nav aria-label="常用时间范围"><button data-days="1" aria-pressed="false">今日</button><button data-days="7" aria-pressed="false">近 7 天</button><button data-days="30" aria-pressed="false">近 30 天</button></nav></div>
+<div class="filters" aria-label="筛选条件">
+<label>开始日期<input type="date" id="from"></label><label>结束日期<input type="date" id="to"></label>
+<label>版本<select id="version"><option value="">全部版本</option></select></label>
+<label>平台<select id="platform"><option value="">全部平台</option><option>macOS</option><option>Windows</option></select></label>
+</div>
+<div class="table-wrap"><table><caption class="sr-only">按版本和平台汇总的下载数据</caption><thead><tr><th>版本</th><th>平台</th><th>下载次数</th><th>完整发送</th><th>流量</th></tr></thead><tbody id="breakdown"></tbody></table></div></section>
+<footer>下载次数为会话估算，不代表人数或安装量；已排除部署验证。北京时间，下载结束后约 1–2 分钟显示。</footer>
+</main></body></html>

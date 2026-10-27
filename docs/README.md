@@ -15,6 +15,7 @@
 | 产品边界与取舍 | [为什么做 ClawClaw](why-desktop.md) |
 | 插件生态原则 | [插件生态](plugin-ecosystem.md) |
 | GitHub 打包、版本存档和服务器发布边界 | [打包与发布](github-packaging.md) |
+| 下载量口径、内部报表和服务器安装 | [下载统计](download-statistics.md) |
 | 贡献和验证 | [贡献指南](../CONTRIBUTING.md) |
 | Desktop 包级操作 | [Desktop](../dsh-plugin-desktop/README.zh.md) |
 | Channels | [实现说明](../channels/dsh-im/README.zh.md) |

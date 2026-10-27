@@ -13,6 +13,8 @@ function fixture() {
   const request = async (url, init) => {
     assert.equal(init.redirect, 'error')
     assert.equal(init.cache, 'no-store')
+    assert.equal(init.headers['X-ClawClaw-Download-Purpose'], 'deployment-verification')
+    assert.equal(init.headers['User-Agent'], 'ClawClaw-Release-Verify/1')
     if (url === FEED) return Response.json(manifest)
     if (url.endsWith('build-info.json')) return Response.json(info)
     const platform = url.endsWith('.dmg') ? 'darwin' : 'win32'
