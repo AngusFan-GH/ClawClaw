@@ -3,6 +3,10 @@
 - insert:
     - id: desktop-response-policy
       name: dsh-plugin-desktop/response-policy
+    - id: desktop-genui
+      name: dsh-plugin-desktop/genui
+      config:
+        enabled: false
     - id: desktop-shell
       name: dsh-plugin-desktop
       config:

@@ -541,6 +541,7 @@ the package names, versions, and licenses for transparency.
 | dshmarket | 1.38.1 | MIT |
 | dunder-proto | 1.0.1 | MIT |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 |
+| echarts | 6.1.0 | Apache-2.0 |
 | ee-first | 1.1.1 | MIT |
 | emoji-regex | 8.0.0 | MIT |
 | encodeurl | 2.0.0 | MIT |
@@ -732,6 +733,7 @@ the package names, versions, and licenses for transparency.
 | toidentifier | 1.0.1 | MIT |
 | token-types | 6.1.2 | MIT |
 | ts-algebra | 2.0.0 | MIT |
+| tslib | 2.3.0 | 0BSD |
 | tslib | 2.8.1 | 0BSD |
 | tsyringe | 4.10.0 | MIT |
 | turndown | 7.2.4 | MIT |
@@ -761,6 +763,7 @@ the package names, versions, and licenses for transparency.
 | yocto-queue | 1.2.2 | MIT |
 | yoctocolors | 2.2.0 | MIT |
 | zod | 4.4.3 | MIT |
+| zrender | 6.1.0 | BSD-3-Clause |
 > Notice-required licenses in use: LGPL-3.0-or-later, GPL-3.0. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.
 
 ## dsh-git-graph

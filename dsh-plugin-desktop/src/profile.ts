@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import type { DesktopPnpmBootstrap } from './pnpm.ts'
 import { DESKTOP_PERSONA, desktopDefaultPersona } from './response-policy.ts'
 import { INPUT_SUGGESTIONS_ENTRY } from './input-suggestions-contract.ts'
+import { GENUI_ENTRY } from './genui-contract.ts'
 import { withDesktopPnpmPolicy } from './pnpm-policy.ts'
 import {
   existsSync,
@@ -114,6 +115,7 @@ const RETIRED_DESKTOP_SPIRITX_PACKAGE = `${DESKTOP_PACKAGE_NAME}/spiritx`
 const DESKTOP_EXPERTS_ROW_ID = 'clawclaw-experts'
 const DESKTOP_EXPERTS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/experts`
 const DESKTOP_EDITABLE_PROFILE_ENTRIES = [
+  { id: GENUI_ENTRY, name: `${DESKTOP_PACKAGE_NAME}/genui` },
   { id: INPUT_SUGGESTIONS_ENTRY, name: `${DESKTOP_PACKAGE_NAME}/input-suggestions` },
   { id: 'desktop-ai-continuation', name: `${DESKTOP_PACKAGE_NAME}/ai-continuation` },
   { id: 'desktop-ai-draft-optimization', name: `${DESKTOP_PACKAGE_NAME}/ai-draft-optimization` },

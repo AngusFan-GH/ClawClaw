@@ -27,7 +27,7 @@ describe('Desktop current version row', () => {
     expect(register).toHaveBeenCalledWith(expect.objectContaining({
       name: 'settings.general.item',
       id: 'current-version',
-      order: 100,
+      order: 1000,
       priority: -100,
       locale: 'settings',
     }), DesktopCurrentVersionRow)

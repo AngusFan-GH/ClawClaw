@@ -29,6 +29,7 @@ import { DesktopProfileService } from '../lib/profile-service.js'
 import { importLegacyDesktopSetupWizardSettings } from '../lib/setup-wizard-settings.js'
 import { verifyChannelHarness } from './verify-channel-harness.mjs'
 import { verifyGitGraph } from './verify-git-graph.mjs'
+import { verifyGenui } from './verify-genui.mjs'
 import { verifyUpgradeExpertRun, verifyDesktopSchedule } from './verify-upgrade-agent.mjs'
 import { selectOptionalBundles, verifyOptionalInventory, verifyAutoSelection, verifyOptionalRenderer } from './verify-optional-plugins.mjs'
 
@@ -654,6 +655,9 @@ try {
   }
   console.log('verify-desktop-schedule: legacy first-import and repeat-import retained all 40 history records and original Sessions')
   console.log('verify-optional-plugins: all shipped bundles offered, enabled, active across two starts and disabled persistently; renderer graphs, Auto permission selection and offline tool review passed')
+  // This probe edits the Profile and reloads its contribution; run after the
+  // existing Agent/optional-bundle fixtures have completed their assertions.
+  await verifyGenui(ctx)
 
 } finally {
   await ctx?.fiber.dispose()

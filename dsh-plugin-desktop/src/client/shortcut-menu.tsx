@@ -291,7 +291,7 @@ export function applyShortcutMenu(ctx: ClientContext): void {
   const shortcutTargets = createShortcutTargets(ctx)
   ctx.effect(() => ctx.locale.register(DESKTOP_SHORTCUTS_LOCALE_NAMESPACE, { zh, en }), 'dsh-plugin-desktop: shortcut menu dictionaries')
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item', id: 'desktop-shortcuts', order: 35, locale: DESKTOP_SHORTCUTS_LOCALE_NAMESPACE,
+    name: 'settings.general.item', id: 'desktop-shortcuts', order: 90, locale: DESKTOP_SHORTCUTS_LOCALE_NAMESPACE,
     inject: () => ({ shortcutSettings, shortcutTargets }),
   }, ShortcutSettingsRow))
   ctx.slots.inject('settings.action', () => ctx.slots.register({

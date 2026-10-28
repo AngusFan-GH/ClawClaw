@@ -18,7 +18,7 @@ export function applyDesktopVersionRow(ctx: ClientContext, version: string): voi
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
     id: 'current-version',
-    order: 100,
+    order: 1000,
     priority: -100,
     locale: 'settings',
     inject: (): DesktopVersionInjected => ({ version }),

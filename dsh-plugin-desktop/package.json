@@ -76,6 +76,10 @@
       "types": "./lib/types/response-policy.d.ts",
       "default": "./lib/response-policy.js"
     },
+    "./genui": {
+      "types": "./lib/types/genui.d.ts",
+      "default": "./lib/genui.js"
+    },
     "./reminders": {
       "types": "./lib/types/reminders.d.ts",
       "default": "./lib/reminders.js"
@@ -509,7 +513,8 @@
     "@deepseek-ai/dsh-experimental-client-ui-cot-translation": "0.2.1-rc.2",
     "@deepseek-ai/dsh-experimental-inspector": "0.2.1-rc.2",
     "@deepseek-ai/dsh-experimental-session-inspector": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-plugin-market": "0.2.1-rc.2"
+    "@deepseek-ai/dsh-client-ui-plugin-market": "0.2.1-rc.2",
+    "echarts": "6.1.0"
   },
   "optionalDependencies": {
     "@deepseek-ai/node-addon-system-darwin-arm64": "0.1.2",

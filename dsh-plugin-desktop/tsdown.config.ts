@@ -81,6 +81,7 @@ export default defineConfig([
       'plugin-registry-probe': 'src/plugin-registry-probe.ts',
       'default-workspace': 'src/default-workspace.ts',
       'git-graph': 'src/git-graph.ts',
+      genui: 'src/genui.ts',
       skills: 'src/skills.ts',
       'clawclaw-skill-filesystem': 'src/clawclaw-skill-filesystem.ts',
       'legacy-agent-presets': 'src/legacy-agent-presets.ts',
