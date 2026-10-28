@@ -137,6 +137,12 @@ describe('Host input suggestions', () => {
 })
 
 describe('suggestion content boundaries', () => {
+  it('retains the original safety ceiling without imposing short style targets as rejection rules', () => {
+    const text = 'Add a regression test for the fix. Include the edge case reported in this conversation.'
+    expect(suggestionText(text)).toBe(text)
+    expect(suggestionText('文'.repeat(240))).toBe('文'.repeat(240))
+    expect(suggestionText('文'.repeat(241))).toBe('')
+  })
   it.each(['', 'a', '- Do this', '1. Do this', '建议：做这个', 'Suggestion: do this', 'two\nlines', 'Keep going…', 'x'.repeat(241), '{"text":"oops"}'])('rejects invalid output %j', value => {
     expect(suggestionText(value)).toBe('')
   })

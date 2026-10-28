@@ -13,6 +13,12 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 afterEach(() => vi.useRealTimers())
 
 describe('strict assistance contracts', () => {
+  it('keeps brevity as guidance rather than rejecting otherwise valid suffixes', () => {
+    const text = ' write regression tests. Include edge cases and verify the existing behavior.'
+    expect(continuationText(text, request.draft)).toBe(text)
+    expect(continuationText('文'.repeat(300), request.draft)).toBe('文'.repeat(300))
+    expect(continuationText('文'.repeat(301), request.draft)).toBe('')
+  })
   it('preserves the whitespace needed to append English text', () => expect(continuationText(' write regression tests.', request.draft)).toBe(' write regression tests.'))
   it.each(['Please help me write tests.', '```text\nwrite tests\n```', 'Sure, here is a continuation.', '<tool>'])('rejects echoes and wrappers: %s', text => {
     expect(continuationText(text, request.draft)).toBe('')
@@ -110,6 +116,18 @@ describe('one-shot model calls', () => {
     }))
     return { ctx: { llm: { prepareCall } } as unknown as Pick<Context, 'llm'>, stream, prepareCall }
   }
+  it.each([
+    ['{"continuation":""}', 'model-empty'],
+    [JSON.stringify({ continuation: 'PRIVATE'.repeat(44) }), 'too-long'],
+    ['{"unexpected":"PRIVATE"}', 'invalid-shape'],
+    ['PRIVATE', 'invalid-json'],
+    ['{"continuation":"<PRIVATE>"}', 'rejected-content'],
+  ])('distinguishes empty output from validation failures without reporting content: %s', async (raw, reason) => {
+    const m = model(raw), rejected = vi.fn()
+    expect(await generateDraftAssistance(m.ctx, request, snapshot, new AbortController().signal, undefined, rejected))
+      .toEqual({ text: '', notes: [] })
+    expect(rejected.mock.calls).toEqual([[reason]])
+  })
   it('uses current route, adaptive capabilities, no tools and untrusted draft data', async () => {
     const m = model('" write tests."')
     expect(await generateDraftAssistance(m.ctx, request, snapshot, new AbortController().signal)).toEqual({ text: ' write tests.', notes: [] })
