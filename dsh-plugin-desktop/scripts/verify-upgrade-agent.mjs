@@ -1,7 +1,9 @@
 /** Real preset, expert activation and persistence smoke using an offline model. */
 import assert from 'node:assert/strict'
+import { recordContextAudit } from './context-audit.mjs'
+import { DESKTOP_RESPONSE_POLICY } from '../lib/response-policy.js'
 import { randomUUID } from 'node:crypto'
-import { LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { LlmAdapter, ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, pluginRecordOf } from '@deepseek-ai/dsh-session'
 
 /** Read the loop-built system-role message rather than the one-shot system field. */
@@ -17,6 +19,7 @@ class OfflineAdapter extends LlmAdapter {
   }
   async *stream(options) {
     this.requests.push(options)
+    recordContextAudit(String(options.sessionId).startsWith('expert-') ? 'expert:request' : 'automation:request', { request: options })
     const text = 'CLAWCLAW_UPGRADE_EXPERT_OK'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text }
@@ -67,10 +70,17 @@ export async function verifyUpgradeExpertRun(ctx, cwd, expert) {
     })
     try {
       const assembly = await restored.agent.ctx.systemPrompt.assemble({ scope: restored.agent })
+      recordContextAudit('expert:resumed', { assembly })
       assert.ok(assembly.sections.some(section => section.name === 'deployment:persona-prefix'
         && section.text.length > 0), 'expert persona was lost after resume')
       assert.ok(!assembly.tools.some(tool => tool.name === 'summon_expert_team'), 'expert restriction was lost after resume')
       assert.ok(assembly.sections.some(section => section.name === 'clawclaw:response-policy'), 'response language policy was lost after resume')
+      restored.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: '恢复后请用中文继续说明。' }] }))
+      await restored.agent.whenIdle()
+      const resumedRequest = adapter.requests.findLast(request => request.sessionId === restored.agent.id)
+      assert.ok(resumedRequest, 'resumed expert never reached the offline model')
+      assert.equal(requestSystem(resumedRequest).split(DESKTOP_RESPONSE_POLICY).length, 2)
+      recordContextAudit('expert:resumed-request', { request: resumedRequest })
     } finally {
       await restored.dispose()
     }
@@ -92,7 +102,7 @@ export async function verifyDesktopSchedule(ctx) {
     const controller = ctx.desktopCronTasksController
     const workspace = await ctx.workspaceRegistry.create(ctx.profileContext.home)
     const task = await controller.action({ action: 'create', input: {
-      name: 'Offline Schedule integration', prompt: 'Reply with the offline verification result.',
+      name: 'Offline Schedule integration', prompt: '请用中文返回离线验证结果。',
       expression: '0 0 * * *', timeZone: 'UTC', workspaceId: String(workspace.id), oneTimeAt: new Date(Date.now() + 3_000).toISOString(),
     } })
     const catalog = await ctx.schedule.catalog()
@@ -111,6 +121,8 @@ export async function verifyDesktopSchedule(ctx) {
     assert.equal(adapter.requests.length, 1, 'official delivery executed more than once')
     assert.match(requestSystem(adapter.requests[0]), /This assistant session runs in ClawClaw/)
     assert.match(requestSystem(adapter.requests[0]), /language of the (?:user-written task|original user task)/)
+    assert.equal(requestSystem(adapter.requests[0]).split(DESKTOP_RESPONSE_POLICY).length, 2)
+    assert.ok(JSON.stringify(adapter.requests[0].messages).includes('请用中文返回离线验证结果。'))
     assert.equal(String(adapter.requests[0].sessionId), completed.activeSessionId)
     assert.ok(completed.lastClaimedMessageId, 'execution was not durably fenced')
     await new Promise(resolve => setTimeout(resolve, 25))

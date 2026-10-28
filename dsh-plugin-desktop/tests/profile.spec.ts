@@ -1239,10 +1239,10 @@ virtualStoreDirMaxLength: 60
     for (const id of ['preset-standard', 'preset-ptc', 'preset-cordis', 'preset-minimal']) {
       const plugins = rows.find(row => row.id === id)?.config?.plugins as Array<{ name: string; config?: Record<string, unknown> }>
       const persona = plugins.find(plugin => plugin.name === '@deepseek-ai/dsh-persona')?.config
-      expect(persona?.prefix).toBe(system?.personaPrefix)
+      expect(persona?.prefix).toContain(String(system?.personaPrefix))
       expect(prepared.overlays.findLast(patch => patch.id === id)?.config?.plugins).toEqual(rows.find(row => row.id === id)?.config?.plugins)
-      expect(persona?.prefix).toContain("Use the user's conversational language for all user-facing responses")
-      expect(persona?.prefix).toContain('interim progress updates, tool-call commentary, questions, and final answers')
+      if (id === 'preset-minimal') expect(persona?.prefix).toContain("Use the user's conversational language for all user-facing responses")
+      else expect(persona?.prefix).not.toContain("Use the user's conversational language")
       if (id === 'preset-minimal') {
         expect(persona?.complete).toBe(true)
         expect(persona?.includeRuntimeContext).toBe(false)
@@ -1265,7 +1265,8 @@ virtualStoreDirMaxLength: 60
     expect(system).toMatchObject({ includeHarnessIdentity: false, includeRuntimeContext: false })
     expect(system?.personaPrefix).toContain('You are ClawClaw')
     const plugins = rows.find(row => row.id === 'preset-minimal')?.config?.plugins as Array<{ config?: Record<string, unknown> }>
-    expect(plugins[0]?.config).toMatchObject({ complete: true, prefix: system?.personaPrefix })
+    expect(plugins[0]?.config).toMatchObject({ complete: true })
+    expect(plugins[0]?.config?.prefix).toContain(String(system?.personaPrefix))
     expect(rows.find(row => row.id === 'desktop-response-policy')?.name).toBe('dsh-plugin-desktop/response-policy')
     const persisted = readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8')
     expect(persisted).toContain('You are a helpful software engineer assistant.')

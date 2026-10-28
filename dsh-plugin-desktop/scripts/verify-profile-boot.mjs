@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { recordContextAudit } from './context-audit.mjs'
+import { verifyContextRequests } from './verify-context-requests.mjs'
+import { DESKTOP_PRODUCT_CONTEXT, DESKTOP_RESPONSE_POLICY } from '../lib/response-policy.js'
 import { createHash } from 'node:crypto'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -211,7 +214,8 @@ try {
   let restartGuard = false
   let unexpectedRestartRequests = 0
   const prepareHost = async host => {
-    if (restartGuard) host.on('agent/request', async () => {
+    if (restartGuard) host.on('agent/request', async ({ agent }, next) => {
+      if (agent.options.provider === 'context-smoke') return next()
       unexpectedRestartRequests++
       throw new Error('Schedule restart must never invoke a model')
     }, { global: true, prepend: true })
@@ -392,8 +396,11 @@ try {
     const lease = await agentPresets.acquireScope(presetId)
     try {
       const prompt = await ctx.systemPrompt.assemble({ scope: lease.key })
+      recordContextAudit(`preset:${presetId}`, { assembly: prompt })
       const promptText = prompt.sections.map(section => section.text).join('\n\n')
       assert.match(promptText, /This assistant session runs in ClawClaw/)
+      assert.equal(promptText.split(DESKTOP_RESPONSE_POLICY).length, 2)
+      assert.equal(promptText.split(DESKTOP_PRODUCT_CONTEXT).length, 2)
       assert.match(promptText, /interim progress updates, tool-call commentary, questions, and final answers/)
       assert.ok(!prompt.sections.some(section => section.name === 'harness:identity'))
       assert.ok(!prompt.sections.some(section => ['harness:source', 'app:web-surface'].includes(section.name)))
@@ -422,6 +429,7 @@ try {
     throw new Error(`assembled Windows profile remapped minimal preset to ${minimalPreset.id}`)
   }
   const hostServiceProbe = ctx.get(HOST_SERVICE_PROBE_KEY)
+  await verifyContextRequests(ctx, home)
   await verifyUpgradeExpertRun(ctx, home, firstExpert)
   await verifyDesktopSchedule(ctx)
   await verifyChannelHarness(ctx)
@@ -584,6 +592,7 @@ try {
     ctx = await boot(BIN_NAME, prepared.rootConfig, [hostServicePatch, ...prepared.patches], prepareHost, prepared.bareModuleBaseUrl)
     await verifyOptionalInventory(ctx, true)
     if (restart === 0) {
+      await verifyContextRequests(ctx, home, { team: true })
       await verifyAutoSelection(ctx, home)
       await runtime.mountScheduled()
       await verifyOptionalRenderer(mountedSpec.authenticationUrl, {

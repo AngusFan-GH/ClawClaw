@@ -12,7 +12,9 @@ Desktop 内置 Agent 身份将助手标识为 ClawClaw。独立的回复规则�
 
 Electron main 默认通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKTOP_ISOLATED_HOST=0` 是同进程排查路径。Host 拥有 Cordis 和 Web 服务，Electron main 拥有原生资源。浏览器内容通过普通 loopback HTTP/WebSocket 工作，没有通用 Electron bridge。
 
-普通自我介绍使用 ClawClaw 及当前角色；用户询问模型或架构时仍如实回答。Desktop 禁用上游自开发上下文，避免将产品描述为 Harness Web GUI 并主动展示安装路径和服务地址。回复规则在挂载后的首次模型步骤开启新的请求序列，也覆盖恢复的会话。
+产品身份、应用使用上下文和回复语言分别注入。普通预设只接收一份共享语言规则，内置完整提示词使用同一份文本组合一次。Desktop 用 ClawClaw 应用说明替换上游自开发上下文：显式检查页面状态，区分安装位置和工作目录，核实构建与监听流程，不在用户未要求时另起替代服务器。当前应用地址保留在动态上下文中。工作目录、权限、委派限制及团队角色继续由上游提供。提示词变化和会话恢复使用上游请求更新机制，Desktop 不因插件挂载而重置请求序列。用户询问模型或架构时仍如实回答。
+
+需要脱敏的离线请求证据时，运行 `corepack pnpm --filter dsh-plugin-desktop run verify:profile` 并将 `CLAWCLAW_CONTEXT_AUDIT_PATH` 设为绝对 JSONL 文件路径。临时 Profile 会记录段落归属、动态上下文、消息角色与来源，以及工具说明，覆盖各预设、策略更新、冷恢复、专家、自动任务和真实 Team Lead／teammate 作用域。这些检查验证请求组装和用户输入保留，不评测在线模型对语言要求的遵循程度。
 
 Streamable HTTP 和 SSE MCP 连接器允许本机回环地址及内网 IPv4 网段 `10.0.0.0/8`、`172.16.0.0/12`、`<company-cidr>` 使用 HTTP，其他主机仍要求 HTTPS。HTTP 流量（包括鉴权请求头）不加密。OAuth 发行方、资源及授权和令牌端点仍要求 HTTPS。
 
