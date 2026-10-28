@@ -1389,7 +1389,7 @@ describe('Electron desktop runtime', () => {
     expect(electron.browserWindows[0]?.destroy).toHaveBeenCalledOnce()
   })
 
-  it('does not block a sandboxed iframe from navigating to an external origin', async () => {
+  it('preserves ordinary iframe navigation while preventing opaque previews from navigating out', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
@@ -1409,6 +1409,12 @@ describe('Electron desktop runtime', () => {
     navigate(iframeEvent)
 
     expect(iframeEvent.preventDefault).not.toHaveBeenCalled()
+    for (const source of [{ frame: { url: 'about:srcdoc' } }, { initiator: { url: 'about:srcdoc' } }]) {
+      const previewEvent = { ...iframeEvent, ...source, preventDefault: vi.fn() }
+      navigate(previewEvent)
+      expect(previewEvent.preventDefault).toHaveBeenCalledOnce()
+    }
+
 
     const mainFrameEvent = {
       url: 'https://example.com/',

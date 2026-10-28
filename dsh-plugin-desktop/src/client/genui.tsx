@@ -7,6 +7,7 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { GENUI_ENTRY, GENUI_RENDER_TOOL, type GenuiCell, type GenuiNode, type GenuiSettings } from '../genui-contract.ts'
 import { validateGenuiDocument } from '../genui-core.ts'
+import { GenuiHtmlView } from './genui-html.tsx'
 import { GenuiChartView } from './genui-chart.tsx'
 import { GENUI_STYLES } from './genui-styles.ts'
 
@@ -48,6 +49,7 @@ function GenuiTable({ node, label }: { node: TableNode; label: string }) {
 
 function renderNode(node: GenuiNode, key: number, label: string, zh: boolean): ReactNode {
   switch (node.type) {
+    case 'html': return <GenuiHtmlView key={key} node={node} zh={zh} />
     case 'chart': return <GenuiChartView key={key} node={node} zh={zh} />
     case 'text': return <p key={key}>{node.content}</p>
     case 'card': return <section key={key} className="clawGenuiCard"><h4>{node.title}</h4>{node.items.map((child, i) => renderNode(child, i, node.title, zh))}</section>
@@ -79,8 +81,9 @@ export function GenuiResultView({ sessionId, callId, meta, text, isError, zh = f
     {!isError && <p className="clawGenuiDiagnostic">{zh ? '此卡片无法显示，以下为保存的文本结果。' : 'This card is unavailable. The saved text result follows.'}</p>}
     <pre className="clawGenuiFallback">{text}</pre>
   </div>
-  return <section className="clawGenui" data-genui-session={sessionId} data-genui-call={callId} aria-label={parsed.document.title}>
-    <h3>{parsed.document.title}</h3>
+  const inline = parsed.document.items.every(node => node.type === 'html')
+  return <section className={inline ? 'clawGenui clawGenuiInline' : 'clawGenui'} data-genui-session={sessionId} data-genui-call={callId} aria-label={parsed.document.title}>
+    {!inline && <h3>{parsed.document.title}</h3>}
     {parsed.document.items.map((node, i) => renderNode(node, i, parsed.document.title, zh))}
   </section>
 }

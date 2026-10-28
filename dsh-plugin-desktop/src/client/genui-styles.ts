@@ -4,6 +4,7 @@ import { GENUI_CHART_DARK, GENUI_CHART_LIGHT } from './genui-chart-options.ts'
 export const GENUI_STYLES = `
 .clawGenuiResults{display:grid;gap:16px;min-width:0}
 .clawGenui{min-width:0;display:grid;gap:20px;padding:20px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsh-card-radius,12px);color:var(--dsw-alias-label-primary);font:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:1.6;overflow-wrap:anywhere}
+.clawGenui.clawGenuiInline{padding:0;border:0;border-radius:0;background:transparent}
 .clawGenui h3,.clawGenui h4,.clawGenui p{margin:0;white-space:pre-wrap}
 .clawGenui>h3{font-size:1.1em;font-weight:600;line-height:1.5;padding-bottom:12px;border-bottom:1px solid var(--dsw-alias-border-l2)}
 .clawGenui h4{font-size:1em;font-weight:600}
@@ -31,6 +32,7 @@ export const GENUI_STYLES = `
 .clawGenuiChart figcaption{font-weight:600}.clawGenuiChartLegendGroup{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .clawGenuiChartLegend{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:4px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:inherit;font:inherit;font-size:.9em;cursor:pointer}
 .clawGenuiChartLegend:hover{background:var(--dsw-alias-interactive-bg-hover)}.clawGenuiChartLegend[aria-pressed=false]{color:var(--dsw-alias-label-tertiary);text-decoration:line-through}.clawGenuiChartLegend[aria-pressed=false] span{opacity:.35}
+.clawGenuiHtml{min-width:0}.clawGenuiHtmlToolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.clawGenuiHtmlToolbar h4{margin-right:auto}.clawGenuiHtmlToolbar button{min-height:32px;padding:4px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}.clawGenuiHtmlToolbar button:hover{background:var(--dsw-alias-interactive-bg-hover)}.clawGenuiHtml iframe{display:block;margin-top:8px;border-radius:8px}.clawGenuiHtml summary{cursor:pointer;padding:8px 0;color:var(--dsw-alias-label-secondary)}
 .clawGenuiChartScroll{max-height:440px;overflow:auto;min-width:0;scrollbar-color:var(--dsw-alias-label-tertiary) transparent}.clawGenuiChartNote{margin-top:8px!important;font-size:.95em;color:var(--dsw-alias-label-secondary)}.clawGenuiChartLegendValue{font-variant-numeric:tabular-nums;font-size:.95em}.clawGenuiChartRestore{min-height:32px;padding:4px 0;border:0;background:transparent;color:var(--dsh-color-primary);font:inherit;cursor:pointer}.clawGenuiChartRestore:hover{text-decoration:underline}
 .clawGenuiChartData summary{cursor:pointer;padding:8px 0;color:var(--dsw-alias-label-secondary);font-size:.95em}.clawGenuiChartData[open] summary{margin-bottom:4px}
 @media(max-width:560px){.clawGenui{padding:14px;gap:16px}.clawGenui th,.clawGenui td{padding:8px 10px}.clawGenuiCard{padding:12px}}

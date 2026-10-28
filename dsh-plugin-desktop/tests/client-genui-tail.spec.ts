@@ -68,6 +68,21 @@ describe('GenUI cards outside collapsed tool process', () => {
     expect(reopened.element.querySelector('table')?.textContent).toContain('Worker4')
   })
 
+  it('embeds interactive HTML directly in the chat Turn without tool details, links or an outer result card', async () => {
+    const meta = { format: GENUI_FORMAT, title: '交互示例', items: [{ type: 'html', title: '价格计算器',
+      html: '<label>数量<input type="number" value="3"></label><output>60</output>', fallback: '初始总价 60。调整数量可本地计算。' }] }
+    const tools = store<readonly ToolChatData[]>([{ root: result(24, { meta }) }])
+    const { element } = await mount(store(chatFor({ 1: tools })))
+    expect(element.querySelector('.clawGenuiResults iframe')?.getAttribute('title')).toBe('价格计算器')
+    expect(element.querySelector('[data-genui-session]')?.classList.contains('clawGenuiInline')).toBe(true)
+    expect(element.querySelector('h3')).toBeNull()
+    expect(element.querySelector('h4')?.textContent).toBe('价格计算器')
+    expect(element.querySelector('a')).toBeNull()
+    expect(element.querySelector('iframe')?.getAttribute('sandbox')).toBe('allow-scripts')
+    const restored = await mount(store(chatFor({ 1: store(JSON.parse(JSON.stringify(tools.getSnapshot()))) })))
+    expect(restored.element.querySelector('iframe')?.getAttribute('srcdoc')).toContain('<output>60</output>')
+  })
+
   it('selects only the latest successful render, including PTC children, without using validation results', () => {
     const old = result(10)
     const child = result(24)

@@ -1,3 +1,4 @@
+import { blockIsolatedPreviewNavigation } from './genui-navigation-policy.ts'
 import {
   app,
   BrowserWindow,
@@ -441,6 +442,7 @@ export class ElectronShellGeneration {
       renderer.setZoomLevel(clampedZoomLevel(renderer.getZoomLevel() + step))
     }
     const navigate = (event: Electron.Event<Electron.WebContentsWillFrameNavigateEventParams>): void => {
+      if (blockIsolatedPreviewNavigation(event)) { event.preventDefault(); return }
       if (!event.isMainFrame) return
       let targetOrigin: string | undefined
       try {

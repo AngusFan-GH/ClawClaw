@@ -6,13 +6,13 @@ import { GENUI_ENTRY, type GenuiSettings } from '../genui-contract.ts'
 
 export const GENUI_SETTINGS_ZH = {
   title: '可视化回答',
-  description: '在适合时，用卡片、表格和图表展示回答。图表支持切换图例和查看数据。关闭后显示文本结果。',
+  description: '在适合时，用卡片、表格和图表展示回答。支持查看图表数据及本地交互片段。关闭后显示文本结果。',
   example: '例如：用柱状图对比 API=20、Worker=4、Cache=100。',
   failed: '未能保存设置，请重试。',
 }
 export const GENUI_SETTINGS_EN: Record<keyof typeof GENUI_SETTINGS_ZH, string> = {
   title: 'Visual responses',
-  description: 'Show suitable responses as cards, tables and charts. Toggle chart legends and view source data. Turn off to display text results.',
+  description: 'Show suitable responses as cards, tables and charts. Explore chart data and local interactive snippets. Turn off to display text results.',
   example: 'Try: Compare API=20, Worker=4 and Cache=100 in a bar chart.',
   failed: 'Could not save this setting. Please try again.',
 }

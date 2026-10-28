@@ -6,6 +6,7 @@ export const GENUI_VALIDATE_TOOL = 'clawclaw_validate_ui'
 export const GENUI_LIMITS = Object.freeze({
   bytes: 64 * 1024, nodes: 200, depth: 8, string: 2000, title: 160,
   rows: 50, columns: 12, steps: 24, diagnostics: 24,
+  htmlFragments: 2, htmlBytes: 32 * 1024,
   charts: 8, chartPoints: 60, chartPiePoints: 12, chartSeries: 4, chartValue: 1e15,
 })
 
@@ -19,7 +20,9 @@ export type GenuiChart = {
   series: { name: string; values: (number | null)[] }[]
   unit?: string
 }
+export type GenuiHtml = { type: 'html'; title: string; html: string; fallback: string }
 export type GenuiNode =
+  | GenuiHtml
   | GenuiChart
   | { type: 'text'; content: string }
   | { type: 'card'; title: string; items: GenuiNode[] }

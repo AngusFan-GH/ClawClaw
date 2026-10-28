@@ -14,6 +14,7 @@ export async function verifyGenui(ctx) {
     assert.ok(ctx.tools.get(validate))
     assert.equal(await contributed(), true)
     const document = { format: 'clawclaw.genui/v1', title: 'Offline profile check', items: [
+      { type: 'html', title: 'Local counter', html: '<button onclick="this.textContent++">0</button>', fallback: 'Initial count: 0.' },
       { type: 'table', columns: ['Service', 'Count'], rows: [['API', 2], ['Worker', 0]] },
       { type: 'chart', kind: 'bar', title: 'Request counts', categories: ['API', 'Worker'],
         series: [{ name: 'Count', values: [2, 0] }] },

@@ -2,7 +2,7 @@
 
 English | [中文](genui.zh.md)
 
-GenUI implements opt-in result cards with local chart and table interactions. It does not replace the upstream Markdown renderer, observe the conversation DOM, or change layout ownership. The pinned upstream checkout is unchanged.
+GenUI implements opt-in result cards with local chart, table and isolated HTML interactions. It does not replace the upstream Markdown renderer, observe the conversation DOM, or change layout ownership. The pinned upstream checkout is unchanged.
 
 ## Enable in a test Profile
 
@@ -34,11 +34,11 @@ Ask naturally for a visual comparison, plan or chart; the enabled feature guides
 
 ## Protocol and ownership
 
-Supported types are `text`, `card`, `row`, `stat`, `table`, `progress`, `callout` `steps` and `chart`. Text is literal; no HTML, arbitrary styles, executable expressions or model actions are interpreted. Tables sort locally and use semantic table headers with sort state. Limits are 64 KiB of serialized JSON, 200 components, eight component levels, 50 table rows, 12 columns, 24 steps, 2,000 characters per text field and 160 per title or label. Invalid or oversized documents produce diagnostics instead of silently discarding data. No repair is attempted.
+Supported types are `text`, `card`, `row`, `stat`, `table`, `progress`, `callout`, `steps`, `chart` and `html`. Standard component text is literal; no HTML, arbitrary styles, executable expressions or model actions are interpreted outside isolated HTML previews. Tables sort locally and use semantic table headers with sort state. Limits are 64 KiB of serialized JSON, 200 components, eight component levels, 50 table rows, 12 columns, 24 steps, 2,000 characters per text field and 160 per title or label. Invalid or oversized documents produce diagnostics instead of silently discarding data. No repair is attempted.
 
 The Host validates the document and uses the tool output contract to project it into replayable `meta`, while preserving a readable text result. The Client validates that metadata again. It renders settled results only; preparing/running arguments never become interactive UI. Independent successful results in each Turn are shown in order in the answer's public tail, outside collapsed work details. An optional nonblank `resultId` (at most 160 characters) replaces the result with the same ID in that Turn, preserving its original position. Omit the ID for a new result. Failed or invalid updates cannot replace a valid card; unrecognized metadata retains its saved text separately. This reads the owning Session's Turn-scoped Chat projection, including nested PTC results and hidden process nodes; it restores from history without another model call. The original tool result remains in work details. Missing, invalid or future metadata falls back to saved text. Session and call identity come from the owning view. Local sorting is ephemeral and does not write shared state or send model messages.
 
-The feature follows confirmed Host configuration and disposes its tools, prompt, slot and styles. There is no independent result database or browser persistence. Forms, action delivery, durable drafts, exports, inline fences and sidechat integration remain subsequent work; this increment does not establish their routing or persistence guarantees.
+The feature follows confirmed Host configuration and disposes its tools, prompt, slot and styles. There is no independent result database or browser persistence. Action delivery, durable drafts, exports, inline fences and sidechat integration remain subsequent work; this increment does not establish their routing or persistence guarantees.
 
 ## Charts and presentation
 
@@ -51,6 +51,20 @@ Charts use Apache ECharts with SVG rendering. The `chart` node accepts `kind` (`
 A document allows eight charts, each with at most 60 categories and four series. Pie charts allow 12 categories and one nonnegative series. Values must be finite and have magnitude at most 10^15. Bar and line charts accept `null` for missing values; zero remains zero. Series lengths must match categories. Arbitrary ECharts options, code and HTML are rejected.
 
 Legend toggles only affect the current local view. Pie legends show values and shares of the currently visible categories, with an explicit scope explanation after filtering and a Restore all action. Their data tables always retain all categories and shares of the original total. Single-series bar/line charts show a series label without an unnecessary toggle. Every chart includes an expandable semantic data table; empty, all-hidden, all-missing and zero-sum pie data each explain the specific reason. Hidden data can be restored with one action. Rendering failures automatically expand the data table. Charts resize with the container and follow light/dark themes. Long-name or more-than-eight-category bars use a horizontally oriented comparison with vertical scrolling. Trends with more than 12 categories scroll horizontally, preserving all points and their source order. Plot heights follow content, with bounded scroll viewports. Keyboard users can scroll the plot region and expand the exact data table. Unmounting disposes charts and observers. Cards use theme colors, grouped metrics, restrained borders, numeric table alignment and compact progress bars. Callouts distinguish info, success, warning and error with labels, icons and semantic accent colors. The model is instructed to provide concise conclusions without repeating card data. The General setting includes a concrete example request.
+
+## Local interactive HTML
+
+HTML-only results render inline in the chat answer, before its message action buttons, without an outer result card or duplicate document heading. They do not require opening tool details or another page. Mixed structured results retain their card layout.
+
+Use `html {type:"html",title:string,html:string,fallback:string}` for small self-contained calculators, filters or simulations that standard components cannot express. Each document allows two fragments, each at most 32 KiB of UTF-8 source. Title, source and a readable fallback are required. Tool text contains the fallback, not executable source; source remains in durable metadata for replay.
+
+The Client runs fragments in an opaque-origin `iframe` with only `allow-scripts`. The initial policy blocks external resources, connections, nested frames, workers, objects, base URLs and form submission. Inline CSS and JavaScript are supported; external libraries, imports and eval are unavailable. Electron additionally cancels navigation initiated by or targeting a srcdoc frame, because CSP alone does not block self-navigation. Ordinary plugin iframe navigation remains unchanged. No Electron, filesystem, session, tool or privileged action bridge is exposed. This is a presentation runtime, not a general application or security boundary for arbitrary hostile workloads; CPU and memory quotas are not provided.
+
+A narrow source-checked message channel reports readiness, failure and bounded height (120–720 px); it accepts no commands or shared state updates. Theme updates go into the frame without resetting its local inputs. The host provides Reset, Stop and a text description. Errors or an eight-second startup timeout expose the description. Stop removes the iframe; Reset recreates it. Inputs are temporary and return to their initial state on remount or history reopen. Do not put secrets into snippets or imitate permission dialogs. Static charts should continue to use the standard chart component.
+
+Example request: “Create a local price calculator with unit price and quantity inputs, a live total and a reset button. Include a text explanation.” Users do not need to name a tool.
+
+The architecture follows the general isolated-document approach, informed by the locally available visualization preview wrapper and [OpenAI’s visualization overview](https://learn.chatgpt.com/docs/visualizations). The ClawClaw runtime and styles are original; this does not claim to reproduce Codex’s private app internals.
 
 ## Verification and provenance
 

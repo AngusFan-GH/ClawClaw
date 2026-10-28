@@ -52,6 +52,7 @@ export function validateGenuiDocument(value: unknown): GenuiValidation {
   }
   let count = 0
   let charts = 0
+  let fragments = 0
   function children(items: unknown, path: string, depth: number): GenuiNode[] {
     if (!Array.isArray(items) || items.length === 0) { error(path, 'Expected a nonempty component array.'); return [] }
     const nodes: GenuiNode[] = []
@@ -116,6 +117,18 @@ export function validateGenuiDocument(value: unknown): GenuiValidation {
           }))
         }
         return { type: 'table', columns, rows }
+      }
+      case 'html': {
+        if (++fragments > GENUI_LIMITS.htmlFragments) { error(path, `At most ${GENUI_LIMITS.htmlFragments} HTML fragments are allowed.`); return }
+        keys(item, ['type', 'title', 'html', 'fallback'], path)
+        const title = text(item.title, `${path}.title`, GENUI_LIMITS.title)
+        const fallback = text(item.fallback, `${path}.fallback`)
+        const html = text(item.html, `${path}.html`, GENUI_LIMITS.htmlBytes)
+        for (const [key, value] of [['title', title], ['fallback', fallback], ['html', html]]) {
+          if (!value!.trim()) error(`${path}.${key}`, 'Expected nonblank text.')
+        }
+        if (new TextEncoder().encode(html).length > GENUI_LIMITS.htmlBytes) error(`${path}.html`, 'HTML fragment exceeds the UTF-8 byte limit.')
+        return { type: 'html', title, html, fallback }
       }
       case 'chart': {
         if (++charts > GENUI_LIMITS.charts) { error(path, `At most ${GENUI_LIMITS.charts} charts are allowed.`); return }
@@ -185,6 +198,7 @@ export function validateGenuiDocument(value: unknown): GenuiValidation {
 export function genuiText(document: GenuiDocument): string {
   function lines(node: GenuiNode): string[] {
     switch (node.type) {
+      case 'html': return [node.title, node.fallback]
       case 'text': case 'callout': return [node.content]
       case 'card': return [node.title, ...node.items.flatMap(lines)]
       case 'row': return node.items.flatMap(lines)

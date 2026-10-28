@@ -9,6 +9,7 @@ import { GENUI_FORMAT, GENUI_RENDER_TOOL, GENUI_VALIDATE_TOOL } from '../src/gen
 import { validateGenuiDocument } from '../src/genui-core.ts'
 
 const document = { format: GENUI_FORMAT, title: 'Plan', resultId: 'plan', items: [{ type: 'stat', label: 'Files', value: 3 },
+  { type: 'html', title: 'Counter', html: '<button onclick="this.textContent++">0</button>', fallback: 'Initial count: 0.' },
   { type: 'chart', kind: 'bar', title: 'Requests', categories: ['API', 'Worker'], series: [{ name: 'Count', values: [20, 4] }] },
 ] }
 
@@ -56,7 +57,7 @@ describe('GenUI Host integration', () => {
       const result = await host.ctx.tools.execute({ callId, name: GENUI_RENDER_TOOL,
         arguments: { document }, signal: new AbortController().signal })
       expect(result.isError).toBe(false)
-      expect(result.content).toEqual([{ type: 'text', text: 'Plan\nFiles: 3\nRequests\nCount\nAPI: 20\nWorker: 4' }])
+      expect(result.content).toEqual([{ type: 'text', text: 'Plan\nFiles: 3\nCounter\nInitial count: 0.\nRequests\nCount\nAPI: 20\nWorker: 4' }])
       expect(result.meta).toEqual(document)
       const session = Session.create(SessionId('genui-parent'))
       session.append('tool/call', { turn: 1, step: 1, callId, name: GENUI_RENDER_TOOL, arguments: JSON.stringify({ document }) })
