@@ -1,6 +1,8 @@
 # Desktop Host operations compose around the existing Web bundle. Compatibility
 # mode keeps upstream ownership of the browser carrier and rendered UI.
 - insert:
+    - id: desktop-response-policy
+      name: dsh-plugin-desktop/response-policy
     - id: desktop-shell
       name: dsh-plugin-desktop
       config:
@@ -151,4 +153,8 @@
 
 # Desktop supplies its own ClawClaw identity through the client plugin.
 - id: ui-brand-official
+  disabled: true
+
+# Desktop sessions use product context rather than upstream self-development guidance.
+- id: harness-dev-context
   disabled: true

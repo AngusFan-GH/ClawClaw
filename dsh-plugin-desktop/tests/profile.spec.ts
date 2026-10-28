@@ -1228,6 +1228,69 @@ virtualStoreDirMaxLength: 60
     }))
   })
 
+  it('uses ClawClaw identity and language guidance in every built-in persona, including complete minimal mode', () => {
+    const prepared = prepareDesktopProfile(undefined, temporaryHome(), 'darwin')
+    const rows = composeEntries([prepared.patches])
+    const system = rows.find(row => row.id === 'system-prompt')?.config
+    expect(system?.includeHarnessIdentity).toBe(false)
+    expect(prepared.overlays.find(patch => patch.id === 'system-prompt')?.config).toEqual(system)
+    expect(system?.personaPrefix).toContain('You are ClawClaw, an AI assistant')
+    expect(rows.find(row => row.id === 'harness-dev-context')?.disabled).toBe(true)
+    for (const id of ['preset-standard', 'preset-ptc', 'preset-cordis', 'preset-minimal']) {
+      const plugins = rows.find(row => row.id === id)?.config?.plugins as Array<{ name: string; config?: Record<string, unknown> }>
+      const persona = plugins.find(plugin => plugin.name === '@deepseek-ai/dsh-persona')?.config
+      expect(persona?.prefix).toBe(system?.personaPrefix)
+      expect(prepared.overlays.findLast(patch => patch.id === id)?.config?.plugins).toEqual(rows.find(row => row.id === id)?.config?.plugins)
+      expect(persona?.prefix).toContain("Use the user's conversational language for all user-facing responses")
+      expect(persona?.prefix).toContain('interim progress updates, tool-call commentary, questions, and final answers')
+      if (id === 'preset-minimal') {
+        expect(persona?.complete).toBe(true)
+        expect(persona?.includeRuntimeContext).toBe(false)
+      }
+    }
+  })
+
+  it('updates saved upstream default identities in memory without rewriting the Profile', () => {
+    const home = temporaryHome()
+    const profileDir = ensureDesktopProfile(home)
+    const source = JSON.stringify([
+      { id: 'system-prompt', config: { personaPrefix: 'You are a coding agent powered by the {{model}} model.', includeRuntimeContext: false } },
+      { id: 'preset-minimal', config: { id: 'minimal', plugins: [
+        { id: 'persona', name: '@deepseek-ai/dsh-persona', config: { prefix: 'You are a helpful software engineer assistant.', complete: true } },
+      ] } },
+    ])
+    writeFileSync(join(profileDir, 'cordis.patch.yml'), source)
+    const rows = composeEntries([prepareDesktopProfile(undefined, home, 'darwin').patches])
+    const system = rows.find(row => row.id === 'system-prompt')?.config
+    expect(system).toMatchObject({ includeHarnessIdentity: false, includeRuntimeContext: false })
+    expect(system?.personaPrefix).toContain('You are ClawClaw')
+    const plugins = rows.find(row => row.id === 'preset-minimal')?.config?.plugins as Array<{ config?: Record<string, unknown> }>
+    expect(plugins[0]?.config).toMatchObject({ complete: true, prefix: system?.personaPrefix })
+    expect(rows.find(row => row.id === 'desktop-response-policy')?.name).toBe('dsh-plugin-desktop/response-policy')
+    const persisted = readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8')
+    expect(persisted).toContain('You are a helpful software engineer assistant.')
+    expect(persisted).not.toContain('You are ClawClaw')
+  })
+
+  it('lets Profile overrides replace the default system identity and preset persona', () => {
+    const home = temporaryHome()
+    const profileDir = ensureDesktopProfile(home)
+    writeFileSync(join(profileDir, 'cordis.patch.yml'), JSON.stringify([
+      { id: 'system-prompt', config: { includeHarnessIdentity: true, personaPrefix: 'Custom deployment.' } },
+      { id: 'preset-standard', config: { id: 'standard', plugins: [
+        { id: 'persona', name: '@deepseek-ai/dsh-persona', config: { prefix: 'Custom assistant.', suffix: 'Custom suffix.' } },
+      ] } },
+    ]))
+    const rows = composeEntries([prepareDesktopProfile(undefined, home, 'darwin').patches])
+    expect(rows.find(row => row.id === 'system-prompt')?.config).toEqual({
+      includeHarnessIdentity: true, personaPrefix: 'Custom deployment.',
+    })
+    const plugins = rows.find(row => row.id === 'preset-standard')?.config?.plugins as Array<{ id: string; config?: unknown }>
+    expect(plugins.find(plugin => plugin.id === 'persona')?.config).toEqual({
+      prefix: 'Custom assistant.', suffix: 'Custom suffix.',
+    })
+  })
+
   it('keeps upstream Schedule tools disabled inside Agent presets', () => {
     const prepared = prepareDesktopProfile(undefined, temporaryHome(), 'darwin')
     const rows = composeEntries([prepared.patches])

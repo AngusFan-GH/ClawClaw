@@ -391,6 +391,13 @@ try {
   for (const presetId of presetIds) {
     const lease = await agentPresets.acquireScope(presetId)
     try {
+      const prompt = await ctx.systemPrompt.assemble({ scope: lease.key })
+      const promptText = prompt.sections.map(section => section.text).join('\n\n')
+      assert.match(promptText, /This assistant session runs in ClawClaw/)
+      assert.match(promptText, /interim progress updates, tool-call commentary, questions, and final answers/)
+      assert.ok(!prompt.sections.some(section => section.name === 'harness:identity'))
+      assert.ok(!prompt.sections.some(section => ['harness:source', 'app:web-surface'].includes(section.name)))
+      assert.ok(!prompt.contexts.some(section => ['harness:source', 'app:web-surface'].includes(section.name)))
       const snapshot = await ctx.skills.snapshot({ scope: lease.key })
       if (presetId === 'cordis'
         && !snapshot.skills.some(skill => skill.name === 'editing-cordis-compositions')) {

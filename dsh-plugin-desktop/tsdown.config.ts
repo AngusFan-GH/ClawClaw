@@ -73,6 +73,7 @@ export default defineConfig([
       notifications: 'src/notifications.ts',
       'cron-tasks': 'src/cron-tasks.ts',
       reminders: 'src/reminders.ts',
+      'response-policy': 'src/response-policy.ts',
       'shortcut-menu': 'src/shortcut-menu.ts',
       'input-suggestions': 'src/input-suggestions.ts',
       'ai-continuation': 'src/ai-continuation.ts',

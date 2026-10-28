@@ -183,7 +183,7 @@ A recurring or scheduled request that pushes or updates library content ("每天
 
 ## User-facing Contracts (中文合约原句)
 
-These are the user-facing Chinese statements the skill is committed to produce. They are kept verbatim as a contract surface (issue #113160 中英文白名单: 面向用户的回复模板原句) — do not paraphrase or localize them.
+The Chinese statements below define the required behavior. Explain them in the user's conversation language, preserving their meaning. Use the Chinese wording for Chinese conversations; do not force Chinese wording into conversations in other languages.
 
 **安全与产物边界：**
 - 凭证与内部细节（原始响应/错误堆栈/内部 URL）永不进入用户回复、日志或落库产物。例外：`E_AUTH_REQUIRED` 时先告知用户去已打开的浏览器完成授权；仅当窗口未弹出时才把 `auth_url` 原样转给用户。

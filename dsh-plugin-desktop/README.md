@@ -8,7 +8,11 @@ This package is part of the root pnpm workspace. Do not install it as a standalo
 
 ## Runtime model
 
+Desktop's built-in Agent personas identify the assistant as ClawClaw. A separate response policy keeps progress updates, questions, and final replies in the user's conversation language even when expert or child personas replace the identity. Delegated work follows the original user task language, not generated wrappers or the interface locale; a requested artifact language applies to the artifact. Complete built-in personas include the same policy. Exact old shipped identities in saved Profiles and legacy presets are updated in memory without rewriting user files; custom personas remain available. An explicitly configured complete custom prompt replaces all shared sections. Code, commands, paths, and identifiers retain their original form; upstream sources are unchanged.
+
 Electron main starts the Host through `startIsolatedDesktopHost()` by default. `DSH_DESKTOP_ISOLATED_HOST=0` is an in-process diagnostic route. The Host owns Cordis and Web services; Electron main owns native resources. The browser content uses ordinary loopback HTTP/WebSocket and has no general Electron bridge.
+
+Ordinary self-introductions name ClawClaw and the current role; model and architecture questions still receive factual answers. Desktop disables the upstream self-development context that identifies the product as the Harness Web GUI and advertises installation paths and service URLs. The response policy starts a fresh request series on the first model step after mounting, including resumed sessions.
 
 MCP connectors using Streamable HTTP or SSE accept HTTP for loopback addresses and private IPv4 ranges `10.0.0.0/8`, `172.16.0.0/12`, and `<company-cidr>`. Other hosts require HTTPS. HTTP traffic, including authentication headers, is unencrypted. OAuth issuer, resource, and authorization/token endpoints still require HTTPS.
 

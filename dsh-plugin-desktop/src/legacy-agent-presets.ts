@@ -12,6 +12,7 @@ import type { PresetDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
 import { entryListProblem } from '@deepseek-ai/dsh-agent-preset-registry'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { parseDocument } from 'yaml'
+import { desktopDefaultPersona } from './response-policy.ts'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
 import { DESKTOP_LEGACY_AGENT_PRESETS_ACTION_PATH, DESKTOP_LEGACY_AGENT_PRESETS_PATH, type DesktopLegacyAgentPreset, type DesktopLegacyAgentPresetsView } from './legacy-agent-presets-contract.ts'
 
@@ -134,7 +135,7 @@ export async function readLegacyAgentPreset(directory: string, id: string): Prom
     ...(presetName === undefined ? {} : { name: presetName }),
     ...(description === undefined ? {} : { description }),
     ...(order === undefined ? {} : { order }),
-    plugins: isolateSkillRoots(rows as unknown as PresetDefinition['plugins']),
+    plugins: isolateSkillRoots((rows as unknown as PresetDefinition['plugins']).map(desktopDefaultPersona)),
   }
 }
 

@@ -43,7 +43,7 @@ In this document, "phase N" refers to the execution phases of `modify-branch.md`
 
 ### 1.2 Field names
 
-Default to Chinese: keep any Chinese text from the HTML as-is; for English HTML (e.g. `name=email`), look it up in the term table and translate to Chinese (`邮箱`); if there's no match, fall back to the original English (phase 2 may suggest converting it to Chinese). If the user asks for "English field names", switch the keys of both `properties` and `field_mapping` to English accordingly.
+Follow the user's requested field-name language, or the conversation language when none is specified. Preserve existing schema field names unless the user requests a rename. For a new schema, use the term table only when its target language matches the requested language. Keep the keys of `properties`, `field_mapping`, and `options_map` identical whenever a field is renamed; protocol type names remain unchanged.
 
 ### 1.3 Field ordering
 

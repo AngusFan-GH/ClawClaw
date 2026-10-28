@@ -8,7 +8,11 @@
 
 ## 运行模型
 
+Desktop 内置 Agent 身份将助手标识为 ClawClaw。独立的回复规则确保专家或子代理替换身份后，过程说明、提问和最终回复仍跟随用户对话语言。委派任务依据原始用户任务的语言，不依据自动包装文本或界面语言；用户指定的产物语言只作用于产物。使用完整提示词的内置身份也包含相同规则。已保存 Profile 和旧预设中的原始默认身份会在内存中更新，不改写用户文件；自定义身份仍可使用。显式配置的完整自定义提示词会替换全部共享段落。代码、命令、路径和标识符保留原样；上游源码保持不变。
+
 Electron main 默认通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKTOP_ISOLATED_HOST=0` 是同进程排查路径。Host 拥有 Cordis 和 Web 服务，Electron main 拥有原生资源。浏览器内容通过普通 loopback HTTP/WebSocket 工作，没有通用 Electron bridge。
+
+普通自我介绍使用 ClawClaw 及当前角色；用户询问模型或架构时仍如实回答。Desktop 禁用上游自开发上下文，避免将产品描述为 Harness Web GUI 并主动展示安装路径和服务地址。回复规则在挂载后的首次模型步骤开启新的请求序列，也覆盖恢复的会话。
 
 Streamable HTTP 和 SSE MCP 连接器允许本机回环地址及内网 IPv4 网段 `10.0.0.0/8`、`172.16.0.0/12`、`<company-cidr>` 使用 HTTP，其他主机仍要求 HTTPS。HTTP 流量（包括鉴权请求头）不加密。OAuth 发行方、资源及授权和令牌端点仍要求 HTTPS。
 

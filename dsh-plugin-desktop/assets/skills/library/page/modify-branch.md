@@ -25,10 +25,10 @@ The script performs, in one pass, parsing (see `html-parse-spec.md`) + field tra
 
 **Skip if strong**: skip this confirmation gate and go straight to phase 3 to create the table whenever the user's message lets you identify the domain and the managed objects. That covers listing fields, fields + options, or an explicit module list — and equally a one-sentence workbench ask with a clear object ("a workbench for weekly task planning and progress" → task + status + dates; "an expense tracker" → date/amount/category): design the standard fields yourself, build immediately, and note after delivery that fields can be adjusted. Minor tweaks are collected after delivery, never let the confirmation gate block delivery. Only a request whose managed object cannot be inferred at all (e.g. "build me a tool", no hint of what it manages) goes through the confirmation gate below.
 
-**Must wait for an explicit user reply** before proceeding to phase 3 — silence ≠ confirmation. Display (field names / option labels default to Chinese, ordered per §1.3, primary identifier in the first column):
+**Must wait for an explicit user reply** before proceeding to phase 3 — silence ≠ confirmation. Display (new field names / option labels follow the requested language, or the conversation language when unspecified; preserve existing schema keys, ordered per §1.3, primary identifier in the first column):
 
 ```
-{{请 check 以下 Database 字段（默认中文展示，已按重要性排序，首列为主标识字段）：}}
+{{请核对以下 Database 字段（按重要性排序，首列为主标识字段）：}}
 
 **订单管理**
 | 字段名 | 类型 | 说明 |
@@ -44,7 +44,9 @@ The script performs, in one pass, parsing (see `html-parse-spec.md`) + field tra
 - 直接说明要改的地方（如「『订单编号』改成『单号』」「价格用文本类型」「用英文字段名」「加个『备注』字段」「把『下单日期』放第二列」）→ 我调整后重新展示
 ```
 
-**Type-to-Chinese display mapping** (display only — the schema itself still uses the English oneof key): `text`={{文本}}、`number`={{数字}}、`select`={{单选}}、`multi_select`={{多选}}、`date`={{日期}}、`checkbox`={{是否}}、`url`={{链接}}、`email`={{邮箱}}、`phone_number`={{电话}}.
+Localize the confirmation text and display labels to the conversation language. The Chinese example below illustrates the layout.
+
+**Chinese type display examples** (display only — use equivalent labels for other conversation languages; the schema itself still uses the English oneof key): `text`={{文本}}、`number`={{数字}}、`select`={{单选}}、`multi_select`={{多选}}、`date`={{日期}}、`checkbox`={{是否}}、`url`={{链接}}、`email`={{邮箱}}、`phone_number`={{电话}}.
 
 User reply → handling:
 - "确认 / OK / 可以 / 好的 / 没问题" → proceed to phase 3

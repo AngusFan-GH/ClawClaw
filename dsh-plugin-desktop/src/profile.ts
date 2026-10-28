@@ -2,6 +2,7 @@
 
 import { createRequire } from 'node:module'
 import type { DesktopPnpmBootstrap } from './pnpm.ts'
+import { DESKTOP_PERSONA, desktopDefaultPersona } from './response-policy.ts'
 import { INPUT_SUGGESTIONS_ENTRY } from './input-suggestions-contract.ts'
 import { withDesktopPnpmPolicy } from './pnpm-policy.ts'
 import {
@@ -581,6 +582,19 @@ packageName !== LEGACY_COMMUNITY_MARKET_PACKAGE
     },
     ...(dshMarketFailure === undefined ? {} : { dshMarketFailure }),
   }
+}
+
+/** Apply Desktop defaults without replacing preset tools or explicit custom personas. */
+function desktopPersonaPatches(bundlePatches: PatchOptions[]): PatchOptions[] {
+  const rows = composeEntries([bundlePatches])
+  const patches: PatchOptions[] = []
+  const systemPrompt = rows.find(row => row.id === 'system-prompt')
+  if (systemPrompt !== undefined) {
+    patches.push({ id: 'system-prompt', config: {
+      ...rowConfig(systemPrompt), includeHarnessIdentity: false, personaPrefix: DESKTOP_PERSONA,
+    } })
+  }
+  return patches
 }
 
 /** Resolve the agent presets shipped by the matching presets dependency. */
@@ -1189,6 +1203,7 @@ export function prepareDesktopProfile(
   }
   const ordinary = filterMarketProviderPatches([
     ...filteredBundles.patches,
+    ...desktopPersonaPatches(filteredBundles.patches),
     ...filteredProfile.patches,
     ...filteredHome.patches,
   ])
@@ -1200,6 +1215,28 @@ export function prepareDesktopProfile(
   const rows = new Map<string, EntryOptions>()
   for (const row of composedRows) {
     if (typeof row.id === 'string') rows.set(row.id, row)
+  }
+  const savedSystem = rows.get('system-prompt')
+  if (savedSystem !== undefined && rowConfig(savedSystem).personaPrefix === 'You are a coding agent powered by the {{model}} model.') {
+    const config = { ...rowConfig(savedSystem), includeHarnessIdentity: false, personaPrefix: DESKTOP_PERSONA }
+    rows.set('system-prompt', { ...savedSystem, config })
+  }
+  // ConfigEditor rebuilds disk layers without the generated bundle defaults.
+  // Retain the effective system config alongside the other reload overlays.
+  const effectiveSystem = rows.get('system-prompt')
+  if (effectiveSystem !== undefined) patches.push({ id: 'system-prompt', config: rowConfig(effectiveSystem) })
+  // Saved Profiles can repeat an older shipped persona. Migrate only that
+  // exact default in memory, without rewriting user files or custom identities.
+  for (const [id, row] of rows) {
+    if (row.name !== '@deepseek-ai/dsh-agent-preset') continue
+    const config = rowConfig(row)
+    if (!Array.isArray(config.plugins)) continue
+    const original = config.plugins as EntryOptions[]
+    const plugins = original.map(desktopDefaultPersona)
+    if (plugins.every((plugin, index) => plugin === original[index])) continue
+    const updated = { ...row, config: { ...config, plugins } }
+    rows.set(id, updated)
+    patches.push({ id, config: updated.config })
   }
   // A Loader patch replaces a complete config object. Derive these patches
   // from the effective rows so preset identity, tools, and user overrides stay intact.

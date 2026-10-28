@@ -4,6 +4,12 @@ import { randomUUID } from 'node:crypto'
 import { LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId, pluginRecordOf } from '@deepseek-ai/dsh-session'
 
+/** Read the loop-built system-role message rather than the one-shot system field. */
+function requestSystem(request) {
+  const system = request.messages.findLast(message => message.role === 'system')
+  return system?.content.filter(block => block.type === 'text').map(block => block.text).join('\n') ?? request.system ?? ''
+}
+
 class OfflineAdapter extends LlmAdapter {
   requests = []
   resolveModel(provider, model) {
@@ -40,6 +46,8 @@ export async function verifyUpgradeExpertRun(ctx, cwd, expert) {
     assert.equal(result.value.answer, 'CLAWCLAW_UPGRADE_EXPERT_OK')
     const request = adapter.requests.find(request => String(request.sessionId).startsWith('expert-'))
     assert.ok(request, 'expert never reached the offline model')
+    assert.match(requestSystem(request), /This assistant session runs in ClawClaw/)
+    assert.match(requestSystem(request), /original user task/)
     assert.ok(!request.tools.some(tool => tool.name === 'summon_expert_team'), 'expert delegation restriction was lost')
     const handle = await ctx.sessionPersistence.open(SessionId(String(request.sessionId)), 'read')
     try {
@@ -62,6 +70,7 @@ export async function verifyUpgradeExpertRun(ctx, cwd, expert) {
       assert.ok(assembly.sections.some(section => section.name === 'deployment:persona-prefix'
         && section.text.length > 0), 'expert persona was lost after resume')
       assert.ok(!assembly.tools.some(tool => tool.name === 'summon_expert_team'), 'expert restriction was lost after resume')
+      assert.ok(assembly.sections.some(section => section.name === 'clawclaw:response-policy'), 'response language policy was lost after resume')
     } finally {
       await restored.dispose()
     }
@@ -100,6 +109,8 @@ export async function verifyDesktopSchedule(ctx) {
     assert.equal(completed.enabled, false)
     assert.equal(completed.history.length, 1)
     assert.equal(adapter.requests.length, 1, 'official delivery executed more than once')
+    assert.match(requestSystem(adapter.requests[0]), /This assistant session runs in ClawClaw/)
+    assert.match(requestSystem(adapter.requests[0]), /language of the (?:user-written task|original user task)/)
     assert.equal(String(adapter.requests[0].sessionId), completed.activeSessionId)
     assert.ok(completed.lastClaimedMessageId, 'execution was not durably fenced')
     await new Promise(resolve => setTimeout(resolve, 25))

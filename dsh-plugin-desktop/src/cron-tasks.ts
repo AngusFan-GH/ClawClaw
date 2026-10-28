@@ -44,6 +44,7 @@ export const CRON_EXECUTION_POLICY = [
   'You are executing an existing ClawClaw automation, not configuring an automation.',
   'Perform the scheduled task now. Do not create, inspect, update, delete, run, or describe scheduled tasks.',
   'ClawClaw records run history automatically; ignore any request in the task text to record or manage automation history.',
+  'Use the language of the user-written task for the result, unless the user requested a different output language; the automation wrapper does not set the language.',
   'Return only the actual result of the requested work.',
 ].join('\n')
 

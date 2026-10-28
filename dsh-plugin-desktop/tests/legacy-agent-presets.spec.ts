@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -48,6 +48,24 @@ describe('legacy Agent preset registrar', () => {
       id: 'clawclaw-skill-filesystem',
       name: 'dsh-plugin-desktop/clawclaw-skill-filesystem',
     })
+  })
+
+  it('updates a legacy shipped identity while preserving custom personas and source files', async () => {
+    const root = await fixture()
+    for (const prefix of ['You are a helpful software engineer assistant.', 'Custom researcher.']) {
+      const id = prefix.startsWith('Custom') ? 'custom' : 'old-default'
+      const directory = join(root, id)
+      await mkdir(directory)
+      await writeFile(join(directory, 'preset.yml'), `name: ${id}\n`)
+      const source = JSON.stringify([{ name: '@deepseek-ai/dsh-persona', config: { prefix, complete: true } }])
+      await writeFile(join(directory, 'agent.cordis.yml'), source)
+      const definition = await readLegacyAgentPreset(directory, id)
+      const persona = definition.plugins[0]?.config
+      expect(persona?.complete).toBe(true)
+      if (id === 'custom') expect(persona?.prefix).toBe(prefix)
+      else expect(persona?.prefix).toContain('You are ClawClaw')
+      expect(await readFile(join(directory, 'agent.cordis.yml'), 'utf8')).toBe(source)
+    }
   })
 
   it('isolates invalid presets, lets official ids win, and disposes successful registrations', async () => {

@@ -72,6 +72,10 @@
       "types": "./lib/types/cron-tasks.d.ts",
       "default": "./lib/cron-tasks.js"
     },
+    "./response-policy": {
+      "types": "./lib/types/response-policy.d.ts",
+      "default": "./lib/response-policy.js"
+    },
     "./reminders": {
       "types": "./lib/types/reminders.d.ts",
       "default": "./lib/reminders.js"
