@@ -531,7 +531,13 @@ export const CAPABILITY_PICKER_CSS = `
 .aag-connector-readiness{grid-column:3;grid-row:1;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;text-align:right}
 @media(max-width:560px){.aag-menu.aag-discovery{width:min(440px,calc(100vw - 24px))}.aag-capability-picker{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:340px}.aag-capability-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:2px 2px 6px;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l2)}.aag-capability-nav button{padding:7px 4px;text-align:center}.aag-capability-results{padding:6px 2px 2px}.aag-capability-summary span:last-child{display:none}}
 `
-export const CSS = DESKTOP_THEME_CSS + TEAM_CSS + COMPOSER_CSS + SETTINGS_CSS + CARD_SETTINGS_CSS + DISCOVERY_CSS + CAPABILITY_PICKER_CSS + CAPABILITY_SIDEBAR_CSS
+// The generic upstream reference chip renders @. Skills use / in their
+// clipboard projection; match that spelling without changing reference identity.
+const SKILL_REFERENCE_CSS = `
+[data-composer-chip="clawclaw-experts:skills"] > span > [aria-hidden="true"] { display: none; }
+[data-composer-chip="clawclaw-experts:skills"] > span > [aria-hidden="true"] + span::before { content: "/"; }
+`
+export const CSS = DESKTOP_THEME_CSS + TEAM_CSS + COMPOSER_CSS + SETTINGS_CSS + CARD_SETTINGS_CSS + DISCOVERY_CSS + CAPABILITY_PICKER_CSS + CAPABILITY_SIDEBAR_CSS + SKILL_REFERENCE_CSS
   + MENU_NAME_OVERRIDE + `{${EXPERT_MENU_NAME_STYLE}}`
 
 /** 本插件 Remote 命名空间的 client 侧 face（ctx.remote.agencyAgents 的形状）。 */
