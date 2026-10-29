@@ -69,6 +69,8 @@ describe('GenUI cards outside collapsed tool process', () => {
   })
 
   it('embeds interactive HTML directly in the chat Turn without tool details, links or an outer result card', async () => {
+    vi.stubGlobal('crypto', { subtle: { digest: async () => new Uint8Array(32).buffer } })
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ state: null }) }))
     const meta = { format: GENUI_FORMAT, title: '交互示例', items: [{ type: 'html', title: '价格计算器',
       html: '<label>数量<input type="number" value="3"></label><output>60</output>', fallback: '初始总价 60。调整数量可本地计算。' }] }
     const tools = store<readonly ToolChatData[]>([{ root: result(24, { meta }) }])

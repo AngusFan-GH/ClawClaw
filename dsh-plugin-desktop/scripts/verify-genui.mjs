@@ -20,7 +20,7 @@ export async function verifyGenui(ctx) {
         series: [{ name: 'Count', values: [2, 0] }] },
     ] }
     const result = await ctx.tools.execute({ callId: ToolCallId('genui-profile-smoke'), name: render,
-      arguments: { document }, signal: new AbortController().signal })
+      arguments: { document_json: JSON.stringify(document) }, signal: new AbortController().signal })
     assert.equal(result.isError, false)
     assert.deepEqual(result.meta, document)
     assert.match(result.content[0].text, /Worker \| 0/)

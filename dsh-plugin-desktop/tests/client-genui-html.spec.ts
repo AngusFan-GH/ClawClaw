@@ -6,11 +6,11 @@ import { GenuiHtmlView } from '../src/client/genui-html.tsx'
 import { createGenuiHtmlDocument, GENUI_HTML_CHANNEL, GENUI_HTML_CSP } from '../src/client/genui-html-document.ts'
 const node = { type: 'html' as const, title: 'Counter', html: '<button id="count" onclick="this.textContent++">0</button>', fallback: 'Initial count is zero.' }
 let root: Root | undefined
-async function mount() {
+async function mount(storage?: import('../src/client/genui-html-state.ts').HtmlStateStorage) {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const element = document.createElement('div'); document.body.append(element)
   root = createRoot(element)
-  await act(async () => root!.render(createElement(GenuiHtmlView, { node, zh: true })))
+  await act(async () => root!.render(createElement(GenuiHtmlView, { node, zh: true, ...(storage ? { storage } : {}) })))
   return element
 }
 afterEach(async () => {
@@ -31,6 +31,11 @@ describe('isolated interactive HTML', () => {
     expect(GENUI_HTML_CSP).not.toContain('unsafe-eval')
     expect(source).toContain('color-scheme:dark')
     expect(source).toContain('lang="zh-CN"')
+    const saved = { controls: [], custom: '</script><script>evil()</script>' }
+    const restored = createGenuiHtmlDocument('', { dark: false, zh: false, state: saved })
+    const literal = restored.match(/const initialState=(.*?);const send=/)![1]!
+    expect(literal).not.toContain('<')
+    expect(JSON.parse(literal)).toEqual(saved)
   })
   it('never mounts user code in the host, accepts only its own opaque-frame messages and clamps layout', async () => {
     const element = await mount()
@@ -59,13 +64,94 @@ describe('isolated interactive HTML', () => {
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'error', value: true })
     expect(element.querySelector('details')?.open).toBe(true)
     expect(element.textContent).toContain(node.fallback)
-    await act(async () => [...element.querySelectorAll('button')].find(button => button.textContent === '停止')!.click())
+    await act(async () => [...element.querySelectorAll('button')].find(button => button.textContent === '暂停')!.click())
     expect(element.querySelector('iframe')).toBeNull()
-    await act(async () => [...element.querySelectorAll('button')].find(button => button.textContent === '重置')!.click())
+    await act(async () => [...element.querySelectorAll('button')].find(button => button.textContent === '恢复初始值')!.click())
     expect(element.querySelector('iframe')).not.toBe(frame)
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'error', value: true })
     expect(element.textContent).not.toContain('未能正常运行')
   })
+  it('restores persisted inputs, saves bounded state and resumes without clearing; Reset explicitly clears', async () => {
+    const saved = { controls: [{ index: 0, value: '42' }], custom: { total: 42 } }
+    const storage = { load: vi.fn(async () => saved), save: vi.fn(async () => {}), clear: vi.fn(async () => {}) }
+    const element = await mount(storage)
+    expect(element.querySelector('iframe')!.srcdoc).toContain('"value":"42"')
+    const changed = { controls: [{ index: 0, value: '99' }], custom: { total: 99 } }
+    await send(element.querySelector('iframe')!, { channel: GENUI_HTML_CHANNEL, type: 'state', value: changed })
+    expect(storage.save).toHaveBeenCalledWith(changed)
+    await act(async () => [...element.querySelectorAll('button')].find(b => b.textContent === '暂停')!.click())
+    await act(async () => [...element.querySelectorAll('button')].find(b => b.textContent === '继续运行')!.click())
+    expect(element.querySelector('iframe')!.srcdoc).toContain('"value":"99"')
+    expect(storage.clear).not.toHaveBeenCalled()
+    await act(async () => [...element.querySelectorAll('button')].find(b => b.textContent === '恢复初始值')!.click())
+    expect(storage.clear).toHaveBeenCalledOnce()
+    expect(element.querySelector('iframe')!.srcdoc).not.toContain('"value":"99"')
+  })
+  it('does not overwrite saved data when loading fails, and exposes a retry', async () => {
+    const storage = { load: vi.fn(async () => { throw new Error('offline') }), save: vi.fn(async () => {}), clear: vi.fn(async () => {}) }
+    const element = await mount(storage)
+    expect(element.querySelector('iframe')).toBeNull()
+    expect(element.textContent).toContain('无法读取已保存的输入')
+    expect(storage.save).not.toHaveBeenCalled()
+  })
+
+  it('keeps reset secondary and reserves the measured height through pause and resume', async () => {
+    const element = await mount()
+    expect(element.querySelector('.clawGenuiHtmlToolbar')!.textContent).not.toContain('恢复初始值')
+    expect(element.querySelector('details')!.open).toBe(false)
+    expect(element.querySelector('.clawGenuiHtmlReset')!.getAttribute('title')).toContain('清除保存的输入')
+    const viewport = element.querySelector<HTMLElement>('.clawGenuiHtmlViewport')!
+    expect(viewport.style.height).toBe('240px')
+    const frame = element.querySelector('iframe')!
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'height', value: 420 })
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'ready', value: true })
+    const toggle = element.querySelector<HTMLButtonElement>('.clawGenuiHtmlToolbar button')!
+    await act(async () => toggle.click())
+    expect(viewport.style.height).toBe('420px')
+    expect(element.querySelector('iframe')).toBeNull()
+    expect(element.querySelector('details')!.open).toBe(false)
+    expect(element.querySelector('.clawGenuiHtmlToolbar button')).toBe(toggle)
+    await act(async () => toggle.click())
+    expect(viewport.style.height).toBe('420px')
+    expect(element.querySelector('iframe')!.style.visibility).toBe('hidden')
+  })
+  it('reserves space during saved-input loading instead of inserting a new result area later', async () => {
+    const load = Promise.withResolvers<null>()
+    const element = await mount({ load: () => load.promise, save: async () => {}, clear: async () => {} })
+    const viewport = element.querySelector<HTMLElement>('.clawGenuiHtmlViewport')!
+    expect(viewport.style.height).toBe('240px')
+    expect(element.querySelector('iframe')).toBeNull()
+    await act(async () => load.resolve(null))
+    expect(element.querySelector('.clawGenuiHtmlViewport')).toBe(viewport)
+    expect(viewport.style.height).toBe('240px')
+    expect(element.querySelector('iframe')).not.toBeNull()
+  })
+  it('retries saving the current inputs without reloading the fragment', async () => {
+    const saved = { controls: [{ index: 0, value: '99' }], custom: null }
+    const storage = { load: vi.fn(async () => null), save: vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined), clear: vi.fn(async () => {}) }
+    const element = await mount(storage)
+    const frame = element.querySelector('iframe')!
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'state', value: saved })
+    expect(element.querySelector('.clawGenuiHtmlNotice')!.textContent).toContain('保存失败')
+    await act(async () => element.querySelector<HTMLButtonElement>('.clawGenuiHtmlNotice button')!.click())
+    expect(storage.save).toHaveBeenLastCalledWith(saved)
+    expect(storage.save).toHaveBeenCalledTimes(2)
+    expect(element.querySelector('.clawGenuiHtmlNotice')).toBeNull()
+    expect(element.querySelector('iframe')).toBe(frame)
+  })
+  it('reloads a failed runtime with its current inputs rather than clearing storage', async () => {
+    const saved = { controls: [{ index: 0, value: '99' }], custom: null }
+    const storage = { load: vi.fn(async () => saved), save: vi.fn(async () => {}), clear: vi.fn(async () => {}) }
+    const element = await mount(storage)
+    const frame = element.querySelector('iframe')!
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'error', value: true })
+    const reload = [...element.querySelectorAll('button')].find(button => button.textContent === '重新加载')!
+    await act(async () => reload.click())
+    expect(element.querySelector('iframe')).not.toBe(frame)
+    expect(element.querySelector('iframe')!.srcdoc).toContain('"value":"99"')
+    expect(storage.clear).not.toHaveBeenCalled()
+  })
+
   it('uses a timed fallback if the frame never starts and updates the theme without discarding local state', async () => {
     vi.useFakeTimers()
     const schedule = vi.spyOn(window, 'setTimeout')

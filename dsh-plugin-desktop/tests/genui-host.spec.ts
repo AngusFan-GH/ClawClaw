@@ -76,6 +76,43 @@ describe('GenUI Host integration', () => {
     } finally { await host.ctx.fiber.dispose() }
   })
 
+  it('preserves HTML and nested arrays through the preferred string parameter and rejects the observed item wrapper', async () => {
+    const host = await harness(true)
+    try {
+      const invoke = (name: string, args: Record<string, unknown>) => host.ctx.tools.execute({ callId: ToolCallId('wire-replay'), name,
+        arguments: args as never, signal: new AbortController().signal })
+      const broken = { ...document, items: { item: document.items } }
+      const rejected = await invoke(GENUI_VALIDATE_TOOL, { document: broken })
+      expect(JSON.stringify(rejected.content)).toContain('$.items')
+      expect(JSON.stringify(rejected.content)).toContain('document_json')
+      expect(JSON.stringify(rejected.content)).toContain('Do not open a browser')
+      const checked = await invoke(GENUI_VALIDATE_TOOL, { document_json: JSON.stringify(document) })
+      expect(checked.content).toEqual([{ type: 'text', text: JSON.stringify({ ok: true, format: GENUI_FORMAT }) }])
+      const rendered = await invoke(GENUI_RENDER_TOOL, { document_json: JSON.stringify(document) })
+      expect(rendered.isError).toBe(false)
+      expect(rendered.meta).toEqual(document)
+      expect(Array.isArray((rendered.meta as typeof document).items)).toBe(true)
+      const legacyString = await invoke(GENUI_RENDER_TOOL, { document: JSON.stringify(document) })
+      expect(legacyString.meta).toEqual(document)
+      const schema = host.ctx.tools.schemas().find(tool => tool.name === GENUI_RENDER_TOOL)!
+      expect(schema.parameters).toMatchObject({ properties: { document_json: { type: 'string' }, document: expect.any(Object) } })
+    } finally { await host.ctx.fiber.dispose() }
+  })
+  it('rejects malformed JSON, ambiguous arguments and over-budget strings without silently repairing them', async () => {
+    const host = await harness(true)
+    try {
+      for (const args of [{}, { document, document_json: JSON.stringify(document) },
+        { document_json: '{bad json' }, { document_json: ' '.repeat(65537) },
+        { document_json: JSON.stringify({ ...document, items: { item: document.items } }) }]) {
+        const result = await host.ctx.tools.execute({ callId: ToolCallId('bad-wire'), name: GENUI_RENDER_TOOL,
+          arguments: args, signal: new AbortController().signal })
+        expect(result.isError).toBe(true)
+        expect(result.meta).toBeUndefined()
+        expect(JSON.stringify(result.content)).toContain('document_json')
+      }
+    } finally { await host.ctx.fiber.dispose() }
+  })
+
   it('returns diagnostics without displaying invalid documents and rejects disabled or aborted work', async () => {
     const host = await harness(true)
     try {

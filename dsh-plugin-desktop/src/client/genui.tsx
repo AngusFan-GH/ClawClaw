@@ -47,13 +47,13 @@ function GenuiTable({ node, label }: { node: TableNode; label: string }) {
   </div>
 }
 
-function renderNode(node: GenuiNode, key: number, label: string, zh: boolean): ReactNode {
+function renderNode(node: GenuiNode, key: number, label: string, zh: boolean, identity: { sessionId: string; callId: string; path: string }): ReactNode {
   switch (node.type) {
-    case 'html': return <GenuiHtmlView key={key} node={node} zh={zh} />
+    case 'html': return <GenuiHtmlView key={key} node={node} zh={zh} identity={identity} />
     case 'chart': return <GenuiChartView key={key} node={node} zh={zh} />
     case 'text': return <p key={key}>{node.content}</p>
-    case 'card': return <section key={key} className="clawGenuiCard"><h4>{node.title}</h4>{node.items.map((child, i) => renderNode(child, i, node.title, zh))}</section>
-    case 'row': return <div key={key} className="clawGenuiRow">{node.items.map((child, i) => renderNode(child, i, label, zh))}</div>
+    case 'card': return <section key={key} className="clawGenuiCard"><h4>{node.title}</h4>{node.items.map((child, i) => renderNode(child, i, node.title, zh, { ...identity, path: `${identity.path}.${i}` }))}</section>
+    case 'row': return <div key={key} className="clawGenuiRow">{node.items.map((child, i) => renderNode(child, i, label, zh, { ...identity, path: `${identity.path}.${i}` }))}</div>
     case 'stat': return <div key={key} className="clawGenuiStat"><span>{node.label}</span><strong>{node.value}</strong></div>
     case 'table': return <GenuiTable key={key} node={node} label={label} />
     case 'progress': return <div key={key} className="clawGenuiProgress"><div className="clawGenuiProgressLabel"><span>{node.label}</span><span className="clawGenuiProgressValue">{node.value}%</span></div><progress aria-label={node.label} value={node.value} max={100} /></div>
@@ -84,7 +84,7 @@ export function GenuiResultView({ sessionId, callId, meta, text, isError, zh = f
   const inline = parsed.document.items.every(node => node.type === 'html')
   return <section className={inline ? 'clawGenui clawGenuiInline' : 'clawGenui'} data-genui-session={sessionId} data-genui-call={callId} aria-label={parsed.document.title}>
     {!inline && <h3>{parsed.document.title}</h3>}
-    {parsed.document.items.map((node, i) => renderNode(node, i, parsed.document.title, zh))}
+    {parsed.document.items.map((node, i) => renderNode(node, i, parsed.document.title, zh, { sessionId, callId, path: String(i) }))}
   </section>
 }
 
