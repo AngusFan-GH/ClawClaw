@@ -918,6 +918,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
         skills: capabilityState.skillsLoaded, mcpServers: capabilityState.mcpLoaded,
       })
       if (health.state === 'blocked') throw new Error(props.t('capability.health.blocked'))
+      if (health.state === 'unknown') throw new Error(props.t('capability.health.unknown'))
       if (!current.enabled.has(slug)) throw new Error(props.t('custom.unavailable'))
       if (request !== epoch.current) return
       if (!current.enabled.has(slug) || !insertSelectedExpert(slug, props.getActive(), insert, current.experts)) {

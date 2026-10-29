@@ -69,12 +69,12 @@ export function projectExpertPluginTeamRecord(
   return projectTeamCapabilityRecord({
     id: team.id,
     builtin: true,
-    runtime: { mode: 'lead', leadExpertSlug: lead.slug, initPrompt },
+    runtime: { mode: 'lead', leadExpertSlug: lead.slug, initPrompt, ...(team.execution === undefined ? {} : { execution: team.execution }) },
     provenance: { packageName: team.packageName, packageVersion: team.packageVersion, source: 'local' },
     name: localizedPluginText(team.name, locale),
     description: localizedPluginText(team.description, locale),
     tags: team.tags.map(value => localizedPluginText(value, locale)),
-    examples: team.quickPrompts.map(value => localizedPluginText(value, locale)),
+    examples: team.quickPrompts.length > 0 ? team.quickPrompts.map(value => localizedPluginText(value, locale)) : [initPrompt],
     goal: initPrompt,
     constraints: '',
     deliveryRequirements: initPrompt,
@@ -191,12 +191,13 @@ export function createTeamLibrary(
         throw new Error(tx('专家团已删除，请作为新团队保存。'))
       if (!value.id && state.custom.length >= 100)
         throw new Error(tx('自定义专家团最多保存 100 个。'))
+      const pluginNames = (await definitions()).flatMap(team => Object.values(team.name))
       if (
         teams().some(
           (team) =>
             team.id !== value.id &&
             [team.name, localizeTeam(team, 'en').name].some(name => name.trim().toLowerCase() === value.name.trim().toLowerCase()),
-        )
+        ) || pluginNames.some(name => typeof name === 'string' && name.trim().toLowerCase() === value.name.trim().toLowerCase())
       )
         throw new Error(tx('团队名称已被使用。'))
       requireMembers(value, all)

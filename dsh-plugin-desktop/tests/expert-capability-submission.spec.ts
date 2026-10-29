@@ -17,4 +17,12 @@ describe('structured expert capability submission', () => {
     const team = capabilitySubmissionMarker({ expertIds: [], teamId: 'team-review', skillNames: [] })
     expect(() => parseCapabilitySubmission(`${one}${team} Invalid.`)).toThrow(/cannot be combined/i)
   })
+
+  it('rejects excess or invalid selections instead of silently dropping them', () => {
+    expect(() => capabilitySubmissionMarker({ expertIds: Array.from({ length: 9 }, (_, i) => `expert-${i}`), skillNames: [] })).toThrow(/up to 8/u)
+    expect(() => capabilitySubmissionMarker({ expertIds: ['../expert'], skillNames: [] })).toThrow(/Invalid/u)
+    const one = capabilitySubmissionMarker({ expertIds: Array.from({ length: 8 }, (_, i) => `expert-${i}`), skillNames: [] })
+    const two = capabilitySubmissionMarker({ expertIds: ['expert-extra'], skillNames: [] })
+    expect(() => parseCapabilitySubmission(`${one}${two} Task`)).toThrow(/up to 8/u)
+  })
 })

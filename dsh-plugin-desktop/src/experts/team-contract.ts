@@ -82,6 +82,7 @@ export const teamConnectorSchema = z.object({
 export type TeamConnector = z.infer<typeof teamConnectorSchema>
 export const teamRuntimeSchema = z.object({
   mode: z.enum(['coordinator', 'lead']),
+  execution: z.enum(['parallel', 'pipeline']).optional(),
   leadExpertSlug: z.string().optional(),
   initPrompt: z.string(),
 }).superRefine((value, context) => {

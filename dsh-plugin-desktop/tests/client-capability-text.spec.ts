@@ -15,6 +15,8 @@ describe('capability selections in user messages', () => {
       id: 'clawclaw-team-label', data: { label: '文档生产专家团' }, end: text.indexOf('\n'),
     })
     expect(capabilityTeamLabelRule.match('【Expert team: Document Team】\nCreate a report', 0, context)).toMatchObject({ data: { label: 'Document Team' } })
+    expect(capabilityTeamLabelRule.match('【专家：趋势研究员】\n分析报告', 0, context)).toMatchObject({ data: { label: '趋势研究员' } })
+    expect(capabilityTeamLabelRule.match('【Skill: doc-typeset】\nTypeset', 0, context)).toMatchObject({ data: { label: 'doc-typeset' } })
   })
   it('replaces the complete encoded team carrier with a readable label in pending and saved text', () => {
     const marker = capabilitySubmissionMarker({ expertIds: [], skillNames: [], teamId: 'plugin-team:migrated-document-production-team' })

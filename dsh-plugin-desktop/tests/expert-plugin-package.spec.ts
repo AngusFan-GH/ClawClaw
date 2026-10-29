@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   discoverExpertPluginPackages,
   expertPluginLeadAgent,
+  expertPluginManifestSchema,
   findExpertPluginPackageBySession,
   isConversationCreatedExpertPlugin,
   projectExpertPluginAgents,
@@ -63,6 +64,12 @@ afterEach(async () => {
 })
 
 describe('ClawClaw expert plugin packages', () => {
+  it('rejects team metadata that cannot cross the shared team snapshot boundary', async () => {
+    const pkg = (await discoverExpertPluginPackages(bundledPluginRoot)).find(pkg => pkg.manifest.name === 'migrated-document-production-team')!
+    expect(expertPluginManifestSchema.safeParse({ ...pkg.manifest, profession: { en: 'x'.repeat(41) } }).success).toBe(false)
+    expect(expertPluginManifestSchema.safeParse({ ...pkg.manifest, defaultInitPrompt: { en: 'x'.repeat(2001) } }).success).toBe(false)
+    expect(expertPluginManifestSchema.safeParse({ ...pkg.manifest, members: Array.from({ length: 9 }, () => pkg.manifest.members![0]) }).success).toBe(false)
+  })
   it('ships valid migrated expert and Team packages', async () => {
     const packages = await discoverExpertPluginPackages(bundledPluginRoot)
     expect(packages.map(pkg => pkg.manifest.name).sort()).toEqual([

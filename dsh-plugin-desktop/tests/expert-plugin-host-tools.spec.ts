@@ -100,14 +100,14 @@ async function hostFixture() {
   const starts: Array<Record<string, unknown>> = []
   const createdListeners = new Set<(value: { agent: Agent }) => void>()
   let preStep: ((payload: { agent: Agent; signal: AbortSignal }, next: () => Promise<PreStepDecision>) => Promise<PreStepDecision>) | undefined
-  const startActivation = vi.fn(async (spec: { childId: string; request: Record<string, unknown>; delivery: string }) => {
+  const startActivation = vi.fn(async (spec: { childId: string; label?: string; request: Record<string, unknown>; delivery: string }) => {
     expect(spec.delivery).toBe('caller')
     const session = Session.create(SessionId(spec.childId))
     const child = { id: spec.childId, session,
       ctx: { systemPrompt: { section: vi.fn(), getSectionOrder: () => 0 }, tools: { restrict: vi.fn(), guard: vi.fn() } } } as unknown as Agent
     for (const listener of createdListeners) listener({ agent: child })
     const composition = session.snapshotEvents().map(pluginRecordOf).find(record => record?.type === 'plugin:clawclaw/expert-composition')?.data as { persona: string; deniedTools: string[]; allowedTools?: string[] }
-    starts.push({ ...spec.request, persona: composition.persona, toolFilter: { deny: composition.deniedTools, ...(composition.allowedTools === undefined ? {} : { allow: composition.allowedTools }) } })
+    starts.push({ ...spec.request, label: spec.label, persona: composition.persona, toolFilter: { deny: composition.deniedTools, ...(composition.allowedTools === undefined ? {} : { allow: composition.allowedTools }) } })
     const text = outputs[starts.length - 1] ?? 'unexpected'
     return { childId: spec.childId, result: Promise.resolve({ stopReason: 'completed', output: [{ type: 'text', text }] }), dispose: vi.fn(async () => {}) }
   })
@@ -148,7 +148,7 @@ async function hostFixture() {
     return tool.execute(args, { agent, signal: new AbortController().signal })
   }
   const prepareStep = (messages: UserMessage[], agent = parent) => preStep!({ agent, signal: new AbortController().signal }, async () => ({ kind: 'enter', messages }))
-  return { home, ctx, services, tools, starts, execute, prepareStep, setConnectorState: (value: 'running' | 'error') => { connectorState = value } }
+  return { home, ctx, services, tools, starts, outputs, execute, prepareStep, setConnectorState: (value: 'running' | 'error') => { connectorState = value } }
 }
 
 async function writeAgentPackage(home: string, personal = true): Promise<string> {
@@ -276,6 +276,22 @@ describe('Plugin Team Host tools', () => {
     })
   })
 
+  it('does not start queued experts after cancellation or turn an empty answer into success', async () => {
+    const fixture = await hostFixture()
+    const controller = new AbortController()
+    controller.abort(new Error('Stop expert batch'))
+    await expect(fixture.tools.get('summon_experts')!.execute({ experts: [{ expert: 'base', task: 'Review.' }] }, {
+      agent: { session: { header: {} } }, signal: controller.signal,
+    })).rejects.toThrow('Stop expert batch')
+    expect(fixture.starts).toHaveLength(0)
+    const library = fixture.services.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary
+    const catalog = await library.catalog()
+    await library.setEnabled([...catalog.enabled, 'base'], catalog.revision)
+    vi.spyOn(fixture.ctx.skills, 'get').mockResolvedValue({ name: 'evidence-research', content: 'Research.', invocation: { modelInvocable: true } } as never)
+    fixture.outputs[0] = '  '
+    await expect(fixture.execute('summon_expert', { expert: 'base', task: 'Review.' })).rejects.toThrow('no usable content')
+  })
+
   it('rejects a required missing Skill before starting even the team lead', async () => {
     const fixture = await hostFixture()
     const root = await writeTeamPackage(fixture.home, '1.0.0')
@@ -370,6 +386,35 @@ describe('Plugin Team Host tools', () => {
     expect(fixture.starts.slice(4).every(call => call.cwd === second.runDirectory)).toBe(true)
     expect(fixture.starts[0]?.toolFilter).toMatchObject({ allow: [] })
     expect(fixture.starts[1]?.toolFilter).not.toHaveProperty('allow')
+    expect(fixture.starts.slice(0, 4).map(call => call.label)).toEqual(['Research Lead · Planning', 'Research Lead · Writing', 'Evidence Analyst · Working', 'Research Lead · Synthesis'])
+  })
+
+  it('admits an expert selection with its attachments and persistent label without running it early', async () => {
+    const fixture = await hostFixture()
+    const library = fixture.services.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary
+    const catalog = await library.catalog()
+    await library.setEnabled([...catalog.enabled, 'base'], catalog.revision)
+    const marker = capabilitySubmissionMarker({ expertIds: ['base'], skillNames: [] })
+    const image = { type: 'image' as const, attachment: { attachmentId: AttachmentId('expert-input'), mediaType: 'image/png' as const, bytes: 1, width: 1, height: 1 } }
+    const decision = await fixture.prepareStep([createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: `${marker} Analyze the attached report.` }, image] })])
+    expect(fixture.starts).toHaveLength(0)
+    if (decision.kind !== 'enter') throw new Error('Expected admission')
+    expect(decision.messages[0]?.content).toEqual([{ type: 'text', text: '【Expert: Base Researcher】\nAnalyze the attached report.' }, image])
+    expect(decision.messages.at(-1)?.content).toEqual([{ type: 'text', text: expect.stringContaining('Use summon_expert') }])
+  })
+
+  it('strips empty carriers and rejects stale selected expert IDs before admission', async () => {
+    const fixture = await hostFixture()
+    const plainText = '  indented text\n\n  '
+    const plain = await fixture.prepareStep([createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: plainText }] })])
+    if (plain.kind !== 'enter') throw new Error('Expected admission')
+    expect(plain.messages[0]?.content).toEqual([{ type: 'text', text: plainText }])
+    const empty = capabilitySubmissionMarker({ expertIds: [], skillNames: [] })
+    const decision = await fixture.prepareStep([createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: `${empty} Hello.` }] })])
+    expect(JSON.stringify(decision)).not.toContain('clawclaw-capabilities:')
+    const marker = capabilitySubmissionMarker({ expertIds: ['missing-expert'], skillNames: [] })
+    await expect(fixture.prepareStep([createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: `${marker} Analyze.` }] })])).rejects.toThrow('No expert matched')
+    expect(fixture.starts).toHaveLength(0)
   })
 
   it('registers the Plugin Team library as a first-class Host service', async () => {

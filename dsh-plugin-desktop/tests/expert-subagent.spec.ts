@@ -103,4 +103,15 @@ describe('DSH activation expert adaptation', () => {
     })).rejects.toThrow('startup failed')
     expect(f.listeners.size).toBe(0)
   })
+
+  it('tolerates synchronous disposal in a cancellation callback', async () => {
+    const f = fixture()
+    f.dispose.mockImplementationOnce(() => undefined as never)
+    const controller = new AbortController()
+    const run = await startExpertSubagent(f.ctx, 'spawn', { parent: {} as Agent, prompt: [], persona: 'Expert', toolFilter: { deny: [] }, signal: controller.signal })
+    expect(() => controller.abort()).not.toThrow()
+    expect(f.dispose).toHaveBeenCalledOnce()
+    f.settled.resolve({ stopReason: 'completed', output: [] })
+    await run.result
+  })
 })

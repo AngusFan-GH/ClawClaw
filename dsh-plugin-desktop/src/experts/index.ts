@@ -973,6 +973,7 @@ export function apply(ctx: Context, config: Config): void {
 
   async function runExpert(query: unknown, task: unknown, exec: ToolRunContext): Promise<{ expert: string; answer: string }> {
     const locale = activeLocale()
+    exec.signal?.throwIfAborted()
     // 单条与批量召唤共用同一套任务校验，避免单条路径绕过码点上限
     const taskText = normalizeTask(task, locale)
     if (exec.agent === undefined) throw new Error(formatHost(locale, 'error.summonRequiresAgent'))
@@ -1000,6 +1001,7 @@ export function apply(ctx: Context, config: Config): void {
         const detail = text.length > 0 ? formatHost(locale, 'error.partialOutput', { text }) : ''
         throw new Error(formatHost(locale, 'error.expertRun', { reason: result.stopReason, detail }))
       }
+      if (text.trim() === '') throw new Error(formatHost(locale, 'error.expertEmptyAnswer'))
       return { expert: localizedExpertName(expert, locale), answer: text }
     } finally {
       await run.dispose()
@@ -1054,9 +1056,11 @@ export function apply(ctx: Context, config: Config): void {
       if (exec.agent === undefined) throw new Error(formatHost(locale, 'error.summonManyRequiresAgent'))
       const specs = validateSummonSpecs(args.experts, locale)
       const results = await mapPool(specs, SUMMON_EXPERTS_CONCURRENCY, async (spec) => {
+        exec.signal?.throwIfAborted()
         try {
           return toSummonItemResult(spec.expert, await runExpert(spec.expert, spec.task, exec))
         } catch (error) {
+          exec.signal?.throwIfAborted()
           return toSummonItemResult(spec.expert, error instanceof Error ? error : new Error(String(error)))
         }
       })
@@ -1154,7 +1158,10 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                 runAgent: async (agentRun: ExpertPluginAgentRun) => {
                     exec.signal?.throwIfAborted();
                     const composition = await resolveExpertComposition(ctx, agentRun.expert, exec.agent!, agentRun.persona, exec.signal);
-                    const run = await startExpertSubagent(ctx, config.provider, { label: agentRun.expert.name, parent: exec.agent!,
+                    const phase = activeLocale() === 'en'
+                        ? { plan: 'Planning', produce: 'Writing', member: 'Working', synthesize: 'Synthesis' }[agentRun.phase]
+                        : { plan: '规划', produce: '成稿', member: '执行', synthesize: '汇总' }[agentRun.phase];
+                    const run = await startExpertSubagent(ctx, config.provider, { label: `${localizedExpertName(agentRun.expert, activeLocale())} · ${phase}`, parent: exec.agent!,
                         ...(runDirectory === undefined ? {} : { cwd: runDirectory }),
                         prompt: [{ type: 'text', text: [agentRun.prompt, ...(runDirectory === undefined ? [] : [
                             `Bundled workflow resources (read-only): ${resolve(BUNDLED_PLUGIN_ROOT, '../skills')}. Read named SKILL.md files directly here when they are not invocable through the Skill tool. Never infer resource paths from member IDs or search the filesystem.`,
@@ -1216,10 +1223,13 @@ ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecisio
     const decision = await next();
     if (decision.kind === 'reject') return decision;
     const selections: Array<ReturnType<typeof parseCapabilitySubmission>['selection']> = [];
+    let hasCarrier = false;
     let rewritten = decision.messages.map((message): UserMessage => {
         if (message.source.kind !== 'user') return message;
         const content = message.content.map(block => {
             if (block.type !== 'text') return block;
+            if (!/<!--clawclaw-capabilities:[A-Za-z0-9%._~-]+-->/u.test(block.text)) return block;
+            hasCarrier = true;
             const parsed = parseCapabilitySubmission(block.text);
             if (parsed.selection.expertIds.length > 0 || parsed.selection.skillNames.length > 0 || parsed.selection.teamId !== undefined)
                 selections.push(parsed.selection);
@@ -1227,7 +1237,7 @@ ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecisio
         });
         return freezeMessage({ ...message, content });
     });
-    if (selections.length === 0) return decision;
+    if (selections.length === 0) return hasCarrier ? { ...decision, messages: rewritten } : decision;
     const expertIds = [...new Set(selections.flatMap(value => value.expertIds))];
     const skillNames = [...new Set(selections.flatMap(value => value.skillNames))];
     const teamIds = [...new Set(selections.flatMap(value => value.teamId === undefined ? [] : [value.teamId]))];
@@ -1236,9 +1246,12 @@ ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecisio
         .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n').trim();
     if (task === '') throw new Error(teamTx("请补充需要处理的任务。"));
     const injections: UserMessage[] = [];
+    const expertLabels = new Map<string, string>();
+    let teamLabel: string | undefined;
+    const skillRegistry = ctx.get('agentPresets')?.serviceFor(agent, 'skills') ?? ctx.skills;
     for (const name of skillNames) {
         signal.throwIfAborted();
-        const skill = await ctx.skills.get(name, { cwd: agent.session.header.cwd, signal, scope: agent });
+        const skill = await skillRegistry.get(name, { cwd: agent.session.header.cwd, signal, scope: agent });
         if (skill === undefined || skill.invocation.userInvocable !== true) throw new Error(teamTx("技能不可用：{0}。", [name]));
         injections.push(createUserMessage({
             source: { kind: 'clawclaw-capability-result', form: 'instructions', summary: teamTx("已加载技能：{0}", [name]) },
@@ -1252,16 +1265,7 @@ ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecisio
         const selected = snapshot.teams.find(team => team.id === teamIds[0]);
         if (!selected || !isTeamRecalled(selected, snapshot.enabledExperts, snapshot.recalledTeams))
             throw new Error(teamTx("专家团不存在或成员未就绪。"));
-        const label = activeLocale() === 'en' ? `Expert team: ${selected.name}` : `专家团：${selected.name}`;
-        rewritten = rewritten.map((message, index) => {
-            if (message.source.kind !== 'user') return message;
-            const content = message.content.map((block, blockIndex) => {
-                const original = decision.messages[index]?.content[blockIndex];
-                return block.type === 'text' && original?.type === 'text' && parseCapabilitySubmission(original.text).selection.teamId !== undefined
-                    ? { ...block, text: `【${label.replace(/[】\r\n]/gu, ' ')}】\n${block.text}` } : block;
-            });
-            return freezeMessage({ ...message, content });
-        });
+        teamLabel = selected.name;
         // Admission must finish before any long-running delegation. Let the normal
         // tool lifecycle publish progress, failures and cancellation in the chat.
         injections.push(createUserMessage({
@@ -1275,13 +1279,40 @@ ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecisio
             ].join('\n') }],
         }));
     } else if (expertIds.length > 0) {
-        const results = await mapPool(expertIds.map(expert => ({ expert, task })), SUMMON_EXPERTS_CONCURRENCY,
-            spec => runExpert(spec.expert, spec.task, { agent, signal } as ToolRunContext));
+        if (agent.session.header.parentSession !== undefined)
+            throw new Error(teamTx("专家成员不能继续召唤专家团。"));
+        const catalog = await library.catalog();
+        for (const id of expertIds) {
+            const expert = catalog.experts.find(item => item.slug === id && !item.conflict && item.packageType !== 'team');
+            if (!expert) throw new Error(formatHost(activeLocale(), 'error.expertMissing', { query: id }));
+            if (!catalog.enabled.includes(id)) throw new Error(formatHost(activeLocale(), 'error.expertDisabled', { name: localizedExpertName(expert, activeLocale()) }));
+            expertLabels.set(id, localizedExpertName(expert, activeLocale()));
+        }
         injections.push(createUserMessage({
-            source: { kind: 'clawclaw-capability-result', form: 'notice', summary: teamTx("专家已完成分析") },
-            content: [{ type: 'text', text: `<expert_results>\n${JSON.stringify(results)}\n</expert_results>` }],
+            source: { kind: 'clawclaw-capability-result', form: 'instructions', summary: teamTx("已选择专家：{0}", [[...expertLabels.values()].join('、')]) },
+            content: [{ type: 'text', text: [
+                `The user explicitly selected these experts: ${JSON.stringify(expertIds)}.`,
+                'Use summon_expert for one selected expert, or summon_experts for multiple selected experts. Use the exact selected IDs.',
+                'Give each expert a self-contained task preserving the user request, relevant conversation context, attachments and accessible source paths. Wait for actual tool results before claiming completion.',
+            ].join('\n') }],
         }));
     }
+    rewritten = rewritten.map((message, index) => {
+        if (message.source.kind !== 'user') return message;
+        const content = message.content.map((block, blockIndex) => {
+            const original = decision.messages[index]?.content[blockIndex];
+            if (block.type !== 'text' || original?.type !== 'text') return block;
+            const { selection } = parseCapabilitySubmission(original.text);
+            const english = activeLocale() === 'en';
+            const labels = [
+                ...(selection.teamId === undefined || teamLabel === undefined ? [] : [english ? `Expert team: ${teamLabel}` : `专家团：${teamLabel}`]),
+                ...selection.expertIds.map(id => english ? `Expert: ${expertLabels.get(id) ?? id}` : `专家：${expertLabels.get(id) ?? id}`),
+                ...selection.skillNames.map(name => english ? `Skill: ${name}` : `技能：${name}`),
+            ].map(label => `【${label.replace(/[】\r\n]/gu, ' ')}】`);
+            return labels.length === 0 ? block : { ...block, text: `${labels.join(' ')}\n${block.text}` };
+        });
+        return freezeMessage({ ...message, content });
+    });
     return { ...decision, messages: [...rewritten, ...injections] };
 });
 ctx.systemPrompt.section({ name: 'agency:teams', order: 118, text: context => {

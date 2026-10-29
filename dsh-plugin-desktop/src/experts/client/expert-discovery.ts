@@ -42,12 +42,13 @@ export function ExpertDiscovery(props: DiscoveryProps): React.ReactElement {
         experts.map(expert => {
           const health = props.health.get(expert.slug)
           const blocked = health?.state === 'blocked'
-          const action = expert.conflict ? props.t('discovery.conflict') : blocked ? props.t('capability.health.blocked') : props.enabled.has(expert.slug) ? '' : props.t('discovery.enableSelect')
+          const checking = health?.state === 'unknown'
+          const action = expert.conflict ? props.t('discovery.conflict') : checking ? props.t('capability.health.unknown') : blocked ? props.t('capability.health.blocked') : props.enabled.has(expert.slug) ? '' : props.t('discovery.enableSelect')
           return React.createElement('button', {
             key: expert.slug, type: 'button', className: 'aag-menu-item aag-discovery-row',
             'aria-label': action === '' ? name(expert) : `${name(expert)} · ${action}`,
             title: props.locale === 'en' ? expert.descriptionEn || expert.description : expert.description,
-            disabled: props.busy || expert.conflict === true || blocked, onClick: () => props.onPick(expert.slug),
+            disabled: props.busy || expert.conflict === true || blocked || checking, onClick: () => props.onPick(expert.slug),
           }, React.createElement('img', {
             className: 'aag-discovery-avatar', src: props.avatarSrc(expert), alt: '', width: 22, height: 22, loading: 'lazy', decoding: 'async',
           }),

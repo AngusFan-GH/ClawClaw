@@ -1,6 +1,9 @@
 /** 专家团共享词条；中文原文作为稳定键，插值不参与翻译匹配。 */
 export const TEAM_EN = {
   '已选择专家团：{0}': 'Selected team: {0}',
+  '已选择专家：{0}': 'Selected experts: {0}',
+  '由独立主理人规划并成稿，成员按顺序交接，最后统一汇总。': 'An independent lead plans and creates the source, members hand off in order, then the lead synthesizes the result.',
+  '由独立主理人规划，成员并行执行后由主理人汇总。': 'An independent lead plans, members work in parallel, then the lead synthesizes their results.',
   '能力就绪': 'Capabilities ready', '可降级运行': 'Limited operation available', '能力检查中': 'Checking capabilities',
   '必需能力未就绪': 'Required capabilities unavailable', '未发现工具': 'No tools discovered',
   '可选': 'Optional',

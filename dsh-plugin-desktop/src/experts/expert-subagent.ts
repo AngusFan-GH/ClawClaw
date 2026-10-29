@@ -83,7 +83,10 @@ export async function startExpertSubagent(
     const activation = await ctx.subagents.startActivation({
       provider, childId, label, request, signal, delivery: 'caller',
     })
-    const cancel = (): void => { void activation.dispose().catch(error => ctx.logger.warn(error)) }
+    const cancel = (): void => {
+      try { void Promise.resolve(activation.dispose()).catch(error => ctx.logger.warn(error)) }
+      catch (error) { ctx.logger.warn(error) }
+    }
     signal.addEventListener('abort', cancel, { once: true })
     if (signal.aborted) cancel()
     const result = activation.result.finally(() => { signal.removeEventListener('abort', cancel) })

@@ -8,9 +8,15 @@ export interface CapabilitySelection {
 }
 
 function normalized(value: CapabilitySelection): CapabilitySelection {
-  const expertIds = [...new Set(value.expertIds)].filter(id => ID.test(id)).slice(0, 8)
-  const skillNames = [...new Set(value.skillNames)].filter(id => ID.test(id)).slice(0, 16)
-  const teamId = value.teamId !== undefined && ID.test(value.teamId) ? value.teamId : undefined
+  if (!Array.isArray(value.expertIds) || !Array.isArray(value.skillNames)
+    || [...value.expertIds, ...value.skillNames].some(id => typeof id !== 'string' || !ID.test(id))
+    || (value.teamId !== undefined && (typeof value.teamId !== 'string' || !ID.test(value.teamId)))) {
+    throw new Error('Invalid ClawClaw capability selection.')
+  }
+  const expertIds = [...new Set(value.expertIds)]
+  const skillNames = [...new Set(value.skillNames)]
+  const teamId = value.teamId
+  if (expertIds.length > 8 || skillNames.length > 16) throw new Error('A task supports up to 8 experts and 16 Skills.')
   if (teamId !== undefined && expertIds.length > 0) throw new Error('A team cannot be combined with individual experts.')
   return { expertIds, skillNames, ...(teamId === undefined ? {} : { teamId }) }
 }

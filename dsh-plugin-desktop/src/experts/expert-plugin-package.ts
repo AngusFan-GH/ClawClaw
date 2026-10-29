@@ -66,6 +66,22 @@ export const expertPluginManifestSchema = z.object({
   }
   if (value.teamInfo === undefined) ctx.addIssue({ code: 'custom', path: ['teamInfo'], message: 'team package requires teamInfo' })
   if (value.members === undefined || value.members.length < 2) ctx.addIssue({ code: 'custom', path: ['members'], message: 'team package requires lead and members' })
+  if (value.members !== undefined && value.members.length > 8) ctx.addIssue({ code: 'custom', path: ['members'], message: 'team package supports at most 8 members' })
+  // A discovered package must fit the same snapshot contract used by the UI.
+  // Reject malformed packages here so one package cannot break the entire roster RPC.
+  const bounded = (text: ExpertPluginLocalizedText, limit: number, path: (string | number)[], name = false): void => {
+    for (const locale of ['zh', 'en'] as const) {
+      const item = text[locale]
+      if (item !== undefined && (Array.from(item).length > limit || (name && /[@\r\n\u0000-\u001f]/u.test(item))))
+        ctx.addIssue({ code: 'custom', path: [...path, locale], message: `team text must fit the catalog limit of ${limit} characters` })
+    }
+  }
+  bounded(value.profession, 40, ['profession'], true)
+  bounded(value.displayDescription ?? { en: value.description }, 160, ['displayDescription'])
+  bounded(value.defaultInitPrompt, 2000, ['defaultInitPrompt'])
+  value.tags?.forEach((item, index) => bounded(item, 16, ['tags', index]))
+  value.quickPrompts?.forEach((item, index) => bounded(item, 1000, ['quickPrompts', index]))
+  value.members?.forEach((item, index) => bounded(item.profession, 100, ['members', index, 'profession']))
 })
 export type ExpertPluginManifest = z.infer<typeof expertPluginManifestSchema>
 

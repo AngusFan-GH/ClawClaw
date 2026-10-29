@@ -11,7 +11,7 @@ declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
 export const capabilityTeamLabelRule: UserTextRule<'clawclaw-team-label'> = {
   id: 'clawclaw-team-label', order: 0,
   match(text, from) {
-    const pattern = /【(?:专家团：|Expert team: )([^】\r\n]+)】/gu
+    const pattern = /【(?:专家团：|专家：|技能：|Expert team: |Expert: |Skill: )([^】\r\n]+)】/gu
     pattern.lastIndex = from
     const match = pattern.exec(text)
     return match === null ? undefined : {

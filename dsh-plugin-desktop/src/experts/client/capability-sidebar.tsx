@@ -159,8 +159,8 @@ function provider(): ResourceProvider<'clawclaw-capability'> {
 
 function copy(locale: 'zh' | 'en') {
   return locale === 'en'
-    ? { expired: 'Capability unavailable', expiredBody: 'This capability was removed or its saved details could not be restored.', unavailable: 'This saved capability is no longer in the library. You can review its details, then close this tab.', close: 'Close details', try: 'Try asking', test: 'Test now', failed: 'Could not open a new conversation with this capability.', members: 'Team members', skills: 'Skills', connectors: 'Connectors', role: 'Expert', team: 'Expert team', alias: 'Name', type: 'Type', category: 'Category', intro: 'Capabilities', strengths: 'Areas of expertise', coordinator: 'Coordinator', lead: 'Lead' }
-    : { expired: '能力详情不可用', expiredBody: '该能力可能已被移除，或保存的详情无法恢复。', unavailable: '这个已保存的能力已不在专家库中。你仍可查看原有详情，确认后关闭此标签。', close: '关闭详情', try: '试试这样问', test: '立即测试', failed: '无法新建对话并添加该能力。', members: '团队成员', skills: '技能', connectors: '连接器', role: '专家', team: '专家团', alias: '名称', type: '类型', category: '行业分类', intro: '能力介绍', strengths: '擅长领域', coordinator: '统筹官', lead: '主理人' }
+    ? { expired: 'Capability unavailable', expiredBody: 'This capability was removed or its saved details could not be restored.', unavailable: 'This saved capability is no longer in the library. You can review its details, then close this tab.', close: 'Close details', try: 'Try asking', test: 'Use in new chat', failed: 'Could not open a new conversation with this capability.', members: 'Team members', skills: 'Skills', connectors: 'Connectors', role: 'Expert', team: 'Expert team', alias: 'Name', type: 'Type', category: 'Category', intro: 'Capabilities', strengths: 'Areas of expertise', coordinator: 'Coordinator', lead: 'Lead' }
+    : { expired: '能力详情不可用', expiredBody: '该能力可能已被移除，或保存的详情无法恢复。', unavailable: '这个已保存的能力已不在专家库中。你仍可查看原有详情，确认后关闭此标签。', close: '关闭详情', try: '试试这样问', test: '带入新对话', failed: '无法新建对话并添加该能力。', members: '团队成员', skills: '技能', connectors: '连接器', role: '专家', team: '专家团', alias: '名称', type: '类型', category: '行业分类', intro: '能力介绍', strengths: '擅长领域', coordinator: '统筹官', lead: '主理人' }
 }
 
 function CapabilitySection(props: { readonly title: string; readonly className?: string; readonly children: React.ReactNode }) {
@@ -202,12 +202,13 @@ function TeamBody({ entry }: { readonly entry: TeamSidebarEntry }) {
     <CapabilityHero visual={<div className="clawCapabilityTeamVisual aag-team-avatar"><TeamAvatars team={team} experts={entry.experts}/></div>} name={team.name} facts={[[labels.alias, team.name], [labels.type, labels.team], [labels.category, category]]}/>
     <CapabilitySection title={labels.intro}><p className="clawCapabilityDescription">{team.description}</p></CapabilitySection>
     {team.tags.length > 0 && <CapabilitySection title={labels.strengths}><CapabilityTags values={team.tags}/></CapabilitySection>}
+    {team.runtime.execution === 'pipeline' && <p className="clawCapabilityDescription">{entry.locale === 'en' ? 'Source production → ordered member handoffs → synthesis' : '主笔成稿 → 成员按序交接 → 汇总交付'}</p>}
     <CapabilitySection title={labels.members}><div className="clawCapabilityMembers">
-      <div className="clawCapabilityCoordinator"><span aria-hidden="true">{entry.locale === 'en' ? 'C' : '统'}</span><div><strong>{team.name}{labels.lead}</strong><small>{labels.coordinator}</small></div><em>{labels.lead}</em></div>
+      {team.runtime.mode === 'coordinator' && <div className="clawCapabilityCoordinator"><span aria-hidden="true">{entry.locale === 'en' ? 'C' : '统'}</span><div><strong>{team.name}{labels.lead}</strong><small>{labels.coordinator}</small></div><em>{labels.lead}</em></div>}
       {team.members.map(member => {
       const expert = entry.experts.find(item => item.slug === member.expertSlug)
       const name = expert === undefined ? member.expertSlug : entry.locale === 'en' ? expert.nameEn : expert.name
-      return <div key={member.expertSlug}><Avatar {...(expert === undefined ? {} : { expert })} size={36}/><div><strong>{name}</strong><small>{member.duty}</small></div></div>
+      return <div key={member.expertSlug}><Avatar {...(expert === undefined ? {} : { expert })} size={36}/><div><strong>{name}</strong><small>{member.duty}</small></div>{team.runtime.mode === 'lead' && member.expertSlug === leadSlug && <em>{labels.lead}</em>}</div>
     })}</div></CapabilitySection>
   </>
 }

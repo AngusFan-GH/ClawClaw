@@ -108,7 +108,9 @@ export function TeamDetails(props: {
             <div><strong>{expert?.name ?? tx("成员失效")}</strong><span>{member.duty}</span><p>{member.instructions}</p></div>
           </article>
         })}</div>
-        <p className="agt-help">{tx("由当前会话协调，成员分别分析后统一汇总。")}</p>
+        <p className="agt-help">{tx(props.team.runtime.mode === 'lead'
+          ? props.team.runtime.execution === 'pipeline' ? "由独立主理人规划并成稿，成员按顺序交接，最后统一汇总。" : "由独立主理人规划，成员并行执行后由主理人汇总。"
+          : "由当前会话协调，成员分别分析后统一汇总。")}</p>
       </section>
       <section className="agt-detail-delivery">
         <h3>

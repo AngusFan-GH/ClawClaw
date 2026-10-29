@@ -78,7 +78,7 @@ describe('capability details sidebar', () => {
     expect(select).toHaveBeenLastCalledWith('列出风险')
     expect(focusComposer).toHaveBeenCalledOnce()
 
-    const test = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '立即测试')
+    const test = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '带入新对话')
     await act(async () => { test?.click(); await Promise.resolve() })
     expect(select).toHaveBeenLastCalledWith('检查这份方案')
     expect(focusComposer).toHaveBeenCalledTimes(2)
@@ -200,5 +200,13 @@ describe('capability details sidebar', () => {
       new URL(EXPERT_AVATAR_URLS[5]!, window.location.href).href,
       new URL(EXPERT_AVATAR_URLS[12]!, window.location.href).href,
     ])
+    await act(async () => root!.render(React.createElement(CapabilitySidebarTab, {
+      useResource: () => ({ status: 'live', value: { entry: { kind: 'team', team: { ...team, runtime: { mode: 'lead', leadExpertSlug: 'reviewer', execution: 'pipeline', initPrompt: '' } }, experts: [reviewer, writer], locale: 'zh', examples: [] } }, failure: undefined }),
+      useTabInfo: () => ({ tab: { contentId: 'dsh-resource://clawclaw-capability/details/team' } }),
+    } as never)))
+    expect(host.querySelector('.clawCapabilityCoordinator')).toBeNull()
+    expect(host.querySelectorAll('.clawCapabilityMembers > div')).toHaveLength(2)
+    expect(host.querySelector('.clawCapabilityMembers em')?.textContent).toBe('主理人')
+    expect(host.textContent).toContain('主笔成稿 → 成员按序交接 → 汇总交付')
   })
 })

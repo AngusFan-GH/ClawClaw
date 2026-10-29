@@ -4,6 +4,7 @@ import type { AgencySettings, ExpertSettingsStore } from '../src/experts/expert-
 import type { ExpertPluginTeamDefinition } from '../src/experts/expert-plugin-package.ts'
 import type { DesktopMcpView } from '../src/mcp-contract.ts'
 import { agencySettingsFromLegacyDocument, readAgencySettings } from '../src/experts/settings-compat.ts'
+import { teamSnapshotSchema } from '../src/experts/team-contract.ts'
 
 const definition: ExpertPluginTeamDefinition = {
   id: 'plugin-team:research-pack',
@@ -55,6 +56,18 @@ function fixture(initial: AgencySettings = { enabled: [] }, connector?: {
 }
 
 describe('unified team library', () => {
+  it('keeps pipeline strategy and a fallback example in the strict client snapshot', async () => {
+    const { library } = fixture(undefined, undefined, [{ ...definition, quickPrompts: [], execution: 'pipeline' }])
+    const snapshot = teamSnapshotSchema.parse(await library.snapshot())
+    expect(snapshot.teams.find(team => team.id === definition.id)).toMatchObject({ runtime: { execution: 'pipeline' }, examples: ['开始研究'] })
+  })
+  it.each(['研究团队', 'Research Team'])('rejects custom team names colliding with packaged teams: %s', async name => {
+    const { library, state } = fixture()
+    const team = (await library.snapshot()).teams.find(team => team.id === definition.id)!
+    const { id: _id, builtin: _builtin, runtime: _runtime, skills: _skills, connectors: _connectors, connectorStates: _states, provenance: _provenance, ...input } = team
+    await expect(library.save({ ...input, name, builtin: false }, 4)).rejects.toThrow('团队名称已被使用')
+    expect(state().customTeams).toBeUndefined()
+  })
   it('reads recall records from live configuration and legacy imports without inferring old records', () => {
     let recalled = [definition.id]
     const config = { enabled: { get: () => experts.map(expert => expert.slug) }, recalledTeams: { get: () => recalled } }
