@@ -1147,7 +1147,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                     const composition = await resolveExpertComposition(ctx, agentRun.expert, exec.agent!, agentRun.persona, exec.signal);
                     const run = await startExpertSubagent(ctx, config.provider, { label: agentRun.expert.name, parent: exec.agent!,
                         prompt: [{ type: 'text', text: agentRun.prompt }], persona: sanitize(composition.persona),
-                        toolFilter: { deny: composition.deniedTools }, ...(maxDepth === undefined ? {} : { maxDepth }), signal: exec.signal });
+                        toolFilter: { deny: composition.deniedTools, ...(agentRun.phase === 'plan' ? { allow: [] } : {}) }, ...(maxDepth === undefined ? {} : { maxDepth }), signal: exec.signal });
                     try {
                         const value = await run.result;
                         if (value.stopReason !== 'completed') throw new Error(teamTx("成员未完成：{0}。{1}", [value.stopReason, textBlocks(value.output)]));
@@ -1200,63 +1200,6 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
     },
 }), activeLocale));
 
-async function runSelectedTeam(teamId: string, task: string, agent: Agent, signal: AbortSignal): Promise<unknown> {
-    const locale = activeLocale();
-    const taskText = normalizeTask(task, locale);
-    const [snapshot, catalog] = await Promise.all([teamLibrary.snapshot(), library.catalog()]);
-    if (snapshot.revision !== catalog.revision)
-        throw new Error(teamTx("名册已更新，请重新读取专家团。"));
-    const selected = snapshot.teams.find(team => team.id === teamId);
-    if (!selected || !isTeamRecalled(selected, snapshot.enabledExperts, snapshot.recalledTeams))
-        throw new Error(teamTx("专家团不存在或成员未就绪。"));
-    await preflightExpertTeam(ctx, selected, catalog.experts, agent, signal);
-    const provider = ctx.subagents.getProvider(config.provider);
-    if (provider === undefined || !supportsExpertComposition(provider) || (maxDepth !== undefined && !provider.capabilities.depthLimit))
-        throw new Error(teamTx("当前子代理服务不支持专家团所需的身份、工具过滤或深度限制。"));
-    const pluginTeam = [...pluginTeams.values()].find(team => team.id === teamId);
-    if (pluginTeam !== undefined) {
-        const unavailable = selected.connectorStates.filter(connector => {
-            const binding = pluginTeam.connectors.find(item => item.name === connector.dependency);
-            return binding?.required && binding.enabled && (!connector.enabled || !connector.credentialsReady || connector.state !== 'running' || connector.toolCount === 0);
-        });
-        if (unavailable.length > 0)
-            throw new Error(teamTx("专家团所需 Connector 未就绪：{0}。", [unavailable.map(item => item.dependency).join(', ')]));
-        return executeExpertPluginTeam({
-            team: pluginTeam, experts: catalog.experts, enabled: catalog.enabled, task: taskText, signal,
-            readPersona: async expert => (await personaSource.getPrompt(expert.slug, expert.division, locale)).prompt,
-            runAgent: async (agentRun: ExpertPluginAgentRun) => {
-                signal.throwIfAborted();
-                const composition = await resolveExpertComposition(ctx, agentRun.expert, agent, agentRun.persona, signal);
-                const run = await startExpertSubagent(ctx, config.provider, { label: agentRun.expert.name, parent: agent,
-                    prompt: [{ type: 'text', text: agentRun.prompt }], persona: sanitize(composition.persona),
-                    toolFilter: { deny: composition.deniedTools }, ...(maxDepth === undefined ? {} : { maxDepth }), signal });
-                try {
-                    const value = await run.result;
-                    if (value.stopReason !== 'completed') throw new Error(teamTx("成员未完成：{0}。{1}", [value.stopReason, textBlocks(value.output)]));
-                    return textBlocks(value.output);
-                } finally { await run.dispose(); }
-            },
-        });
-    }
-    const team = localizeTeam(selected, locale);
-    return executeTeam({ team, locale, experts: catalog.experts, enabled: catalog.enabled, task: taskText, revision: snapshot.revision, signal,
-        readPersona: async expert => (await personaSource.getPrompt(expert.slug, expert.division, locale)).prompt,
-        run: async (member: TeamMemberRun) => {
-            signal.throwIfAborted();
-            const expert = catalog.experts.find(item => item.slug === member.slug)!;
-            const composition = await resolveExpertComposition(ctx, expert, agent, member.persona, signal);
-            const run = await startExpertSubagent(ctx, config.provider, { label: member.name, parent: agent,
-                prompt: [{ type: 'text', text: member.prompt }], persona: sanitize(composition.persona),
-                toolFilter: { deny: composition.deniedTools }, ...(maxDepth === undefined ? {} : { maxDepth }), signal });
-            try {
-                const value = await run.result;
-                if (value.stopReason !== 'completed') throw new Error(teamTx("成员未完成：{0}。{1}", [value.stopReason, textBlocks(value.output)]));
-                return textBlocks(value.output);
-            } finally { await run.dispose(); }
-        },
-    });
-}
-
 ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecision> => {
     const decision = await next();
     if (decision.kind === 'reject') return decision;
@@ -1291,10 +1234,23 @@ ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecisio
         }));
     }
     if (teamIds[0] !== undefined) {
-        const result = await runSelectedTeam(teamIds[0], task, agent, signal);
+        if (agent.session.header.parentSession !== undefined)
+            throw new Error(teamTx("专家团只能在主会话中召唤。"));
+        const snapshot = await teamLibrary.snapshot();
+        const selected = snapshot.teams.find(team => team.id === teamIds[0]);
+        if (!selected || !isTeamRecalled(selected, snapshot.enabledExperts, snapshot.recalledTeams))
+            throw new Error(teamTx("专家团不存在或成员未就绪。"));
+        // Admission must finish before any long-running delegation. Let the normal
+        // tool lifecycle publish progress, failures and cancellation in the chat.
         injections.push(createUserMessage({
-            source: { kind: 'clawclaw-capability-result', form: 'notice', summary: teamTx("专家团已完成分析") },
-            content: [{ type: 'text', text: `<expert_team_result team="${teamIds[0]}">\n${JSON.stringify(result)}\n</expert_team_result>` }],
+            source: { kind: 'clawclaw-capability-result', form: 'instructions', summary: teamTx("已选择专家团：{0}", [selected.name]) },
+            content: [{ type: 'text', text: [
+                'The user explicitly selected this expert team for the accompanying task.',
+                `Selected team ID: ${JSON.stringify(selected.id)}`,
+                'Call get_expert_team with this ID, then call summon_expert_team with this ID and a self-contained task including the user request, attachments and accessible source paths.',
+                'Delegate immediately without searching for member implementations or doing their work first. Team member IDs are agent identities, not Skill names or filesystem paths.',
+                'Do not claim the team has completed before its tool results arrive. If native mode returns a dispatch acknowledgement, wait for actual member results before delivering the answer.',
+            ].join('\n') }],
         }));
     } else if (expertIds.length > 0) {
         const results = await mapPool(expertIds.map(expert => ({ expert, task })), SUMMON_EXPERTS_CONCURRENCY,

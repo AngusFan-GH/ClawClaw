@@ -66,6 +66,19 @@ describe('DSH activation expert adaptation', () => {
     expect(f.restrict).toHaveBeenCalledWith({ deny: ['write_file'] })
   })
 
+  it('keeps planning tools disabled on activation and cold resume', async () => {
+    const f = fixture()
+    await startExpertSubagent(f.ctx, 'spawn', {
+      parent: {} as Agent, prompt: [], persona: 'Plan only', toolFilter: { deny: [], allow: [] },
+    })
+    expect(f.restrict).toHaveBeenCalledWith({ deny: [], allow: [] })
+    f.restrict.mockClear()
+    installExpertCompositionRecovery(f.ctx)
+    for (const callback of f.listeners) callback({ agent: f.child })
+    expect(f.restrict).toHaveBeenCalledWith({ deny: [], allow: [] })
+    f.settled.resolve({ stopReason: 'completed', output: [] })
+  })
+
   it('cancels an accepted activation when the owning tool is cancelled', async () => {
     const f = fixture()
     const controller = new AbortController()

@@ -68,8 +68,9 @@ export async function executeExpertPluginTeam(args: {
     prompt: [
       `You are the lead Agent for team ${args.team.packageName}.`,
       `Task:\n${task}`,
-      `Members:\n${members.map(member => `- ${member.name} (${member.slug})`).join('\n')}`,
+      `Members (agent identities, not Skill names or paths):\n${members.map(member => `- ${member.name} (${member.slug}): ${member.description}\n  Bound Skills: ${member.skills.filter(binding => binding.enabled).map(binding => binding.name).join(', ') || 'none'}`).join('\n')}`,
       'Create a concise execution plan and a specific brief for each member. Do not answer the task yet.',
+      'This is a planning-only phase with no tools. Use the supplied roster and task. Do not load member identities as Skills, search the filesystem for their implementations, or perform research or production work. The host will execute each member and provide their results for synthesis. State assumptions and missing inputs in the plan, then return it immediately.',
     ].join('\n\n'),
   })
   if (plan.trim() === '') throw new Error(`Team lead returned an empty plan: ${lead.slug}`)

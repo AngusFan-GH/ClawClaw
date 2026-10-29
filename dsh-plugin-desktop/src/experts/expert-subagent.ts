@@ -9,6 +9,7 @@ interface ExpertComposition {
   readonly version: 1
   readonly persona: string
   readonly deniedTools: string[]
+  readonly allowedTools?: string[]
 }
 
 declare module '@deepseek-ai/dsh-session/types' {
@@ -28,7 +29,7 @@ function applyComposition(agent: Agent, value: ExpertComposition): void {
     order: agent.ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
     text: value.persona,
   })
-  agent.ctx.tools.restrict({ deny: value.deniedTools })
+  agent.ctx.tools.restrict({ deny: value.deniedTools, ...(value.allowedTools === undefined ? {} : { allow: value.allowedTools }) })
 }
 
 /** Restore child-owned expert overrides before a resumed Agent can execute. */
@@ -39,10 +40,11 @@ export function installExpertCompositionRecovery(ctx: Context): void {
     if (record === undefined) return
     const value = record.data as Partial<ExpertComposition> | null
     if (value === null || typeof value !== 'object' || value.version !== 1 || typeof value.persona !== 'string'
-      || !Array.isArray(value.deniedTools) || !value.deniedTools.every(name => typeof name === 'string')) {
+      || !Array.isArray(value.deniedTools) || !value.deniedTools.every(name => typeof name === 'string')
+      || (value.allowedTools !== undefined && (!Array.isArray(value.allowedTools) || !value.allowedTools.every(name => typeof name === 'string')))) {
       throw new Error('Invalid persisted ClawClaw expert composition')
     }
-    applyComposition(agent, { version: 1, persona: value.persona, deniedTools: value.deniedTools })
+    applyComposition(agent, { version: 1, persona: value.persona, deniedTools: value.deniedTools, ...(value.allowedTools === undefined ? {} : { allowedTools: value.allowedTools }) })
   })
 }
 
@@ -53,7 +55,7 @@ export async function startExpertSubagent(
   options: Omit<SubagentStartRequest, 'signal'> & {
     readonly signal?: AbortSignal
     readonly persona: string
-    readonly toolFilter: { readonly deny: readonly string[] }
+    readonly toolFilter: { readonly deny: readonly string[]; readonly allow?: readonly string[] }
   },
 ) {
   const backend = ctx.subagents.getProvider(provider)
@@ -62,7 +64,7 @@ export async function startExpertSubagent(
   }
   const childId = SessionId(`expert-${randomUUID()}`)
   const { label = 'expert', signal = new AbortController().signal, persona, toolFilter, ...request } = options
-  const composition: ExpertComposition = { version: 1, persona, deniedTools: [...toolFilter.deny] }
+  const composition: ExpertComposition = { version: 1, persona, deniedTools: [...toolFilter.deny], ...(toolFilter.allow === undefined ? {} : { allowedTools: [...toolFilter.allow] }) }
   // Agent creation listeners run serially before publication or prompt delivery.
   const stop = ctx.on('agent/created', ({ agent }) => {
     if (agent.id !== childId) return

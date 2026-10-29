@@ -3,7 +3,10 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
+import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
+import { capabilitySubmissionMarker } from '../src/experts/capability-submission.ts'
 import { Context } from '@deepseek-ai/cordis'
 import { Peer } from '@deepseek-ai/dsh-client-connection'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
@@ -96,14 +99,15 @@ async function hostFixture() {
   const outputs = ['lead plan', 'member evidence', 'lead final']
   const starts: Array<Record<string, unknown>> = []
   const createdListeners = new Set<(value: { agent: Agent }) => void>()
+  let preStep: ((payload: { agent: Agent; signal: AbortSignal }, next: () => Promise<PreStepDecision>) => Promise<PreStepDecision>) | undefined
   const startActivation = vi.fn(async (spec: { childId: string; request: Record<string, unknown>; delivery: string }) => {
     expect(spec.delivery).toBe('caller')
     const session = Session.create(SessionId(spec.childId))
     const child = { id: spec.childId, session,
       ctx: { systemPrompt: { section: vi.fn(), getSectionOrder: () => 0 }, tools: { restrict: vi.fn() } } } as unknown as Agent
     for (const listener of createdListeners) listener({ agent: child })
-    const composition = session.snapshotEvents().map(pluginRecordOf).find(record => record?.type === 'plugin:clawclaw/expert-composition')?.data as { persona: string; deniedTools: string[] }
-    starts.push({ ...spec.request, persona: composition.persona, toolFilter: { deny: composition.deniedTools } })
+    const composition = session.snapshotEvents().map(pluginRecordOf).find(record => record?.type === 'plugin:clawclaw/expert-composition')?.data as { persona: string; deniedTools: string[]; allowedTools?: string[] }
+    starts.push({ ...spec.request, persona: composition.persona, toolFilter: { deny: composition.deniedTools, ...(composition.allowedTools === undefined ? {} : { allow: composition.allowedTools }) } })
     const text = outputs[starts.length - 1] ?? 'unexpected'
     return { childId: spec.childId, result: Promise.resolve({ stopReason: 'completed', output: [{ type: 'text', text }] }), dispose: vi.fn(async () => {}) }
   })
@@ -131,6 +135,7 @@ async function hostFixture() {
     get: (name: string) => services.get(name),
     on: vi.fn((event: string, callback: (value: { agent: Agent }) => void) => {
       if (event === 'agent/created') createdListeners.add(callback)
+      if (event === 'agent/pre-step') preStep = callback as unknown as NonNullable<typeof preStep>
       return () => { createdListeners.delete(callback) }
     }), effect: vi.fn(() => () => {}),
     webServer: {}, logger: { warn: vi.fn(), error: vi.fn() },
@@ -142,7 +147,8 @@ async function hostFixture() {
     if (!tool) throw new Error(`Tool was not registered: ${name}`)
     return tool.execute(args, { agent, signal: new AbortController().signal })
   }
-  return { home, ctx, services, tools, starts, execute, setConnectorState: (value: 'running' | 'error') => { connectorState = value } }
+  const prepareStep = (messages: UserMessage[], agent = parent) => preStep!({ agent, signal: new AbortController().signal }, async () => ({ kind: 'enter', messages }))
+  return { home, ctx, services, tools, starts, execute, prepareStep, setConnectorState: (value: 'running' | 'error') => { connectorState = value } }
 }
 
 async function writeAgentPackage(home: string, personal = true): Promise<string> {
@@ -313,12 +319,40 @@ describe('Plugin Team Host tools', () => {
       expect.stringContaining('Member evidence:\n##'),
     ])
     expect(fixture.starts.every(call => (call.toolFilter as { deny: string[] }).deny.includes('summon_expert_team'))).toBe(true)
+    expect(fixture.starts[0]?.toolFilter).toMatchObject({ allow: [] })
+    expect(fixture.starts.slice(1).every(call => !('allow' in (call.toolFilter as object)))).toBe(true)
 
     const child = { session: { header: { parentSession: 'parent' } } } as unknown as Agent
     await expect(fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Nested.' }, child)).rejects.toThrow('cannot invoke additional teams')
 
     fixture.setConnectorState('error')
     await expect(fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Blocked.' })).rejects.toThrow('Required Team Connectors are not ready')
+  })
+
+  it('admits team selections without blocking on child execution and preserves attachments', async () => {
+    const fixture = await hostFixture()
+    await writeTeamPackage(fixture.home, '1.0.0')
+    const marker = capabilitySubmissionMarker({ expertIds: [], skillNames: [], teamId: 'plugin-team:research-team' })
+    const image = { type: 'image' as const, attachment: { attachmentId: AttachmentId('report-image'), mediaType: 'image/png' as const, bytes: 1, width: 1, height: 1 } }
+    const decision = await fixture.prepareStep([createUserMessage({ source: { kind: 'user' }, content: [
+      { type: 'text', text: `${marker}\nInvestigate this report.` }, image,
+    ] })])
+    expect(fixture.starts).toHaveLength(0)
+    expect(decision.kind).toBe('enter')
+    if (decision.kind !== 'enter') throw new Error('Expected admission')
+    expect(decision.messages[0]?.content).toEqual([{ type: 'text', text: 'Investigate this report.' }, image])
+    expect(decision.messages.at(-1)).toMatchObject({
+      source: { kind: 'clawclaw-capability-result', form: 'instructions' },
+      content: [{ type: 'text', text: expect.stringContaining('summon_expert_team') }],
+    })
+    expect(JSON.stringify(decision.messages)).not.toContain('<!--clawclaw-capabilities:')
+    expect(JSON.stringify(decision.messages)).not.toContain('expert_team_result')
+    await fixture.prepareStep([])
+    expect(fixture.starts).toHaveLength(0)
+
+    await expect(fixture.prepareStep([createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: `${marker} Research.` }] })], {
+      session: { header: { parentSession: 'parent' } },
+    } as unknown as Agent)).rejects.toThrow('main conversation')
   })
 
   it('registers the Plugin Team library as a first-class Host service', async () => {

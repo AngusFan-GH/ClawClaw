@@ -26,6 +26,11 @@ describe('Expert Plugin Team runtime', () => {
       team, experts, enabled: experts.map(item => item.slug), task: 'Ship a release',
       readPersona: async item => `persona:${item.slug}`,
       runAgent: async run => {
+        if (run.phase === 'plan') {
+          expect(run.prompt).toContain('agent identities, not Skill names or paths')
+          expect(run.prompt).toContain('planning-only phase with no tools')
+          expect(run.prompt).toContain('return it immediately')
+        }
         events.push(`${run.phase}:${run.expert.slug}`)
         return `${run.phase} result from ${run.expert.slug}`
       },

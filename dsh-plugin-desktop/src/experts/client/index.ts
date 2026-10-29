@@ -47,6 +47,7 @@ import { createDesktopSkillsApi } from '../../client/skills-api.js'
 import { createDesktopMcpApi } from '../../client/mcp-api.js'
 import { skillInsertion } from '../../client/conversation-skills.js'
 import { capabilitySubmissionMarker } from '../capability-submission.js'
+import { capabilityTextRule } from './capability-text.js'
 import { ExpertCapabilityRegistry } from './capability-registry.js'
 import { expertCapabilityHealth, type ExpertCapabilityHealth } from './capability-options.js'
 import { SkillsSettingsSection } from '../../client/SkillsSettingsSection.js'
@@ -1683,6 +1684,16 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   if (typeof remote.getTeams === 'function') void refreshTeams(remote as TeamRemote).catch((error: unknown) => console.warn('[clawclaw-experts] 专家团预加载失败：', error))
   await readEnabled(remote).catch((error: unknown) => console.warn('[clawclaw-experts] 初始名册读取失败，设置页可重试：', error))
   ctx.effect(() => installLegacyTeamReferenceGuard(), 'clawclaw-experts: legacy team message references')
+  ctx.inject(['uiConversation'], scope => {
+    scope.uiConversation.userText.register(capabilityTextRule({
+      expert: id => {
+        const expert = catalogState(remote).experts.find(item => item.slug === id)
+        return expert === undefined ? id : displayName(expert, getActive())
+      },
+      team: id => teamState(remote as TeamRemote)?.teams.find(item => item.id === id)?.name ?? (getActive() === 'zh' ? '专家团' : 'Expert team'),
+      skill: name => skillDisplayName(name, getActive()),
+    }))
+  })
   ctx.effect(() => {
     const names = installNativeTeamNames(async () => {
       if (!remote.getTeams) return new Map<string, string>()
