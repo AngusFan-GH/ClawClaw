@@ -70,7 +70,7 @@ describe('GenUI result card', () => {
     const { element, root } = await mount({ ...props, isError: true, text: 'Validation failed' })
     expect(element.textContent).toBe('Validation failed')
     await act(async () => root.render(createElement(GenuiToolView, { phase: 'preparing', block: { args: meta }, zh: true } as never)))
-    expect(element.querySelector('[role="status"]')?.textContent).toBe('正在准备卡片…')
+    expect(element.querySelector('[role="status"]')?.textContent).toBe('正在生成交互内容…')
     expect(element.querySelector('table')).toBeNull()
   })
 

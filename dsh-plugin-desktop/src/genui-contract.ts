@@ -1,6 +1,7 @@
 /** Versioned, read-only GenUI vocabulary shared by Host and Client. */
 export const GENUI_FORMAT = 'clawclaw.genui/v1'
 export const GENUI_ENTRY = 'desktop-genui'
+export const GENUI_ROUTING_MARKER = '[clawclaw:inline-presentation]'
 export const GENUI_RENDER_TOOL = 'clawclaw_render_ui'
 export const GENUI_VALIDATE_TOOL = 'clawclaw_validate_ui'
 export const GENUI_LIMITS = Object.freeze({

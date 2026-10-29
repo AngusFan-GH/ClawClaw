@@ -33,8 +33,7 @@ import { applySpiritXProviderPriority } from './spiritx-provider-priority.tsx'
 import { applySelectionQuote } from './selection-quote.tsx'
 import { applyInputSuggestions, INPUT_SUGGESTIONS_INJECT } from './input-suggestions.tsx'
 import { applyDesktopGitGraph } from './git-graph.ts'
-import { applyDesktopGenui } from './genui.tsx'
-import { applyGenuiSettings } from './genui-settings.tsx'
+import * as GenuiClient from './genui-plugin.ts'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 import { apply as applyExperts } from '../experts/client/index.ts'
 
@@ -148,8 +147,7 @@ export function apply(ctx: ClientContext): void {
   applySelectionQuote(ctx)
   applyInputSuggestions(ctx)
   applyDesktopGitGraph(ctx)
-  applyDesktopGenui(ctx)
-  applyGenuiSettings(ctx)
+  ctx.plugin(GenuiClient)
   ctx.effect(() => applyExperts(ctx), 'dsh-plugin-desktop: experts')
   applyShortcutMenu(ctx)
   if (productVersion !== undefined) applyDesktopVersionRow(ctx, productVersion)

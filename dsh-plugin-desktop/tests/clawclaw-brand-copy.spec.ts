@@ -37,14 +37,17 @@ describe('ClawClaw product copy', () => {
     })
     const slotInject = vi.fn()
     const inject = vi.fn()
+    const plugin = vi.fn()
     try {
       apply({
         effect,
         inject,
+        plugin,
         inputTriggers: { registerSource: vi.fn(() => () => undefined) },
         locale: { register: vi.fn() },
         slots: { inject: slotInject },
       } as unknown as ClientContext)
+      expect(plugin).toHaveBeenCalledWith(expect.objectContaining({ name: 'desktop-genui-client' }))
       expect(document.title).toBe('ClawClaw')
       expect(document.querySelector('link[rel="icon"]')?.getAttribute('href')).toMatch(/^data:image\/png;base64,/u)
       expect(document.querySelector('h1')?.textContent).toBe(brandedHero)

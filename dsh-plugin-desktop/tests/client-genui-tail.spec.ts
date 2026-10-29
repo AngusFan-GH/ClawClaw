@@ -5,7 +5,7 @@ import type { ChatSnapshot, ToolChatData, ToolResultNode } from '@deepseek-ai/ds
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GenuiTurnTail, genuiResults, latestGenuiResult, type GenuiTurnTailProps } from '../src/client/genui.tsx'
-import { GENUI_FORMAT, GENUI_RENDER_TOOL } from '../src/genui-contract.ts'
+import { GENUI_FORMAT, GENUI_RENDER_TOOL, GENUI_ROUTING_MARKER } from '../src/genui-contract.ts'
 
 const document = { format: GENUI_FORMAT, title: '服务状态', items: [
   { type: 'stat', label: '健康服务数', value: 3 },
@@ -43,11 +43,11 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-async function mount(chat: GenuiTurnTailProps['chat'], turn = 1, sessionId = 'main') {
+async function mount(chat: GenuiTurnTailProps['chat'], turn = 1, sessionId = 'main', extra: Partial<GenuiTurnTailProps> = {}) {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const element = globalThis.document.createElement('div'); globalThis.document.body.append(element)
   const root = createRoot(element); roots.push(root)
-  await act(async () => root.render(createElement(GenuiTurnTail, { chat, turn: { turn }, sessionId, zh: true } as GenuiTurnTailProps)))
+  await act(async () => root.render(createElement(GenuiTurnTail, { chat, turn: { turn }, sessionId, zh: true, ...extra } as GenuiTurnTailProps)))
   return { element, root }
 }
 
@@ -83,6 +83,55 @@ describe('GenUI cards outside collapsed tool process', () => {
     expect(element.querySelector('iframe')?.getAttribute('sandbox')).toBe('allow-scripts')
     const restored = await mount(store(chatFor({ 1: store(JSON.parse(JSON.stringify(tools.getSnapshot()))) })))
     expect(restored.element.querySelector('iframe')?.getAttribute('srcdoc')).toContain('<output>60</output>')
+  })
+
+  it('shows real preparation and replaces it with the saved result when it arrives', async () => {
+    const running = { phase: 'start' as const, callId: 'rendering', name: GENUI_RENDER_TOOL, turn: 1, step: 1,
+      time: 0, args: result().args, argsRaw: '{}', subCalls: [] }
+    const tools = store<readonly ToolChatData[]>([{ root: running }])
+    const { element } = await mount(store(chatFor({ 1: tools })))
+    expect(element.querySelector('[role="status"]')?.textContent).toBe('正在生成交互内容…')
+    expect(element.querySelector('.clawGenui')).toBeNull()
+    await act(async () => tools.set([{ root: result() }]))
+    expect(element.querySelector('[role="status"]')).toBeNull()
+    expect(element.querySelector('h3')?.textContent).toBe('服务状态')
+  })
+  it('explains an inline-routing correction without displaying raw tool denial text', async () => {
+    const tools = store<readonly ToolChatData[]>([{ root: result(10, { name: 'mcp__playwright__browser_navigate', isError: true,
+      content: [{ type: 'text', text: `${GENUI_ROUTING_MARKER} tool denied: internal corrective instructions` }] }) }])
+    const { element } = await mount(store(chatFor({ 1: tools })))
+    expect(element.textContent).toBe('正在改为对话内展示…')
+    expect(element.textContent).not.toContain('denied')
+  })
+  it('provides one explicit scoped retry for a completed failure and reports submission errors', async () => {
+    const tools = store<readonly ToolChatData[]>([{ root: result(10, { isError: true, content: [{ type: 'text', text: 'internal error' }] }) }])
+    const retry = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined)
+    const { element } = await mount(store(chatFor({ 1: tools })), 1, 'main', { retry, turn: { turn: 1, status: 'closed' } as GenuiTurnTailProps['turn'] })
+    expect(element.textContent).toContain('交互内容未能显示')
+    expect(element.textContent).not.toContain('internal error')
+    const button = element.querySelector('button')!
+    await act(async () => button.click())
+    expect(element.textContent).toContain('重试未能提交')
+    await act(async () => button.click())
+    expect(retry).toHaveBeenLastCalledWith(1)
+    expect(button.textContent).toBe('已提交重试')
+    expect(button.disabled).toBe(true)
+    expect(retry).toHaveBeenCalledTimes(2)
+  })
+  it('does not count successful validation as displayed UI or leave a completed turn loading', async () => {
+    const tools = store<readonly ToolChatData[]>([{ root: result(10, { name: 'clawclaw_validate_ui', meta: null,
+      content: [{ type: 'text', text: '{"ok":true}' }] }) }])
+    const closed = await mount(store(chatFor({ 1: tools })), 1, 'main', { turn: { turn: 1, status: 'closed' } as GenuiTurnTailProps['turn'] })
+    expect(closed.element.textContent).toContain('交互内容未能显示')
+    expect(closed.element.querySelector('.clawGenui')).toBeNull()
+    const open = await mount(store(chatFor({ 1: tools })))
+    expect(open.element.textContent).toBe('正在生成交互内容…')
+  })
+
+  it('does not show an endless generation notice for an incomplete historical turn', async () => {
+    const tools = store<readonly ToolChatData[]>([{ root: result(10, { name: 'clawclaw_validate_ui', meta: null }) }])
+    const { element } = await mount(store(chatFor({ 1: tools })), 1, 'main', { turn: { turn: 1, status: 'unknown' } as GenuiTurnTailProps['turn'] })
+    expect(element.textContent).toBe('')
   })
 
   it('selects only the latest successful render, including PTC children, without using validation results', () => {

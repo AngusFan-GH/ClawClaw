@@ -1,4 +1,4 @@
-import { blockIsolatedPreviewNavigation } from './genui-navigation-policy.ts'
+import { blockIsolatedPreviewNavigation } from './isolated-preview-navigation.ts'
 import {
   app,
   BrowserWindow,

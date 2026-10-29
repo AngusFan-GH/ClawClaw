@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { GENUI_FORMAT, GENUI_LIMITS } from '../src/genui-contract.ts'
 import { genuiText, validateGenuiDocument } from '../src/genui-core.ts'
-import { blockIsolatedPreviewNavigation } from '../src/genui-navigation-policy.ts'
+import { blockIsolatedPreviewNavigation } from '../src/isolated-preview-navigation.ts'
 const fragment = { type: 'html', title: 'Counter', html: '<button onclick="this.textContent++">0</button>', fallback: 'Initial count: 0. Press the button to increment locally.' }
 const doc = (items: unknown[]) => ({ format: GENUI_FORMAT, title: 'Demo', items })
 
