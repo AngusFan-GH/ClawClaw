@@ -109,8 +109,46 @@ for member results. Teams requiring member-specific MCP isolation use standard
 subagents. Restarting the Host interrupts live work; persisted identities,
 configuration and existing files do not imply automatic workflow completion.
 
+### Agent Team on/off compatibility
+
+The Agent Team toggle changes the optional engine, not expert/team availability.
+
+| Invocation | Agent Team off | Agent Team on |
+| --- | --- | --- |
+| Single expert or ad-hoc expert batch | Managed subagents | Managed subagents |
+| Independent-lead parallel or pipeline package | Package executor | Same package executor and handoffs |
+| Coordinator team, unrestricted | Managed subagents | Native dispatch when current conversation tools are ready |
+| Coordinator team with depth limit or enabled MCP bindings | Managed subagents | Managed subagents, preserving restrictions |
+| Existing conversation missing native tools | Managed subagents | Managed subagents, with a reload recommendation |
+
+Team details show the default engine and why it applies to that specific team.
+A native default is a forecast: dispatch checks the actual current conversation's
+`list_agents`, task revision, messaging and waiting tools again. Package-team
+inspection and execution responses also explicitly report their subagent engine.
+
+Native assignments record task IDs in desktop-owned Session plugin records;
+internal tracking data is not inserted into visible task descriptions. Before a
+new team invocation, unfinished tracked tasks block duplicate work. This also
+applies to a fallback path and after disabling Agent Team and restarting, when
+the guard reads the durable board from the parent Session. Completed or deleted
+tasks unblock future work. Disabling the engine does not complete an assignment;
+re-enable it to inspect and resolve an unfinished native run. Records inherited
+from a different root do not block a fresh conversation.
+
+Native members read the latest task revision before claiming it. The parent
+checks member activity before waiting; inactive members with unfinished tasks
+must be reported as unfinished, rather than repeatedly waiting without progress
+or automatically dispatching duplicate work. Startup acknowledgements remain
+separate from actual results. Native dispatch failures clean up unaccepted tasks;
+no automatic engine switch repeats a partially accepted assignment.
+
 ### October 2026 audit regression coverage
 
+- On/off Host regressions cover single experts, batches, package teams and coordinator
+  routing, including stale conversation tools and configured depth limits.
+- UI regressions cover engine explanations and draft selection in both modes.
+- Native regressions cover durable pending tasks, completed-member reuse, failed
+  dispatch cleanup and cancellation during dispatch.
 - Stable IDs resolve independently of localized names.
 - Admission preserves attachments and does not wait for expert/team execution.
 - Readable labels survive history replay; wire carriers do not render as code.

@@ -7,7 +7,7 @@ import { acceptCatalog } from '../src/experts/client/catalog.ts'
 import { AgentsButton, ExpertCardsSettings, installExpertManagementNavigation } from '../src/experts/client/index.ts'
 import { acceptTeamSnapshot } from '../src/experts/client/team-cache.ts'
 import { TeamLocaleContext } from '../src/experts/client/team-locale.ts'
-import { isDeletableTeam, TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
+import { isDeletableTeam, TeamDetails, TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
 import { TeamEditor } from '../src/experts/client/team-editor.tsx'
 import { TeamMenu } from '../src/experts/client/team-composer.tsx'
 import { customZh } from '../src/experts/client/custom-locales.ts'
@@ -39,6 +39,31 @@ afterEach(async () => {
 })
 
 describe('expert team live UI state', () => {
+  it.each([
+    ['off', 'coordinator', false, '普通子代理'],
+    ['on', 'coordinator', false, '原生智能体团队'],
+    ['on', 'coordinator', true, '普通子代理'],
+    ['off', 'lead', false, '普通子代理'],
+    ['on', 'lead', false, '普通子代理'],
+  ] as const)('shows the effective team engine and preserves draft selection: %s / %s / MCP=%s', async (toggle, mode, bound, label) => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const team = { ...structuredClone(BUILTIN_TEAMS[0]!), runtime: { mode, initPrompt: '', ...(mode === 'lead' ? { leadExpertSlug: 'reviewer', execution: 'pipeline' as const } : {}) }, members: [{ expertSlug: 'reviewer', duty: 'Review', instructions: 'Check evidence' }] }
+    const selected = vi.fn()
+    const engine = { state: toggle === 'on' ? 'enabled' as const : 'unsupported' as const, mode: toggle === 'on' ? 'native' as const : 'subagent' as const, reason: '', recommendation: '' }
+    const host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await act(async () => root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' }, React.createElement(TeamDetails, {
+      team, engine, experts: [{ ...expert, mcpServers: bound ? [{ name: 'docs', required: true, enabled: true }] : [] }], close: vi.fn(), onSelect: selected,
+    }))))
+    const overview = document.querySelector('.agt-detail-overview')!
+    expect(overview.textContent).toContain(`默认执行方式${label}`)
+    if (mode === 'lead') expect(overview.textContent).toContain('开关不改变其协作流程')
+    if (bound) expect(overview.textContent).toContain('隔离未绑定工具')
+    if (toggle === 'on' && mode === 'coordinator' && !bound) expect(overview.textContent).toContain('核对当前对话工具')
+    await act(async () => document.querySelector<HTMLButtonElement>('.agt-examples button')!.click())
+    expect(selected).toHaveBeenCalledWith(team.examples[0])
+  })
+
   it('navigates both management tabs through a real Cordis layout injection when Desktop calls Experts directly', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const context = new Context()

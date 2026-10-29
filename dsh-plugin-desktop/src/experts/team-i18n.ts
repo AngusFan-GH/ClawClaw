@@ -1,5 +1,17 @@
 /** 专家团共享词条；中文原文作为稳定键，插值不参与翻译匹配。 */
 export const TEAM_EN = {
+  '上一轮原生专家团任务尚未结束，请重新开启智能体团队，检查并处理上一轮任务后再试。': 'A previous native expert team task is unfinished. Re-enable Agent Team and resolve the previous task before trying again.',
+  "本次任务编号：{0}。先使用 team_task_get 读取最新 revision，再使用 team_task_update 领取此任务，然后阅读与你职责相关的材料并完成分析。": "Task ID: {0}. Read the latest revision using team_task_get, claim the task using team_task_update, then read the relevant material and complete your analysis.",
+  "以上仅是启动确认，不是评审结论。使用 team_task_list 查看本次任务，先用 list_agents 检查成员状态，仅在仍有成员 running 或 provisioning 时使用 wait_agent 等待成员消息；成员全部 inactive 且任务未完成时，明确报告未完成状态及缺口，不反复空等、不自动重发任务。没有实际结果时不要把启动确认作为最终结论。收到实际成员结论后，按 coordinator 和 collaboration.reviewChecklist 核验并汇总。只处理本次 taskId；失败成员明确标注，不自动重试或追加普通子代理。": "This is dispatch confirmation, not a review conclusion. Use team_task_list to check this run. Check list_agents first and use wait_agent only while required members are running or provisioning. If all members are inactive with unfinished tasks, report the unfinished state and gaps; do not wait repeatedly or automatically resend assignments. Do not treat startup confirmation as a final conclusion. After receiving actual conclusions, verify and synthesize them using coordinator and collaboration.reviewChecklist. Only process this run's taskIds. Mark failed members; do not automatically retry or add standard subagents.",
+
+  '默认执行方式': 'Default execution engine',
+  '原生智能体团队': 'Native Agent Team',
+  '普通子代理': 'Standard subagents',
+  '未启用原生智能体团队，使用普通子代理。': 'Native Agent Team is not enabled. Standard subagents are used.',
+  '发送时会核对当前对话工具，未就绪时使用普通子代理。': 'Conversation tools are checked when sending. Standard subagents are used if native tools are not ready.',
+  '该专家团使用独立主理人执行器，智能体团队开关不改变其协作流程。': 'This team uses its independent lead executor. The Agent Team toggle does not change its workflow.',
+  '上一轮专家团任务尚未结束，请先检查任务板并完成或取消上一轮任务。': 'The previous expert team task is unfinished. Check the task board and complete or cancel it before starting another run.',
+
   '已选择专家团：{0}': 'Selected team: {0}',
   '已选择专家：{0}': 'Selected experts: {0}',
   '由独立主理人规划并成稿，成员按顺序交接，最后统一汇总。': 'An independent lead plans and creates the source, members hand off in order, then the lead synthesizes the result.',

@@ -50,6 +50,7 @@ function nativeService(): NativeTeamService {
   return {
     tryMembership: () => undefined,
     listMembers: () => [],
+    listTasks: vi.fn(() => []),
     spawnTeammate: vi.fn(),
     sendMessage: vi.fn(),
     createTask: vi.fn(),

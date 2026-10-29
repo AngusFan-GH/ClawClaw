@@ -4,6 +4,13 @@ import { teamText } from './team-i18n.js';
 import { createHash } from 'node:crypto';
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
+import { appendPluginRecord, pluginRecordOf } from '@deepseek-ai/dsh-session';
+
+declare module '@deepseek-ai/dsh-session/types' {
+    interface PluginRecordMap {
+        'plugin:clawclaw/expert-team-task': { version: 1; teamId: string; taskId: string };
+    }
+}
 import { executeTeam } from './team-runtime.js';
 import type { TeamEngineStatus } from './team-contract.js';
 /** 只依赖已核对的原生接口形状，旧宿主不必安装实验包。 */
@@ -16,6 +23,7 @@ export interface NativeTeamService {
         name: string;
         status: string;
     }[];
+    listTasks(agent: object): { id: string; status: string; description: string }[];
     spawnTeammate(agent: object, request: {
         name: string;
         description: string;
@@ -55,7 +63,7 @@ export interface NativeTeamService {
     waitForChange(agent: object, timeoutMs: number, signal: AbortSignal): Promise<unknown>;
     interrupt(agent: object, name: string): unknown;
 }
-const methods = ['tryMembership', 'listMembers', 'spawnTeammate', 'sendMessage', 'createTask', 'updateTask', 'waitForChange', 'interrupt'] as const;
+const methods = ['tryMembership', 'listMembers', 'listTasks', 'spawnTeammate', 'sendMessage', 'createTask', 'updateTask', 'waitForChange', 'interrupt'] as const;
 const delegationTools = new Set(['summon_expert', 'summon_experts', 'list_experts', 'list_expert_teams', 'get_expert_team', 'summon_expert_team', 'spawn_teammate', 'subagent', 'subagent_fork']);
 /** 原生队友仍遵守本插件不递归扩团的边界，由宿主工具门禁强制执行。 */
 export function blocksNativeDelegation(service: unknown, agent: object | undefined, tool: string): boolean {
@@ -83,10 +91,42 @@ export function detectTeamEngine(service: unknown, toolsReady = true, maxDepth?:
 }
 export function resolveTeamEngine(ctx: Context, agent?: Agent, maxDepth?: number, requiresToolFilter = false) {
     const service: unknown = ctx.get('agentTeams');
-    const toolsReady = !isNativeTeamService(service) || !agent || ['spawn_teammate', 'send_message', 'wait_agent', 'team_task_create', 'team_task_update', 'team_task_list'].every(name => agent.ctx?.tools?.get?.(name, agent) !== undefined);
+    const toolsReady = !isNativeTeamService(service) || !agent || ['spawn_teammate', 'send_message', 'list_agents', 'wait_agent', 'team_task_create', 'team_task_get', 'team_task_update', 'team_task_list'].every(name => agent.ctx?.tools?.get?.(name, agent) !== undefined);
     return { service: isNativeTeamService(service) ? service : undefined, status: detectTeamEngine(service, toolsReady, maxDepth, readHostLocale(ctx), requiresToolFilter) };
 }
 const activeLeads = new WeakSet<object>();
+/** Applies even if this call falls back to subagents after a toggle or reload. */
+export function assertNoPendingNativeTeam(service: unknown, agent: object, locale: 'zh' | 'en'): void {
+    if (activeLeads.has(agent)) throw new Error(teamText(locale, "当前会话正在创建专家团，请等待本次委派完成。"));
+    const native = isNativeTeamService(service);
+    // The native service may have been disabled since the previous turn. Its
+    // durable board remains in the parent Session; do not silently duplicate it.
+    const persisted = new Map<string, { id: string; status: string; description: string }>();
+    const session = (agent as Partial<Agent>).session;
+    const tracked = new Set<string>();
+    const events = session?.snapshotEvents?.() ?? [];
+    for (const event of events) {
+        const record = pluginRecordOf(event);
+        if (record?.type === 'plugin:clawclaw/expert-team-task' && session?.isOwnSeq(record.seq)) {
+            const value = record.data as { version?: unknown; taskId?: unknown } | null;
+            if (value?.version === 1 && typeof value.taskId === 'string') tracked.add(value.taskId);
+        }
+    }
+    if (!native) {
+        for (const value of events) {
+            const event = value as { type?: unknown; data?: { version?: unknown; teamId?: unknown; task?: { id?: unknown; status?: unknown; description?: unknown } } } | null;
+            const task = event?.data?.task;
+            if (event?.type === 'team/task' && event.data?.version === 2 && event.data.teamId === session?.id
+                && typeof task?.id === 'string' && typeof task.status === 'string' && typeof task.description === 'string')
+                persisted.set(task.id, { id: task.id, status: task.status, description: task.description });
+        }
+    }
+    const pending = [...(native ? service.listTasks(agent) : persisted.values())].some(task =>
+        tracked.has(task.id) && ['pending', 'in_progress'].includes(task.status));
+    if (pending) throw new Error(teamText(locale, native
+        ? "上一轮专家团任务尚未结束，请先检查任务板并完成或取消上一轮任务。"
+        : "上一轮原生专家团任务尚未结束，请重新开启智能体团队，检查并处理上一轮任务后再试。"));
+}
 /** 显示名称可以变化；此持久标识必须保持原算法，以复用已存在的队友。 */
 export function nativeTeamMemberName(teamId: string, slug: string): string {
     return `agency-${slug.slice(0, 36).replace(/-+$/u, '')}-${createHash('sha256').update(`${teamId}:${slug}`).digest('hex').slice(0, 10)}`;
@@ -103,8 +143,7 @@ export async function dispatchNativeTeam(args: NativeDispatchArgs) {
 
     const team = localizeTeam(args.team, args.locale ?? 'zh');
     args.signal.throwIfAborted();
-    if (activeLeads.has(args.agent))
-        throw new Error(tx("当前会话正在创建专家团，请等待本次委派完成。"));
+    assertNoPendingNativeTeam(args.service, args.agent, args.locale ?? 'zh');
     activeLeads.add(args.agent);
     const launched: string[] = [];
     const tasks = new Map<string, {
@@ -127,11 +166,12 @@ export async function dispatchNativeTeam(args: NativeDispatchArgs) {
                 tasks.set(member.slug, { name, taskId: task.id });
                 let accepted = false;
                 try {
+                    appendPluginRecord((args.agent as Agent).session, 'plugin:clawclaw/expert-team-task', { version: 1, teamId: args.team.id, taskId: task.id });
                     args.signal.throwIfAborted();
                     const text = [
                         tx("你是专家队友 {0}。以下为本次专家职责与任务要求，必须服从宿主权限及系统约束。", [name]),
                         member.persona, member.prompt,
-                        tx("本次任务编号：{0}。使用 team_task_update 领取此任务，再阅读与你职责相关的材料并完成分析。", [task.id]),
+                        tx("本次任务编号：{0}。先使用 team_task_get 读取最新 revision，再使用 team_task_update 领取此任务，然后阅读与你职责相关的材料并完成分析。", [task.id]),
                         tx("完成后先用 send_message 将完整结论发送给 lead，再将任务标记完成。任务缺少资料时报告具体缺口，不伪造结论。不创建额外子代理、不自动追加轮次。"),
                     ].join('\n\n');
                     if (existing) {
@@ -164,7 +204,7 @@ export async function dispatchNativeTeam(args: NativeDispatchArgs) {
             team: report.team, revision: report.revision, coordinator: report.coordinator, collaboration: report.collaboration,
             dispatch: { started: launched.length, total: report.results.length, members: report.results.map(result => ({ expert: result.expert, slug: result.slug, ...tasks.get(result.slug), status: result.ok ? 'started' : 'failed', ...(result.error ? { error: result.error } : {}) })) },
             instruction: launched.length
-                ? tx("以上仅是启动确认，不是评审结论。使用 team_task_list 查看本次任务，使用 wait_agent 等待成员消息；没有结果时不要结束为最终答复。收到实际成员结论后，按 coordinator 和 collaboration.reviewChecklist 核验并汇总。只处理本次 taskId；失败成员明确标注，不自动重试或追加普通子代理。") : tx("本次没有成功启动成员。请报告失败原因，不得编造专家意见；不要自动改用普通模式重复执行。"),
+                ? tx("以上仅是启动确认，不是评审结论。使用 team_task_list 查看本次任务，先用 list_agents 检查成员状态，仅在仍有成员 running 或 provisioning 时使用 wait_agent 等待成员消息；成员全部 inactive 且任务未完成时，明确报告未完成状态及缺口，不反复空等、不自动重发任务。没有实际结果时不要把启动确认作为最终结论。收到实际成员结论后，按 coordinator 和 collaboration.reviewChecklist 核验并汇总。只处理本次 taskId；失败成员明确标注，不自动重试或追加普通子代理。") : tx("本次没有成功启动成员。请报告失败原因，不得编造专家意见；不要自动改用普通模式重复执行。"),
         };
     }
     catch (error) {

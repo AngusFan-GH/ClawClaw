@@ -14,6 +14,8 @@ import TypertGateway from '@deepseek-ai/dsh-api-gateway'
 import RemoteAccessService from '@deepseek-ai/dsh-api-remote-access'
 import AgencyAgentsRemote from '../src/experts/remote.ts'
 import { AGENCY_PLUGIN_PACKAGE_SERVICE, apply, type AgencyPluginPackageService } from '../src/experts/index.ts'
+import type { NativeTeamService } from '../src/experts/team-engine.ts'
+import { BUILTIN_TEAMS } from '../src/experts/team-contract.ts'
 import { AGENCY_TEAM_SERVICE, type AgencyTeamLibrary } from '../src/experts/team-library.ts'
 import { DESKTOP_MCP_LIFECYCLE_SERVICE, type DesktopMcpView } from '../src/mcp-contract.ts'
 import { AGENCY_LIBRARY_SERVICE, type AgencyExpertLibrary } from '../src/experts/expert-library.ts'
@@ -67,7 +69,7 @@ async function writeTeamPackage(home: string, version: string, conversationCreat
   return root
 }
 
-async function hostFixture() {
+async function hostFixture(options: { native?: NativeTeamService; nativeTools?: boolean; maxDepth?: number | null } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'clawclaw-host-tools-'))
   roots.push(root)
   const home = join(root, 'home')
@@ -95,6 +97,7 @@ async function hostFixture() {
   const services = new Map<string, unknown>([[DESKTOP_MCP_LIFECYCLE_SERVICE, {
     read: async () => connectorView(), toggle: vi.fn(), test: vi.fn(), install: vi.fn(),
   }]])
+  if (options.native) services.set('agentTeams', options.native)
   const tools = new Map<string, RegisteredTool>()
   const outputs = ['lead plan', 'member evidence', 'lead final']
   const starts: Array<Record<string, unknown>> = []
@@ -140,8 +143,9 @@ async function hostFixture() {
     }), effect: vi.fn(() => () => {}),
     webServer: {}, logger: { warn: vi.fn(), error: vi.fn() },
   } as unknown as Context
-  apply(ctx, { root: catalog, provider: 'spawn', divisions: ['research'], maxDepth: 3 })
-  const parent = { session: { header: { cwd: root } }, ctx: { get: () => undefined } } as unknown as Agent
+  apply(ctx, { root: catalog, provider: 'spawn', divisions: ['research'], ...(options.maxDepth === null ? {} : { maxDepth: options.maxDepth ?? 3 }) })
+  const seed = Session.create(SessionId('parent'))
+  const parent = { session: Session.create(seed.id, [], { ...seed.header, cwd: root }), ctx: { get: () => undefined, tools: { get: () => options.nativeTools ? {} : undefined } } } as unknown as Agent
   const execute = async (name: string, args: Record<string, unknown> = {}, agent: Agent = parent) => {
     const tool = tools.get(name)
     if (!tool) throw new Error(`Tool was not registered: ${name}`)
@@ -181,6 +185,70 @@ async function expertGateway(fixture: Awaited<ReturnType<typeof hostFixture>>) {
 const legacyExpertInput = {
   name: 'Legacy custom expert', description: 'A custom expert stored in settings', division: 'research', prompt: 'Legacy persona.',
 }
+
+function nativeFixture(): NativeTeamService {
+  const tasks: { id: string; status: string; description: string }[] = []
+  const native: NativeTeamService = {
+    tryMembership: vi.fn(), listMembers: vi.fn(() => []), listTasks: () => tasks,
+    spawnTeammate: vi.fn(async () => ({ member: { name: 'member', status: 'running' } })),
+    sendMessage: vi.fn(), createTask: vi.fn(async (_agent, request) => {
+      const id = String(tasks.length + 1); tasks.push({ id, status: 'pending', description: request.description }); return { id, revision: 1 }
+    }), updateTask: vi.fn(), waitForChange: vi.fn(), interrupt: vi.fn(),
+  }
+  return native
+}
+
+describe('Host expert teams across native capability modes', () => {
+  it.each([false, true])('keeps single experts and ad-hoc batches available with native enabled=%s', async enabled => {
+    const native = nativeFixture()
+    const fixture = await hostFixture({ ...(enabled ? { native } : {}), nativeTools: enabled, maxDepth: null })
+    const library = fixture.services.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary
+    const catalog = await library.saveCustom({ name: 'Mode specialist', description: 'Reviews reports', division: 'research', prompt: 'Return the review.' }, true, 7)
+    const slug = catalog.experts.find(expert => expert.custom)!.slug
+    const single = await fixture.execute('summon_expert', { expert: slug, task: 'Review the report.' })
+    expect(single.answer).toBe('lead plan')
+    const batch = await fixture.execute('summon_experts', { experts: [{ expert: slug, task: 'Check evidence.' }, { expert: slug, task: 'Check coverage.' }] })
+    expect((batch.results as Array<{ ok: boolean }>).every(result => result.ok)).toBe(true)
+    expect(fixture.starts).toHaveLength(3)
+    expect(native.spawnTeammate).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['off', false, false, null, 'subagent'],
+    ['on', true, true, null, 'native'],
+    ['on with stale conversation', true, false, null, 'subagent'],
+    ['on with depth limit', true, true, 3, 'subagent'],
+  ] as const)('%s validates, delegates once and reports its actual engine', async (_name, enabled, ready, depth, mode) => {
+    const native = nativeFixture()
+    const fixture = await hostFixture({ ...(enabled ? { native } : {}), nativeTools: ready, maxDepth: depth })
+    const experts = fixture.services.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary
+    const first = await experts.saveCustom({ name: 'First reviewer', description: 'Review facts', division: 'research', prompt: 'Check evidence.' }, true, 7)
+    const second = await experts.saveCustom({ name: 'Second reviewer', description: 'Review coverage', division: 'research', prompt: 'Check omissions.' }, true, first.revision)
+    const selected = second.experts.filter(expert => expert.custom)
+    const teams = fixture.services.get(AGENCY_TEAM_SERVICE) as AgencyTeamLibrary
+    const { id: _id, builtin: _builtin, runtime: _runtime, skills: _skills, connectors: _connectors, connectorStates: _states, provenance: _provenance, ...template } = structuredClone(BUILTIN_TEAMS[0]!)
+    const saved = await teams.save({ ...template, name: 'Mode review', members: selected.map(expert => ({ expertSlug: expert.slug, duty: 'Review', instructions: 'Return evidence.' })) }, second.revision)
+    const team = saved.teams.find(team => team.name === 'Mode review')!
+    await teams.recall(team.id, saved.revision)
+    const detail = JSON.parse(String((await fixture.execute('get_expert_team', { team: team.id })).report))
+    expect(detail.engine.mode).toBe(mode)
+    const result = JSON.parse(String((await fixture.execute('summon_expert_team', { team: team.id, task: 'Review this report.' })).report))
+    expect(result.engine.mode).toBe(mode)
+    if (mode === 'native') {
+      expect(result.dispatch.started).toBe(2)
+      expect(result.coverage).toBeUndefined()
+      expect(fixture.starts).toHaveLength(0)
+      // The current conversation can lose native tools without permitting a
+      // second run to duplicate work already accepted by the native engine.
+      await expect(fixture.execute('summon_expert_team', { team: team.id, task: 'Review again.' })).rejects.toThrow('previous expert team task is unfinished')
+      expect(native.spawnTeammate).toHaveBeenCalledTimes(2)
+    } else {
+      expect(result.coverage).toMatchObject({ status: 'complete', completed: 2 })
+      expect(fixture.starts).toHaveLength(2)
+      expect(native.spawnTeammate).not.toHaveBeenCalled()
+    }
+  })
+})
 
 describe('Expert deletion through the strict Remote gateway', () => {
   it('deletes a personal Agent package by its package slug while retaining other experts and history', async () => {
@@ -322,8 +390,8 @@ describe('Plugin Team Host tools', () => {
     expect(JSON.parse(String((await fixture.execute('list_expert_teams')).report))).toEqual([])
   })
 
-  it('runs Lead, members, and Lead synthesis through registered Host tools', async () => {
-    const fixture = await hostFixture()
+  it.each([false, true])('runs Lead, members, and Lead synthesis through registered Host tools with native enabled=%s', async enabled => {
+    const fixture = await hostFixture({ ...(enabled ? { native: nativeFixture() } : {}), nativeTools: enabled, maxDepth: null })
     await writeTeamPackage(fixture.home, '1.0.0')
     const result = JSON.parse(String((await fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Investigate the evidence.' })).report))
 

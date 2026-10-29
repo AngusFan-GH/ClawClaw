@@ -30,7 +30,9 @@ import { localizeTeam } from './team-content-en.js'
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { resolveTeamEngine, dispatchNativeTeam, blocksNativeDelegation } from './team-engine.js'
+import { resolveTeamEngine, dispatchNativeTeam, blocksNativeDelegation, assertNoPendingNativeTeam } from './team-engine.js'
+import { teamRequiresToolFilter, teamExecutionEngine } from './team-execution.js'
+export { teamRequiresToolFilter } from './team-execution.js'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
@@ -665,15 +667,6 @@ export async function resolveExpertComposition(
   return { persona: `${basePersona}${skillText}${capabilityNote}`, deniedTools: [...new Set(deniedTools)], diagnostics }
 }
 
-/** Native Agent Team cannot enforce member-specific tool filters yet. */
-export function teamRequiresToolFilter(
-  team: { readonly members: ReadonlyArray<{ readonly expertSlug: string }> },
-  experts: readonly Pick<ExpertSummary, 'slug' | 'mcpServers'>[],
-): boolean {
-  return team.members.some(member => experts.find(expert => expert.slug === member.expertSlug)
-    ?.mcpServers.some(binding => binding.enabled))
-}
-
 export async function preflightExpertTeam(
   ctx: Context,
   team: { readonly members: readonly { readonly expertSlug: string }[] },
@@ -1110,7 +1103,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'get_expert_team', descri
         if (pluginTeam !== undefined) {
             const candidate = snapshot.teams.find(team => team.id === pluginTeam.id);
             if (!candidate || candidate.runtime.mode !== 'lead' || !isTeamRecalled(candidate, snapshot.enabledExperts, snapshot.recalledTeams)) throw new Error(teamTx("专家团成员不存在、冲突或未就绪，请修复后重试。"));
-            return { report: JSON.stringify({ ...localizeTeam(candidate, activeLocale()), revision: catalog.revision,
+            return { report: JSON.stringify({ ...localizeTeam(candidate, activeLocale()), engine: teamExecutionEngine(candidate, catalog.experts, resolveTeamEngine(ctx, exec.agent, maxDepth).status, activeLocale()), revision: catalog.revision,
                 instruction: teamTx("该专家团由独立主理人规划和汇总；主会话只负责发起任务并交付最终结果。") }) };
         }
         const team = snapshot.teams.filter(candidate => candidate.runtime.mode === 'coordinator').map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
@@ -1124,6 +1117,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
     parameters: { team: { type: 'string', required: true, description: teamTx("专家团稳定标识或完整名称。") }, task: { type: 'string', required: true, description: teamTx("完整、自包含的任务、上下文和可访问资料，最多24000字。") } }, output: teamOutput,
     async execute(args, exec) {
         requireParent(exec);
+        assertNoPendingNativeTeam(ctx.get('agentTeams'), exec.agent!, activeLocale());
         const [snapshot, catalog] = await Promise.all([teamLibrary.snapshot(), library.catalog()]);
         if (snapshot.revision !== catalog.revision)
             throw new Error(teamTx("名册已更新，请重新读取专家团。"));
@@ -1174,7 +1168,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                     } finally { await run.dispose(); }
                 },
             });
-            return { report: JSON.stringify({ ...result, runtime: 'lead', ...(runDirectory === undefined ? {} : { runDirectory }) }) };
+            return { report: JSON.stringify({ ...result, runtime: 'lead', engine: teamExecutionEngine(candidate, catalog.experts, resolveTeamEngine(ctx, exec.agent, maxDepth).status, activeLocale()), ...(runDirectory === undefined ? {} : { runDirectory }) }) };
         }
         const team = snapshot.teams.filter(candidate => candidate.runtime.mode === 'coordinator').map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
         if (!team || !isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams))

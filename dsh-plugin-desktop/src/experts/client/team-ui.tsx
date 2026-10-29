@@ -1,4 +1,5 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
+import { teamExecutionEngine } from '../team-execution.js';
 import { catalogState, refreshCatalog, subscribeCatalog } from './catalog.js';
 import { acceptTeamSnapshot, refreshTeams, subscribeTeams, teamState } from './team-cache.js';
 import { useTeamLocale, localizeTeam, localizedExperts } from './team-locale.js';
@@ -44,6 +45,7 @@ export async function unwrap<T>(promise: Promise<{
 }
 export function TeamDetails(props: {
     health?: ExpertCapabilityHealth;
+    engine?: import('../team-contract.js').TeamEngineStatus;
     team: ExpertTeam;
     experts: readonly ExpertSummary[];
     close(): void;
@@ -56,6 +58,7 @@ export function TeamDetails(props: {
 
     props = { ...props, team: localizeTeam(props.team, locale), experts: localizedExperts(props.experts, locale) };
     const [prompt, setPrompt] = React.useState(false);
+    const engine = teamExecutionEngine(props.team, props.experts, props.engine, locale);
     return (<TeamDialog title={tx("{0}详情", [props.team.name])} close={props.close} className="agt-detail">
       <header className="agt-detail-head">
         <TeamAvatars team={props.team} experts={props.experts} large/>
@@ -77,6 +80,7 @@ export function TeamDetails(props: {
       {props.health && <p role="status" className="agt-help">{tx(props.health.state === 'ready' ? '能力就绪' : props.health.state === 'degraded' ? '可降级运行' : props.health.state === 'unknown' ? '能力检查中' : '必需能力未就绪')} · {props.health.ready}/{props.health.total}</p>}
       {props.health?.issues.length > 0 && <ul className="agt-help">{props.health.issues.map(issue => <li key={`${issue.type}:${issue.name}`}>{issue.type === 'skill' ? skillDisplayName(issue.name, locale) : issue.name} · {tx(issue.required ? '必需' : '可选')} · {tx(({ missing: '未安装', disabled: '已停用', starting: '连接中', error: '故障', empty: '未发现工具', ready: '可用' })[issue.state])}</li>)}</ul>}
       <dl className="agt-detail-overview">
+        <div><dt>{tx("默认执行方式")}</dt><dd>{tx(engine.mode === 'native' ? "原生智能体团队" : "普通子代理")}<p className="agt-help">{engine.reason || tx("未启用原生智能体团队，使用普通子代理。")} {engine.recommendation}{engine.mode === 'native' ? ` ${tx("发送时会核对当前对话工具，未就绪时使用普通子代理。")}` : ''}</p></dd></div>
         <div><dt>{tx("团队目标")}</dt><dd>{props.team.goal}</dd></div>
         {props.team.constraints && <div><dt>{tx("通用约束（选填）")}</dt><dd>{props.team.constraints}</dd></div>}
         <div><dt>{tx("交付要求")}</dt><dd>{props.team.deliveryRequirements}</dd></div>
@@ -387,7 +391,7 @@ export function TeamsPanel(props: {
                 setFilter('all');
             }}>{tx("清除筛选")}</Button>
         </div>)}
-      {details && (<TeamDetails team={details} experts={experts} health={healthFor(details, rawExperts)} close={() => setDetails(null)} onSelect={props.onSelectTeam === undefined || !isTeamRecalled(details, snapshot!.enabledExperts, snapshot!.recalledTeams) || teamIssue(details, experts, snapshot!.enabledExperts, healthFor(details, rawExperts)) !== undefined ? undefined : (example) => { void Promise.resolve(props.onSelectTeam?.(details, example)).then(selected => { if (selected) setDetails(null) }) }} onManageConnectors={props.onOpenConnectors} onEdit={!details.builtin
+      {details && (<TeamDetails team={details} experts={experts} engine={snapshot?.engine} health={healthFor(details, rawExperts)} close={() => setDetails(null)} onSelect={props.onSelectTeam === undefined || !isTeamRecalled(details, snapshot!.enabledExperts, snapshot!.recalledTeams) || teamIssue(details, experts, snapshot!.enabledExperts, healthFor(details, rawExperts)) !== undefined ? undefined : (example) => { void Promise.resolve(props.onSelectTeam?.(details, example)).then(selected => { if (selected) setDetails(null) }) }} onManageConnectors={props.onOpenConnectors} onEdit={!details.builtin
                 ? () => {
                     setEditor({
                         value: teamInput(details),
