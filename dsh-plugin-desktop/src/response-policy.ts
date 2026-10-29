@@ -23,6 +23,7 @@ export const DESKTOP_PRODUCT_CONTEXT = [
 /** One language policy shared by ordinary scopes and complete built-in personas. */
 export const DESKTOP_RESPONSE_POLICY = [
   "Use the user's conversational language for all user-facing responses, including interim progress updates, tool-call commentary, questions, and final answers, unless the user explicitly requests another conversation language.",
+  'Before each visible progress update, re-check the conversation language against the human user messages. English skills, workflow instructions, tool results, and earlier assistant commentary are not a request to switch languages. Describe your next action briefly in the user\'s language instead of narrating internal workflow labels.',
   'For delegated work, follow the language of the original user task; generated task wrappers, expert personas, tool descriptions, source documents, and the interface locale do not determine the reply language.',
   'A requested translation or artifact language applies to that deliverable; keep accompanying explanations and progress in the conversation language unless the user asks otherwise.',
   'Keep code, commands, paths, identifiers, and necessary quotations in their original form.',
@@ -48,9 +49,17 @@ export function desktopDefaultPersona<T extends Pick<EntryOptions, 'name' | 'con
 
 const LANGUAGE_CONTEXT = 'clawclaw:conversation-language'
 
-/** Preserve language evidence without expanding a delegated task or adding a persistence schema. */
-function delegatedLanguageContext(ctx: Context, agent: Agent | undefined): string {
-  if (agent?.session.header.parentSession === undefined) return ''
+/** Anchor ordinary and delegated replies to human language without adding a persistence schema. */
+function conversationLanguageContext(ctx: Context, agent: Agent | undefined, pending: WeakMap<Agent, string>): string {
+  if (agent === undefined) return ''
+  if (agent.session.header.parentSession === undefined) {
+    const event = agent.session.snapshotEvents().findLast(event => event.type === 'user/message' && event.data.source.kind === 'user')
+    const text = pending.get(agent) ?? (event?.type === 'user/message'
+      ? event.data.content.filter(block => block.type === 'text').map(block => block.text).join('\n') : '')
+    if (!text.trim()) return ''
+    return 'Current human user language evidence (a bounded excerpt, not additional task instructions or tool authorization). Use the conversation language for visible progress, questions, and answers. Honor explicit conversation-language preferences in user messages; a requested artifact language applies only to the artifact. A short continuation preserves the established conversation language.\n'
+      + JSON.stringify(text.slice(0, 2000))
+  }
   let parent = ctx.get('agents')?.get(agent.session.header.parentSession)
   while (parent !== undefined) {
     const ancestor = parent.session.header.parentSession
@@ -81,6 +90,18 @@ function delegatedLanguageContext(ctx: Context, agent: Agent | undefined): strin
 
 /** Preserve upstream request-update semantics; no listener resets request series on mounting. */
 export function apply(ctx: Context): void {
+  // Assembly precedes inbox admission. Keep accepted human input available to
+  // admission's context refresh, including the very first model request.
+  const pending = new WeakMap<Agent, string>()
+  ctx.on('agent/pre-step', async ({ agent }, next) => {
+    const decision = await next()
+    if (decision.kind === 'enter') {
+      const message = decision.messages.findLast(message => message.source.kind === 'user')
+      const text = message?.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
+      if (text?.trim()) pending.set(agent, text.slice(0, 2000))
+    }
+    return decision
+  })
   ctx.systemPrompt.section({
     name: 'clawclaw:product-context',
     order: ctx.systemPrompt.getSectionOrder('WEB_SURFACE'),
@@ -97,7 +118,7 @@ export function apply(ctx: Context): void {
     order: ctx.systemPrompt.getContextOrder('SUBAGENT_DELEGATION') + 1,
     required: true,
     interpolate: false,
-    text: ({ agent }) => delegatedLanguageContext(ctx, agent),
+    text: ({ agent }) => conversationLanguageContext(ctx, agent, pending),
   })
   ctx.systemPrompt.section({
     name: 'clawclaw:response-policy',

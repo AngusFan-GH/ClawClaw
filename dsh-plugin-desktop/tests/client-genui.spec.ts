@@ -106,4 +106,17 @@ describe('GenUI result card', () => {
     expect(listeners.size).toBe(0)
     expect(document.head.querySelector('style[data-claw-genui]')).toBeNull()
   })
+
+  it('shows tool history as a compact record without executing another interactive copy', async () => {
+    const { element, root } = await mount(props)
+    await act(async () => root.render(createElement(GenuiToolView, { phase: 'result', zh: true,
+      sessionId: 'main', callId: 'old-attempt', block: { meta: { ...meta, items: [{ type: 'html', title: 'Old simulation',
+        html: '<button onclick="missing()">Reset</button>', fallback: 'Old source' }] }, isError: false,
+        content: [{ type: 'text', text: 'Old simulation text' }] } } as never)))
+    expect(element.querySelector('iframe')).toBeNull()
+    expect(element.querySelector('.clawGenui')).toBeNull()
+    expect(element.querySelector('details')?.open).toBe(false)
+    expect(element.textContent).toContain('本轮回复下方')
+    expect(element.querySelector('pre')?.textContent).toBe('Old simulation text')
+  })
 })

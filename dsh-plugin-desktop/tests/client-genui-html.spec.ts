@@ -6,11 +6,11 @@ import { GenuiHtmlView } from '../src/client/genui-html.tsx'
 import { createGenuiHtmlDocument, GENUI_HTML_CHANNEL, GENUI_HTML_CSP } from '../src/client/genui-html-document.ts'
 const node = { type: 'html' as const, title: 'Counter', html: '<button id="count" onclick="this.textContent++">0</button>', fallback: 'Initial count is zero.' }
 let root: Root | undefined
-async function mount(storage?: import('../src/client/genui-html-state.ts').HtmlStateStorage) {
+async function mount(storage?: import('../src/client/genui-html-state.ts').HtmlStateStorage, repair?: () => Promise<void>) {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const element = document.createElement('div'); document.body.append(element)
   root = createRoot(element)
-  await act(async () => root!.render(createElement(GenuiHtmlView, { node, zh: true, ...(storage ? { storage } : {}) })))
+  await act(async () => root!.render(createElement(GenuiHtmlView, { node, zh: true, ...(repair === undefined ? {} : { repair }), ...(storage ? { storage } : {}) })))
   return element
 }
 afterEach(async () => {
@@ -70,6 +70,25 @@ describe('isolated interactive HTML', () => {
     expect(element.querySelector('iframe')).not.toBe(frame)
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'error', value: true })
     expect(element.textContent).not.toContain('未能正常运行')
+  })
+  it('keeps a running simulation visible when a button throws and offers an explicit repair', async () => {
+    const repair = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined)
+    const element = await mount(undefined, repair)
+    const frame = element.querySelector('iframe')!
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'ready', value: true })
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'error', value: true })
+    expect(frame.style.visibility).toBe('visible')
+    expect(element.querySelector('iframe')).toBe(frame)
+    expect(element.textContent).toContain('部分操作执行出错')
+    expect(element.querySelector('details')?.open).toBe(true)
+    expect(repair).not.toHaveBeenCalled()
+    const button = [...element.querySelectorAll('button')].find(button => button.textContent === '重新生成')!
+    await act(async () => button.click())
+    expect(element.textContent).toContain('修复请求未能提交')
+    await act(async () => button.click())
+    expect(button.textContent).toBe('已提交修复')
+    expect(button.disabled).toBe(true)
+    expect(repair).toHaveBeenCalledTimes(2)
   })
   it('restores persisted inputs, saves bounded state and resumes without clearing; Reset explicitly clears', async () => {
     const saved = { controls: [{ index: 0, value: '42' }], custom: { total: 42 } }

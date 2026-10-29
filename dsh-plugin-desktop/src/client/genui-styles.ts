@@ -4,6 +4,7 @@ import { GENUI_CHART_DARK, GENUI_CHART_LIGHT } from './genui-chart-options.ts'
 export const GENUI_STYLES = `
 .clawGenuiStatus{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-height:32px;color:var(--dsw-alias-label-secondary);font-size:13px}.clawGenuiStatus button{padding:4px 10px;min-height:32px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}.clawGenuiStatus button:disabled{opacity:.6;cursor:default}.clawGenuiStatus button:focus-visible{outline:2px solid var(--dsh-color-primary);outline-offset:2px}
 .clawGenuiResults{display:grid;gap:16px;min-width:0}
+.clawGenuiTextFallback{min-width:0;max-width:100%;overflow-x:auto;overflow-wrap:anywhere}.clawGenuiTextFallback:focus-visible{outline:2px solid var(--dsh-color-primary);outline-offset:2px}
 .clawGenui{min-width:0;display:grid;gap:20px;padding:20px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsh-card-radius,12px);color:var(--dsw-alias-label-primary);font:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:1.6;overflow-wrap:anywhere}
 .clawGenui.clawGenuiInline{padding:0;border:0;border-radius:0;background:transparent}
 .clawGenui h3,.clawGenui h4,.clawGenui p{margin:0;white-space:pre-wrap}

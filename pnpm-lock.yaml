@@ -1685,6 +1685,9 @@ importers:
       node-pty:
         specifier: 1.2.0-beta.15
         version: 1.2.0-beta.15
+      parse5:
+        specifier: 8.0.1
+        version: 8.0.1
       pnpm:
         specifier: 11.8.0
         version: 11.8.0(patch_hash=fd9a44ac5e63d7c4a34590e2301123fecab80e7c694d74e2606d480a45de232a)

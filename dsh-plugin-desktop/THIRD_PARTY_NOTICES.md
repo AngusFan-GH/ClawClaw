@@ -545,6 +545,7 @@ the package names, versions, and licenses for transparency.
 | ee-first | 1.1.1 | MIT |
 | emoji-regex | 8.0.0 | MIT |
 | encodeurl | 2.0.0 | MIT |
+| entities | 8.1.0 | BSD-2-Clause |
 | es-define-property | 1.0.1 | MIT |
 | es-errors | 1.3.0 | MIT |
 | es-object-atoms | 1.1.2 | MIT |
@@ -658,6 +659,7 @@ the package names, versions, and licenses for transparency.
 | p-timeout | 7.0.2 | MIT |
 | pako | 0.2.9 | MIT |
 | parse-ms | 4.0.0 | MIT |
+| parse5 | 8.0.1 | MIT |
 | parseurl | 1.3.3 | MIT |
 | partial-json | 0.1.7 | MIT |
 | path-exists | 4.0.0 | MIT |

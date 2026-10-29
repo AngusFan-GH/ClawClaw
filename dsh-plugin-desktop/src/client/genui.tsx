@@ -12,6 +12,7 @@ import { validateGenuiDocument } from '../genui-core.ts'
 import { GenuiHtmlView } from './genui-html.tsx'
 import { GenuiChartView } from './genui-chart.tsx'
 import { GENUI_STYLES } from './genui-styles.ts'
+import { GenuiTextFallback } from './genui-text-fallback.tsx'
 
 
 
@@ -49,13 +50,13 @@ function GenuiTable({ node, label }: { node: TableNode; label: string }) {
   </div>
 }
 
-function renderNode(node: GenuiNode, key: number, label: string, zh: boolean, identity: { sessionId: string; callId: string; path: string }): ReactNode {
+function renderNode(node: GenuiNode, key: number, label: string, zh: boolean, identity: { sessionId: string; callId: string; path: string }, repair?: () => Promise<void>): ReactNode {
   switch (node.type) {
-    case 'html': return <GenuiHtmlView key={key} node={node} zh={zh} identity={identity} />
+    case 'html': return <GenuiHtmlView key={key} node={node} zh={zh} identity={identity} {...(repair === undefined ? {} : { repair })} />
     case 'chart': return <GenuiChartView key={key} node={node} zh={zh} />
     case 'text': return <p key={key}>{node.content}</p>
-    case 'card': return <section key={key} className="clawGenuiCard"><h4>{node.title}</h4>{node.items.map((child, i) => renderNode(child, i, node.title, zh, { ...identity, path: `${identity.path}.${i}` }))}</section>
-    case 'row': return <div key={key} className="clawGenuiRow">{node.items.map((child, i) => renderNode(child, i, label, zh, { ...identity, path: `${identity.path}.${i}` }))}</div>
+    case 'card': return <section key={key} className="clawGenuiCard"><h4>{node.title}</h4>{node.items.map((child, i) => renderNode(child, i, node.title, zh, { ...identity, path: `${identity.path}.${i}` }, repair))}</section>
+    case 'row': return <div key={key} className="clawGenuiRow">{node.items.map((child, i) => renderNode(child, i, label, zh, { ...identity, path: `${identity.path}.${i}` }, repair))}</div>
     case 'stat': return <div key={key} className="clawGenuiStat"><span>{node.label}</span><strong>{node.value}</strong></div>
     case 'table': return <GenuiTable key={key} node={node} label={label} />
     case 'progress': return <div key={key} className="clawGenuiProgress"><div className="clawGenuiProgressLabel"><span>{node.label}</span><span className="clawGenuiProgressValue">{node.value}%</span></div><progress aria-label={node.label} value={node.value} max={100} /></div>
@@ -74,10 +75,11 @@ export interface GenuiResultViewProps {
   text: string
   isError: boolean
   zh?: boolean
+  repair?: () => Promise<void>
 }
 
 /** Only durable result metadata is eligible; never render incomplete tool args. */
-export function GenuiResultView({ sessionId, callId, meta, text, isError, zh = false }: GenuiResultViewProps) {
+export function GenuiResultView({ sessionId, callId, meta, text, isError, zh = false, repair }: GenuiResultViewProps) {
   const parsed = useMemo(() => isError ? undefined : validateGenuiDocument(meta), [isError, meta])
   if (!parsed?.ok) return <div className="clawGenuiFallback">
     {!isError && <p className="clawGenuiDiagnostic">{zh ? '此卡片无法显示，以下为保存的文本结果。' : 'This card is unavailable. The saved text result follows.'}</p>}
@@ -86,18 +88,27 @@ export function GenuiResultView({ sessionId, callId, meta, text, isError, zh = f
   const inline = parsed.document.items.every(node => node.type === 'html')
   return <section className={inline ? 'clawGenui clawGenuiInline' : 'clawGenui'} data-genui-session={sessionId} data-genui-call={callId} aria-label={parsed.document.title}>
     {!inline && <h3>{parsed.document.title}</h3>}
-    {parsed.document.items.map((node, i) => renderNode(node, i, parsed.document.title, zh, { sessionId, callId, path: String(i) }))}
+    {parsed.document.items.map((node, i) => renderNode(node, i, parsed.document.title, zh, { sessionId, callId, path: String(i) }, repair))}
   </section>
 }
 
 export function GenuiToolView(props: ToolCallViewProps & { zh?: boolean }) {
   if (props.phase !== 'result') return <p role="status">{props.zh ? '正在生成交互内容…' : 'Generating interactive content…'}</p>
-  return <GenuiResultView key={JSON.stringify([props.sessionId, props.callId])}
-    sessionId={String(props.sessionId)} callId={props.callId} meta={props.block.meta} isError={props.block.isError}
-    text={props.block.content.filter(block => block.type === 'text').map(block => block.text).join('\n')} zh={props.zh ?? false} />
+  // The turn tail owns the interactive instance. Expanding tool history must
+  // not run old attempts again or create competing copies of the same iframe.
+  return <div className="clawGenuiToolSummary"><p>{props.block.isError
+    ? (props.zh ? '本次生成未完成。' : 'This generation attempt did not complete.')
+    : (props.zh ? '已提交交互内容，见本轮回复下方。' : 'Interactive content submitted. See below this turn’s answer.')}</p>
+    <details><summary>{props.zh ? '查看工具记录' : 'View tool record'}</summary>
+      <pre className="clawGenuiFallback">{props.block.content.filter(block => block.type === 'text').map(block => block.text).join('\n')}</pre>
+    </details>
+  </div>
 }
 
-/** Preserve independent results, replace only explicit IDs, and retain original display order. */
+const containsHtml = (nodes: GenuiNode[]): boolean => nodes.some(node => node.type === 'html'
+  || (node.type === 'card' || node.type === 'row') && containsHtml(node.items))
+
+/** Unnamed HTML is one replaceable interactive area per turn; explicit IDs stay independent. */
 export function genuiResults(tools: readonly ToolChatData[]): ToolResultNode[] {
   const calls = new Map<string, ToolResultNode>()
   const visit = (block: ToolChatData['root']): void => {
@@ -113,7 +124,9 @@ export function genuiResults(tools: readonly ToolChatData[]): ToolResultNode[] {
     const parsed = validateGenuiDocument(result.meta)
     // Invalid updates must not replace a working result; their saved text stays visible separately.
     const id = parsed.ok ? parsed.document.resultId : undefined
-    results.set(id === undefined ? `call:${result.callId}` : `result:${id}`, result)
+    const key = id !== undefined ? `result:${id}`
+      : parsed.ok && containsHtml(parsed.document.items) ? 'html:default' : `call:${result.callId}`
+    results.set(key, result)
   }
   return [...results.values()]
 }
@@ -159,15 +172,16 @@ export function GenuiTurnTail({ chat, sessionId, turn, zh, retry }: GenuiTurnTai
   const activity = turn.status === 'unknown' ? undefined : genuiActivity(data, turn.status === 'closed' || (snapshot?.legacy?.turnEnds.has(turn.turn) ?? false))
   if (results.length === 0 && activity === undefined) return null
   return <div className="clawGenuiResults">
+    {activity === 'failed' && results.length === 0 && snapshot && <GenuiTextFallback snapshot={snapshot} turn={turn.turn} zh={zh} />}
     {activity && <GenuiStatus activity={activity} zh={zh} retry={retry ? () => retry(turn.turn) : undefined} hasResults={results.length > 0} />}
     {results.map(result => <GenuiResultView key={JSON.stringify([sessionId, result.callId])}
-    sessionId={String(sessionId)} callId={result.callId} meta={result.meta} isError={false}
+    sessionId={String(sessionId)} callId={result.callId} meta={result.meta} isError={false} {...(retry === undefined ? {} : { repair: () => retry(turn.turn) })}
     text={result.content.filter(block => block.type === 'text').map(block => block.text).join('\n')} zh={zh} />)}</div>
 }
 
 /** Follow the confirmed Host setting; disabled mode registers no presentation. */
 export function applyDesktopGenui(ctx: Context): void {
-  ctx.inject(['slots', 'configForms', 'locale', 'uiConversation', 'sessions', 'conversation'], scope => {
+  ctx.inject(['slots', 'configForms', 'locale', 'uiConversation', 'sessions'], scope => {
     const settings = scope.configForms.get<GenuiSettings>(GENUI_ENTRY)
     scope.effect(() => {
       let dispose: (() => void) | undefined
@@ -192,13 +206,15 @@ export function applyDesktopGenui(ctx: Context): void {
               inject: sessionId => ({ chat: scope.uiConversation.binding(sessionId).target('chat'),
                 retry: async (failedTurn: number) => {
                   const sessions = scope.get('sessions') as unknown as ISessions
-                  const sessionScope = sessions.scope(sessionId)
-                  if (!sessionScope) throw new Error('Conversation unavailable')
-                  const conversation = (sessionScope as unknown as Context).conversation
+                  const target = sessions.binding(sessionId)?.session
+                  if (!target) throw new Error('Conversation unavailable')
                   const zh = scope.locale.getSnapshot().active.startsWith('zh')
-                  await conversation.send(zh
-                    ? `请在当前对话中重新展示第 ${failedTurn} 轮未能显示的交互内容。沿用原对话语言，直接使用内联渲染，保留已有说明，不要用浏览器页面代替。`
-                    : `Retry the interactive content that failed to display in turn ${failedTurn} of this conversation. Keep the original conversation language and explanation. Render inline instead of opening a browser.`)
+                  // Address the public Session face directly; a root-scoped
+                  // conversation service cannot submit to this owning session.
+                  const response = await target.prompt([{ type: 'text', text: zh
+                    ? `请修复并重新展示当前对话第 ${failedTurn} 轮无法显示或操作出错的交互内容。检查完整脚本以及所有按钮（包括重置和暂停）的处理函数，沿用原对话语言和已有说明，直接内联渲染，不要用浏览器页面代替。`
+                    : `Fix and redisplay the interactive content in turn ${failedTurn} of this conversation that failed to load or run correctly. Check the complete script and every button handler, including reset and pause. Keep the original conversation language and explanation. Render inline instead of opening a browser.` }], 'queue')
+                  if (!response.ok) throw new Error(response.error.message)
                 },
               }),
             }, function LocalizedGenuiTurnTail(props) {

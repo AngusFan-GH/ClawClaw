@@ -8,8 +8,8 @@ function isDark(): boolean {
   return document.body.hasAttribute('data-ds-dark-theme') || document.documentElement.hasAttribute('data-ds-dark-theme')
 }
 
-export function GenuiHtmlView({ node, zh, identity, storage }: { node: GenuiHtml; zh: boolean;
-  identity?: Omit<GenuiStateIdentity, 'sourceHash'>; storage?: HtmlStateStorage }) {
+export function GenuiHtmlView({ node, zh, identity, storage, repair }: { node: GenuiHtml; zh: boolean;
+  identity?: Omit<GenuiStateIdentity, 'sourceHash'>; storage?: HtmlStateStorage; repair?: () => Promise<void> }) {
   const persistence = useMemo(() => storage ?? (identity ? htmlStateStorage(identity, node.html) : undefined),
     [storage, identity?.sessionId, identity?.callId, identity?.path, node.html])
   const [bootState, setBootState] = useState<GenuiHtmlState | null | undefined>(persistence ? undefined : null)
@@ -32,6 +32,8 @@ export function GenuiHtmlView({ node, zh, identity, storage }: { node: GenuiHtml
   const [revision, setRevision] = useState(0)
   const [height, setHeight] = useState(240)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'stopped'>('loading')
+  const [interactionError, setInteractionError] = useState(false)
+  const [repairAttempt, setRepairAttempt] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [fallbackOpen, setFallbackOpen] = useState(false)
   const srcDoc = useMemo(() => createGenuiHtmlDocument(node.html, { dark: isDark(), zh, state: bootState ?? null }), [node.html, zh, bootState])
   useEffect(() => {
@@ -43,15 +45,20 @@ export function GenuiHtmlView({ node, zh, identity, storage }: { node: GenuiHtml
   }, [])
   useLayoutEffect(() => {
     if (status === 'stopped' || bootState === undefined) return
-    setStatus('loading')
+    setStatus('loading'); setInteractionError(false)
     let ready = false
-    const timeout = window.setTimeout(() => { if (!ready) setStatus('error') }, 8000)
+    let startupFailed = false
+    const timeout = window.setTimeout(() => { if (!ready) { startupFailed = true; setStatus('error') } }, 8000)
     const receive = (event: MessageEvent<unknown>): void => {
       if (event.source !== frame.current?.contentWindow || event.origin !== 'null') return
       const data = event.data
       if (!data || typeof data !== 'object' || !('channel' in data) || data.channel !== GENUI_HTML_CHANNEL || !('type' in data)) return
       if (data.type === 'ready') { frame.current?.contentWindow?.postMessage({ channel: GENUI_HTML_CHANNEL, type: 'theme', value: isDark() }, '*'); ready = true; window.clearTimeout(timeout); setStatus(previous => previous === 'error' ? previous : 'ready') }
-      if (data.type === 'error') { ready = true; window.clearTimeout(timeout); setStatus('error') }
+      if (data.type === 'error') {
+        window.clearTimeout(timeout)
+        if (ready && !startupFailed) { setInteractionError(true); setFallbackOpen(true) }
+        else { startupFailed = true; setStatus('error') }
+      }
       if (data.type === 'state-error') setSaveError('unsupported')
       if (data.type === 'state' && 'value' in data && !ignoreState.current) {
         if (!validHtmlState(data.value)) { setSaveError('unsupported'); return }
@@ -81,12 +88,24 @@ export function GenuiHtmlView({ node, zh, identity, storage }: { node: GenuiHtml
     catch { setSaveError('save') }
     finally { setRetrying(false) }
   }
+  const requestRepair = (): void => {
+    if (!repair || repairAttempt === 'sending' || repairAttempt === 'sent') return
+    setRepairAttempt('sending')
+    void repair().then(() => setRepairAttempt('sent')).catch(() => setRepairAttempt('error'))
+  }
+  const repairButton = repair && <button type="button" disabled={repairAttempt === 'sending' || repairAttempt === 'sent'} onClick={requestRepair}>
+    {repairAttempt === 'sending' ? (zh ? '正在提交…' : 'Submitting…') : repairAttempt === 'sent' ? (zh ? '已提交修复' : 'Repair submitted') : (zh ? '重新生成' : 'Regenerate')}
+  </button>
   return <section className="clawGenuiHtml" aria-label={node.title}>
     <div className="clawGenuiHtmlToolbar"><h4>{node.title}</h4>
       <button type="button" disabled={resetting || bootState === undefined} onClick={() => status === 'stopped' ? restart(latest.current) : setStatus('stopped')}>
         {status === 'stopped' ? (zh ? '继续运行' : 'Resume') : (zh ? '暂停' : 'Pause')}
       </button>
     </div>
+    {interactionError && <p className="clawGenuiHtmlNotice" role="status">
+      <span>{zh ? '部分操作执行出错，其余内容仍可使用。' : 'An interaction failed. The remaining content is still available.'}</span>{repairButton}
+    </p>}
+    {repairAttempt === 'error' && <p className="clawGenuiHtmlNotice" role="status">{zh ? '修复请求未能提交，请再试一次。' : 'The repair request could not be submitted. Try again.'}</p>}
     {saveError && <p className="clawGenuiHtmlNotice" role="status">
       {saveError === 'unsupported'
         ? (zh ? '部分输入无法保存，可继续使用当前内容。' : 'Some inputs cannot be saved. You can keep using this view.')
@@ -96,7 +115,7 @@ export function GenuiHtmlView({ node, zh, identity, storage }: { node: GenuiHtml
     <div className="clawGenuiHtmlViewport" style={{ height }} aria-busy={status === 'loading' && !loadError}>
       {(loadError || status === 'loading' || status === 'error' || status === 'stopped') && <div className="clawGenuiHtmlPlaceholder" role="status">
         {loadError ? <><p>{zh ? '无法读取已保存的输入。' : 'Saved inputs could not be loaded.'}</p><button type="button" onClick={() => setLoadAttempt(value => value + 1)}>{zh ? '重试加载' : 'Retry loading'}</button></>
-          : status === 'error' ? <><p>{zh ? '交互内容暂时无法运行，可查看下方说明。' : 'Interactive content could not run. Read the description below.'}</p><button type="button" onClick={() => restart(latest.current)}>{zh ? '重新加载' : 'Reload'}</button></>
+          : status === 'error' ? <><p>{zh ? '交互内容暂时无法运行，可查看下方说明。' : 'Interactive content could not run. Read the description below.'}</p>{repairButton || <button type="button" onClick={() => restart(latest.current)}>{zh ? '重新加载' : 'Reload'}</button>}</>
           : <p>{status === 'stopped' ? (zh ? '已暂停，点击“继续运行”即可恢复。' : 'Paused. Select Resume to continue.') : (zh ? '正在准备交互内容…' : 'Preparing interactive content…')}</p>}
       </div>}
       {status !== 'stopped' && bootState !== undefined && <iframe

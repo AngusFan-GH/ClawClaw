@@ -31,7 +31,7 @@ function store<T>(initial: T) {
 
 function chatFor(turns: Record<number, ObservableSnapshot<readonly ToolChatData[]>>): ChatSnapshot {
   return { nodes: { turnDataSource: (turn: number, kind: string) => {
-    expect(kind).toBe('tool-call')
+    if (kind !== 'tool-call') return store([])
     return turns[turn]
   } } } as unknown as ChatSnapshot
 }
@@ -128,6 +128,21 @@ describe('GenUI cards outside collapsed tool process', () => {
     expect(open.element.textContent).toBe('正在生成交互内容…')
   })
 
+  it('recovers the saved Fourier explanation after a failed render and an empty closing response', async () => {
+    const failed = result(19, { isError: true })
+    const assistants = store([{ blocks: [{ kind: 'text', text: '## 傅里叶变换\n将信号拆分为不同频率的正弦波。' },
+      { kind: 'reasoning', text: 'Internal analysis must remain private.' }] }, { blocks: [] }])
+    const process = store<Array<{ answerAnchorSeq: number | null }>>([{ answerAnchorSeq: null }])
+    const snapshot = { nodes: { turnDataSource: (_turn: number, kind: string) => kind === 'tool-call'
+      ? store([{ root: failed }]) : kind === 'assistant-step' ? assistants : process } } as unknown as ChatSnapshot
+    const { element } = await mount(store(snapshot), 1, 'main', { turn: { turn: 1, status: 'closed' } as GenuiTurnTailProps['turn'] })
+    expect(element.querySelector('h2')?.textContent).toBe('傅里叶变换')
+    expect(element.textContent).not.toContain('Internal analysis')
+    expect(element.textContent).toContain('交互内容未能显示')
+    await act(async () => process.set([{ answerAnchorSeq: 17 }]))
+    expect(element.querySelector('h2')).toBeNull()
+  })
+
   it('does not show an endless generation notice for an incomplete historical turn', async () => {
     const tools = store<readonly ToolChatData[]>([{ root: result(10, { name: 'clawclaw_validate_ui', meta: null }) }])
     const { element } = await mount(store(chatFor({ 1: tools })), 1, 'main', { turn: { turn: 1, status: 'unknown' } as GenuiTurnTailProps['turn'] })
@@ -175,6 +190,22 @@ describe('GenUI cards outside collapsed tool process', () => {
     expect(second.element.textContent).toContain('第二轮')
     expect(second.element.textContent).not.toContain('服务状态')
     expect(child.element.textContent).toBe('')
+  })
+
+  it('replays repeated unnamed Monte Carlo attempts as one interactive result, including title changes', async () => {
+    const html = { type: 'html', title: '撒点估 π', html: '<canvas></canvas>', fallback: 'Estimate pi with random samples.' }
+    const attempts = [1, 2, 3, 6].map(seq => result(seq, { meta: { ...document,
+      title: seq < 6 ? '蒙特卡罗互动演示 · 撒点估算圆周率' : '蒙特卡罗互动演示 · 撒点估算 π',
+      items: [{ type: 'text', content: '撒点估算圆周率' }, html] } }))
+    const failed = [4, 5].map(seq => result(seq, { isError: true }))
+    const explicit = result(7, { meta: { ...document, resultId: 'independent', items: [html] } })
+    const tools = [...attempts, ...failed, explicit].map(root => ({ root }))
+    expect(genuiResults(tools)).toEqual([attempts[3], explicit])
+    const { element } = await mount(store(chatFor({ 1: store(tools) })))
+    expect(element.querySelectorAll('[data-genui-call]')).toHaveLength(2)
+    expect(element.querySelector('[data-genui-call]')?.getAttribute('data-genui-call')).toBe('card-6')
+    const reopened = await mount(store(chatFor({ 1: store(JSON.parse(JSON.stringify(tools))) })))
+    expect(reopened.element.querySelectorAll('[data-genui-call]')).toHaveLength(2)
   })
 
   it('retains the saved text when metadata is missing or from a future version', async () => {

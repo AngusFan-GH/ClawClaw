@@ -89,6 +89,80 @@ describe('Desktop response policy assembly', () => {
     } finally { await ctx.fiber.dispose() }
   })
 
+  it('anchors ordinary progress to human input and refreshes it when the user changes languages', async () => {
+    const ctx = new Context()
+    const id = SessionId('ordinary-language')
+    const agent = { id, session: Session.create(id) } as Agent
+    try {
+      ctx.provide('webApp', { getAdvertisedUrl: () => 'http://127.0.0.1:43120' })
+      await ctx.plugin(SystemPrompt)
+      const fiber = await ctx.plugin(ResponsePolicy)
+      const language = async () => (await ctx.systemPrompt.assemble({ agent })).contexts
+        .find(section => section.name === 'clawclaw:conversation-language')
+      expect((await language())?.text).toBe('')
+      for (const text of [
+        '请整理成可打印的部署 Checklist，包含命令速查表。报告用英文，解释用中文。保留 {{literal}}。',
+        'Continue in English and explain the next step.',
+        '日本語で進捗を説明してください。',
+      ]) {
+        agent.session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [
+          { type: 'text', text },
+        ] }), { surfaceOp: 'append' })
+        agent.session.append('user/message', createUserMessage({
+          source: { kind: 'runtime-context', form: 'snapshot', sections: [{ name: 'skill', text: 'Use the full_pipeline workflow. I will validate the document first.' }] } as unknown as UserMessage['source'],
+          content: [{ type: 'text', text: 'Use the full_pipeline workflow. I will validate the document first.' }],
+        }), { surfaceOp: 'append' })
+        expect(await language()).toMatchObject({ text: expect.stringContaining(JSON.stringify(text)), interpolate: false })
+        expect((await language())?.text).not.toContain('full_pipeline')
+      }
+      expect((await language())?.text).not.toContain('Continue in English')
+      await fiber.dispose()
+      expect(await language()).toBeUndefined()
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('bounds human language evidence without changing the user message', async () => {
+    const ctx = new Context()
+    const id = SessionId('bounded-language')
+    const agent = { id, session: Session.create(id) } as Agent
+    const text = '请用中文说明。' + '文'.repeat(3000)
+    try {
+      ctx.provide('webApp', { getAdvertisedUrl: () => 'http://127.0.0.1:43120' })
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ResponsePolicy)
+      agent.session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [
+        { type: 'text', text },
+      ] }), { surfaceOp: 'append' })
+      const evidence = (await ctx.systemPrompt.assemble({ agent })).contexts
+        .find(section => section.name === 'clawclaw:conversation-language')
+      expect(evidence?.text).toContain(JSON.stringify(text.slice(0, 2000)))
+      expect(evidence?.text).not.toContain(text)
+      expect(agent.session.snapshotEvents().find(event => event.type === 'user/message')?.data).toMatchObject({
+        content: [{ type: 'text', text }],
+      })
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('includes newly admitted human language in the first request before session persistence', async () => {
+    const ctx = new Context()
+    const id = SessionId('first-request-language')
+    const agent = { id, ctx, session: Session.create(id), options: {} } as Agent
+    try {
+      ctx.provide('webApp', { getAdvertisedUrl: () => 'http://127.0.0.1:43120' })
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ResponsePolicy)
+      const assembly = await ctx.systemPrompt.assemble({ agent })
+      const message = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: '请用中文说明进度。' }] })
+      const decision = await agentEvents(ctx, agent).waterfall('agent/pre-step', {
+        messages: [message], turn: 1, step: 1, signal: new AbortController().signal,
+      }, async (): Promise<PreStepDecision> => ({ kind: 'enter', messages: [message] }))
+      expect(decision).not.toHaveProperty('startsRequestSeries')
+      expect(agent.session.snapshotEvents().some(event => event.type === 'user/message')).toBe(false)
+      expect(ctx.systemPrompt.refreshContext(assembly, { agent }).contexts
+        .find(section => section.name === 'clawclaw:conversation-language')?.text).toContain('请用中文说明进度。')
+    } finally { await ctx.fiber.dispose() }
+  })
+
   it('leaves request-series decisions to upstream across policy mounting and reloading', async () => {
     const ctx = new Context()
     try {

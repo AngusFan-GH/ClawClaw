@@ -6,14 +6,12 @@ import { GENUI_ENTRY, type GenuiSettings } from '../genui-contract.ts'
 
 export const GENUI_SETTINGS_ZH = {
   title: '可视化回答',
-  description: '在适合时，用卡片、表格和图表展示回答。支持查看图表数据及本地交互片段。关闭后显示文本结果。',
-  example: '例如：用柱状图对比 API=20、Worker=4、Cache=100。',
+  description: '在对话中用卡片、表格、图表和交互内容展示回答。关闭后显示文字结果。',
   failed: '未能保存设置，请重试。',
 }
 export const GENUI_SETTINGS_EN: Record<keyof typeof GENUI_SETTINGS_ZH, string> = {
   title: 'Visual responses',
-  description: 'Show suitable responses as cards, tables and charts. Explore chart data and local interactive snippets. Turn off to display text results.',
-  example: 'Try: Compare API=20, Worker=4 and Cache=100 in a bar chart.',
+  description: 'Display responses in chat with cards, tables, charts and interactive content. Turn off to show text results.',
   failed: 'Could not save this setting. Please try again.',
 }
 
@@ -36,7 +34,6 @@ export function GenuiSettingsRow({ settings, t }: {
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 14, lineHeight: '20px' }}>{t('title')}</div>
       <div style={{ marginTop: 4, color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px' }}>{t('description')}</div>
-      <div style={{ marginTop: 4, color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px' }}>{t('example')}</div>
       {failed && <div role="alert" style={{ marginTop: 4, fontSize: 12, lineHeight: '18px',
         color: 'var(--dsw-alias-state-error-primary)' }}>{t('failed')}</div>}
     </div>

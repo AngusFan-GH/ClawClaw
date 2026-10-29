@@ -27,6 +27,24 @@ async function harness(enabled = false) {
 }
 
 describe('GenUI Host integration', () => {
+  it('keeps the model-facing instructions within budget without repeating the guide in both tools', async () => {
+    const host = await harness(true)
+    try {
+      const system = renderPrompt(await host.ctx.systemPrompt.assemble())
+      const tools = host.ctx.tools.schemas().filter(tool => [GENUI_RENDER_TOOL, GENUI_VALIDATE_TOOL].includes(tool.name))
+      expect(tools).toHaveLength(2)
+      const requestText = system + '\n' + JSON.stringify(tools)
+      expect(requestText.split('ClawClaw supports structured result cards')).toHaveLength(2)
+      expect(requestText.length).toBeLessThan(8000)
+      expect(system).toContain('Use the conversation language')
+      expect(system).toContain('Supported components (exact field names)')
+      for (const tool of tools) {
+        expect(JSON.stringify(tool.parameters)).toContain('Preserve JSON arrays')
+        expect(JSON.stringify(tool.parameters)).toContain('clawclaw.genui/v1')
+      }
+    } finally { await host.ctx.fiber.dispose() }
+  })
+
   it('defaults off and owns tools and prompt across enable, disable, re-enable and unload', async () => {
     expect(Genui.Config({} as { enabled: boolean })).toEqual({ enabled: false })
     const host = await harness()
@@ -109,6 +127,22 @@ describe('GenUI Host integration', () => {
         expect(result.isError).toBe(true)
         expect(result.meta).toBeUndefined()
         expect(JSON.stringify(result.content)).toContain('document_json')
+      }
+    } finally { await host.ctx.fiber.dispose() }
+  })
+
+  it('returns script diagnostics before accepting or persisting a broken interactive result', async () => {
+    const host = await harness(true)
+    try {
+      const broken = { ...document, items: [{ type: 'html', title: 'Monte Carlo',
+        html: '<canvas></canvas><script>var total=0;BIRTH vars computed var X=[];</script>', fallback: 'Estimate pi.' }] }
+      for (const name of [GENUI_VALIDATE_TOOL, GENUI_RENDER_TOOL]) {
+        const result = await host.ctx.tools.execute({ callId: ToolCallId('script-error'), name,
+          arguments: { document_json: JSON.stringify(broken) }, signal: new AbortController().signal })
+        expect(result.meta ?? null).toBeNull()
+        expect(JSON.stringify(result.content)).toContain('$.items[0].html')
+        expect(JSON.stringify(result.content)).toContain('Invalid JavaScript')
+        expect(result.isError).toBe(name === GENUI_RENDER_TOOL)
       }
     } finally { await host.ctx.fiber.dispose() }
   })

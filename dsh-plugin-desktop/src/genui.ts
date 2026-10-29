@@ -8,6 +8,7 @@ import { GENUI_FORMAT, GENUI_RENDER_TOOL, GENUI_VALIDATE_TOOL, GENUI_LIMITS, typ
 import { genuiPresentationGuard } from './genui-presentation-policy.ts'
 import { applyGenuiState } from './genui-state.ts'
 import { genuiText, validateGenuiDocument } from './genui-core.ts'
+import { validateGenuiHtmlScripts } from './genui-html-validation.ts'
 
 export const name = 'desktop-genui'
 export const inject = ['settings']
@@ -17,7 +18,7 @@ Use cards only when they improve a comparison, small data summary, or plan; ordi
 Presentation routing: for a small calculator, chart, filter or interactive explanation requested in this conversation, call clawclaw_render_ui directly. Inline rendering is the default, including requests that mention HTML. Do not first create an HTML file, start a server, open a browser or run browser automation merely to display or verify this inline result. Use clawclaw_validate_ui for document validation when needed; do not claim visual verification from tool success.
 Use a website, standalone-file, export or browser workflow only when the user requests that deliverable or interaction. Researching source data when needed is still allowed; it does not change the requested inline presentation.
 Use the conversation language for titles, labels, and content. Do not emit dsh-ui fences.
-Independent cards are shown with the answer, outside collapsed tool details. Use optional document.resultId (a nonblank string, max 160 characters) to update an existing result with the same ID within this Turn. Omit resultId for a new independent result; do not reuse IDs for unrelated results. Group related charts in one document. Use a brief conclusion plus one main visual area by default. Keep detailed explanations in the document only when useful; do not repeat card data, code, tool names or implementation progress in the final answer. Never claim the interface is visible solely because validation succeeded. Render success confirms accepted source and metadata, not a painted-client inspection. Describe only what was actually verified.
+Independent cards are shown with the answer, outside collapsed tool details. Use optional document.resultId (a nonblank string, max 160 characters) to update an existing result with the same ID within this Turn. An HTML result without resultId replaces the previous unnamed HTML result in this Turn; use distinct resultIds for independent interactive examples. Other unnamed cards remain independent. Group related charts in one document. Use a brief conclusion plus one main visual area by default. Keep detailed explanations in the document only when useful; do not repeat card data, code, tool names or implementation progress in the final answer. Never claim the interface is visible solely because validation succeeded. Render success confirms accepted source and metadata, not a painted-client inspection. Describe only what was actually verified.
 Pass document_json as one JSON string containing the complete document, for example document_json='{"format":"${GENUI_FORMAT}","title":"Example","items":[{"type":"text","content":"Hello"}]}'. Preserve arrays as JSON arrays inside that string; do not translate arrays into {item:...} objects or XML tags. The legacy document object parameter is accepted for compatibility, but prefer document_json. Supply exactly one of these parameters.
 If validation or rendering fails, correct the document and retry inline with document_json. Do not silently replace the requested inline result with an external browser or standalone page.
 Supported components (exact field names):
@@ -31,6 +32,7 @@ Charts: at most 8 charts per document, 60 unique categories per chart and 4 uniq
 Outside isolated html components, HTML, scripts, arbitrary styles, forms, and actions are not supported. HTML snippets cannot perform business actions or call tools. Do not collect credentials.
 Limits: 200 components, 8 component levels, 50 table rows, 12 columns, 24 steps, 2000 characters per text and 160 per title/label.
 Do not omit source data to fit a limit without explaining the selection. Validate uncertain documents with ${GENUI_VALIDATE_TOOL}, fix reported paths, then render.
+HTML scripts must be complete, with closed script tags and every button handler implemented, including reset and pause. No omitted helpers or placeholder code. For simulation state beyond native form inputs, restore bounded JSON with window.clawclaw.getState() and update it with window.clawclaw.setState(value); save summaries or a seed, not thousands of points. State is limited to 16 KiB, 100 array entries and depth 8.
 Cards describe results; rendering a progress or success card does not execute or prove a task succeeded.`
 
 export function createGenuiTool(mode: 'render' | 'validate', enabled: () => boolean = () => true): ToolDefinition {
@@ -40,7 +42,7 @@ export function createGenuiTool(mode: 'render' | 'validate', enabled: () => bool
       ? 'Render cards, charts and small interactive HTML directly in this chat. Default for in-conversation visualizations and calculators; no HTML file, server or browser is needed. Pass a versioned document. Does not execute business actions.'
       : 'Validate a ClawClaw structured UI document. Returns exact field diagnostics; does not display a card.',
     parameters: {
-      document_json: { type: 'string', description: 'Preferred: complete document serialized as a JSON string. Arrays must stay JSON arrays, e.g. {"format":"clawclaw.genui/v1","title":"Example","items":[{"type":"text","content":"Hello"}]}. ' + GENUI_PROMPT },
+      document_json: { type: 'string', description: 'Preferred: complete document serialized as one JSON string. Preserve JSON arrays, e.g. {"format":"clawclaw.genui/v1","title":"Example","items":[{"type":"text","content":"Hello"}]}. Component fields and limits are in the GenUI system instructions. Supply only one document parameter.' },
       document: { type: 'json', description: 'Legacy document object. Prefer document_json to preserve nested arrays across model transports. Supply only one parameter.' },
     },
     output: {
@@ -68,8 +70,12 @@ export function createGenuiTool(mode: 'render' | 'validate', enabled: () => bool
         if (typeof source !== 'string' || source.length > GENUI_LIMITS.bytes) parseError = 'Expected a bounded JSON document string.'
         else try { input = JSON.parse(source) as unknown } catch { parseError = 'Invalid JSON document string.' }
       }
-      const parsed = parseError === undefined ? validateGenuiDocument(input)
+      let parsed = parseError === undefined ? validateGenuiDocument(input)
         : { ok: false as const, diagnostics: [{ path: '$.document_json', message: parseError }] }
+      if (parsed.ok) {
+        const diagnostics = validateGenuiHtmlScripts(parsed.document)
+        if (diagnostics.length) parsed = { ok: false, diagnostics }
+      }
       if (mode === 'validate') return parsed.ok ? { ok: true, format: GENUI_FORMAT, next_step: 'Validation only; nothing has been displayed. Call clawclaw_render_ui now with the same document_json to show it in this conversation. Do not switch to a local browser.' } : { ...parsed, hint: retry }
       if (!parsed.ok) throw new TypeError(parsed.diagnostics.map(d => `${d.path}: ${d.message}`).join('\n') + '\n' + retry)
       return parsed.document

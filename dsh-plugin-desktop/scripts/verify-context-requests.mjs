@@ -61,6 +61,9 @@ export async function verifyContextRequests(ctx, cwd, { team = false } = {}) {
           const request = adapter.requests.at(-1)
           checkRequest(request, `${team ? 'team:lead' : `request:${preset}`}`)
           assert.ok(request.messages.some(message => message.source?.kind === 'user' && textOf(message) === input))
+          const language = request.messages.findLast(message => message.source?.kind === 'runtime-context').source.sections
+            .find(section => section.name === 'clawclaw:conversation-language')
+          assert.ok(language?.text.includes(input), `${preset}: current human language evidence missing`)
           if (preset !== 'minimal') {
             const sections = request.messages.findLast(message => message.source?.kind === 'runtime-context').source.sections
             for (const name of ['sandbox:policy', 'approval:policy', 'clawclaw:app-surface']) {
@@ -73,10 +76,18 @@ export async function verifyContextRequests(ctx, cwd, { team = false } = {}) {
           const context = lead.messages.findLast(message => message.source?.kind === 'runtime-context')
           assert.ok(context.source.sections.some(section => section.name === 'team:identity'))
           assert.match(textOf(context), /Team Lead/)
-          const spawned = await ctx.agentTeams.spawnTeammate(handle.agent, { name: 'context-audit-member',
-            description: 'Offline context fixture', prompt: [{ type: 'text', text: 'Review the project and return your findings. This is an English generated task wrapper.' }],
-            context: 'fresh', provider: 'spawn', signal: AbortSignal.timeout(10_000) })
-          const child = ctx.agents.get(spawned.member.id)
+          // The deterministic adapter can finish and retire the child before
+          // spawn returns. Capture its real handle at creation, rather than
+          // requiring a completed activation to remain in the live registry.
+          const created = new Map()
+          const stopCreated = ctx.on('agent/created', ({ agent }) => { created.set(agent.id, agent) })
+          let child
+          try {
+            const spawned = await ctx.agentTeams.spawnTeammate(handle.agent, { name: 'context-audit-member',
+              description: 'Offline context fixture', prompt: [{ type: 'text', text: 'Review the project and return your findings. This is an English generated task wrapper.' }],
+              context: 'fresh', provider: 'spawn', signal: AbortSignal.timeout(10_000) })
+            child = ctx.agents.get(spawned.member.id) ?? created.get(spawned.member.id)
+          } finally { stopCreated() }
           assert.ok(child, 'teammate was not created')
           await child.whenIdle()
           const request = adapter.requests.findLast(item => item.sessionId === child.id)
@@ -108,6 +119,9 @@ export async function verifyContextRequests(ctx, cwd, { team = false } = {}) {
         await handle.agent.whenIdle()
         const resumed = adapter.requests.at(-1)
         checkRequest(resumed, `resumed:${preset}`)
+        const language = resumed.messages.findLast(message => message.source?.kind === 'runtime-context').source.sections
+          .find(section => section.name === 'clawclaw:conversation-language')
+        assert.ok(language?.text.includes('恢复后继续用中文。'), `${preset}: resume lost current language evidence`)
         assert.ok(!systemOf(resumed).includes('Historical policy fixture.'))
         assert.ok(resumed.messages.some(message => message.source?.kind === 'user' && textOf(message) === inputs[0]), 'resume lost user history')
       } finally { await handle.dispose() }
