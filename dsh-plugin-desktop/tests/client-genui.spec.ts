@@ -82,7 +82,8 @@ describe('GenUI result card', () => {
     const register = vi.fn((_options: unknown, _component: unknown) => removeView)
     const scope = {
       locale: { getSnapshot: () => ({ active: 'zh-CN' }) },
-      slots: { inject: (_name: string, register: () => () => void) => register(), register },
+      on: () => () => {},
+      slots: { entries: () => [], inject: (_name: string, register: () => () => void) => register(), register },
       configForms: { get: () => ({ getSnapshot: () => ({ value: { enabled } }), subscribe: (callback: () => void) => {
         listeners.add(callback); return () => { listeners.delete(callback) }
       } }) },
@@ -93,16 +94,16 @@ describe('GenUI result card', () => {
     expect(register).not.toHaveBeenCalled()
     expect(document.head.querySelector('style[data-claw-genui]')).toBeNull()
     enabled = true; sync(); sync()
-    expect(register).toHaveBeenCalledTimes(2)
+    expect(register).toHaveBeenCalledTimes(3)
     expect(register.mock.calls[0]?.[0]).toMatchObject({ name: 'tool.call.toolview', key: GENUI_RENDER_TOOL })
-    expect(register.mock.calls[1]?.[0]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'desktop-genui' })
+    expect(register.mock.calls[2]?.[0]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'desktop-genui' })
     expect(document.head.querySelectorAll('style[data-claw-genui]')).toHaveLength(1)
     enabled = false; sync()
-    expect(removeView).toHaveBeenCalledTimes(2)
+    expect(removeView).toHaveBeenCalledTimes(3)
     expect(document.head.querySelector('style[data-claw-genui]')).toBeNull()
     enabled = true; sync()
     cleanup?.()
-    expect(removeView).toHaveBeenCalledTimes(4)
+    expect(removeView).toHaveBeenCalledTimes(6)
     expect(listeners.size).toBe(0)
     expect(document.head.querySelector('style[data-claw-genui]')).toBeNull()
   })
@@ -116,7 +117,7 @@ describe('GenUI result card', () => {
     expect(element.querySelector('iframe')).toBeNull()
     expect(element.querySelector('.clawGenui')).toBeNull()
     expect(element.querySelector('details')?.open).toBe(false)
-    expect(element.textContent).toContain('本轮回复下方')
+    expect(element.textContent).toContain('本轮回答')
     expect(element.querySelector('pre')?.textContent).toBe('Old simulation text')
   })
 })

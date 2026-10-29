@@ -2,10 +2,26 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Blob as NodeBlob } from 'node:buffer'
 import { GenuiHtmlView } from '../src/client/genui-html.tsx'
-import { createGenuiHtmlDocument, GENUI_HTML_CHANNEL, GENUI_HTML_CSP } from '../src/client/genui-html-document.ts'
+import { createGenuiHtmlDocument, genuiHtmlDownloadName, GENUI_HTML_CHANNEL, GENUI_HTML_CSP } from '../src/client/genui-html-document.ts'
 const node = { type: 'html' as const, title: 'Counter', html: '<button id="count" onclick="this.textContent++">0</button>', fallback: 'Initial count is zero.' }
 let root: Root | undefined
+const cleanups: Array<() => void> = []
+function fullscreenMock(element: HTMLElement) {
+  const current = Object.getOwnPropertyDescriptor(document, 'fullscreenElement')
+  const exit = Object.getOwnPropertyDescriptor(document, 'exitFullscreen')
+  let active: Element | null = null
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => active })
+  Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: async () => {
+    active = null; document.dispatchEvent(new Event('fullscreenchange'))
+  } })
+  element.requestFullscreen = async () => { active = element; document.dispatchEvent(new Event('fullscreenchange')) }
+  cleanups.push(() => {
+    if (current) Object.defineProperty(document, 'fullscreenElement', current); else Reflect.deleteProperty(document, 'fullscreenElement')
+    if (exit) Object.defineProperty(document, 'exitFullscreen', exit); else Reflect.deleteProperty(document, 'exitFullscreen')
+  })
+}
 async function mount(storage?: import('../src/client/genui-html-state.ts').HtmlStateStorage, repair?: () => Promise<void>) {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const element = document.createElement('div'); document.body.append(element)
@@ -16,6 +32,7 @@ async function mount(storage?: import('../src/client/genui-html-state.ts').HtmlS
 afterEach(async () => {
   if (root) await act(async () => root!.unmount()); root = undefined
   document.body.replaceChildren(); document.body.removeAttribute('data-ds-dark-theme')
+  for (const cleanup of cleanups.splice(0)) cleanup()
   vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals()
 })
 const send = async (frame: HTMLIFrameElement, data: unknown, origin = 'null', source: MessageEventSource | null = frame.contentWindow) => {
@@ -58,14 +75,12 @@ describe('isolated interactive HTML', () => {
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'execute', value: 'ignore' })
     expect(element.querySelector('iframe')).toBe(frame)
   })
-  it('exposes fallback on runtime failure and unmounts on Stop; Reset creates fresh local state', async () => {
+  it('exposes fallback on runtime failure; Reset creates fresh local state and ignores the retired frame', async () => {
     const element = await mount()
     const frame = element.querySelector('iframe')!
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'error', value: true })
     expect(element.querySelector('details')?.open).toBe(true)
     expect(element.textContent).toContain(node.fallback)
-    await act(async () => [...element.querySelectorAll('button')].find(button => button.textContent === '暂停')!.click())
-    expect(element.querySelector('iframe')).toBeNull()
     await act(async () => [...element.querySelectorAll('button')].find(button => button.textContent === '恢复初始值')!.click())
     expect(element.querySelector('iframe')).not.toBe(frame)
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'error', value: true })
@@ -90,17 +105,18 @@ describe('isolated interactive HTML', () => {
     expect(button.disabled).toBe(true)
     expect(repair).toHaveBeenCalledTimes(2)
   })
-  it('restores persisted inputs, saves bounded state and resumes without clearing; Reset explicitly clears', async () => {
+  it('restores persisted inputs and saves bounded state without reloading; Reset explicitly clears', async () => {
     const saved = { controls: [{ index: 0, value: '42' }], custom: { total: 42 } }
     const storage = { load: vi.fn(async () => saved), save: vi.fn(async () => {}), clear: vi.fn(async () => {}) }
     const element = await mount(storage)
     expect(element.querySelector('iframe')!.srcdoc).toContain('"value":"42"')
     const changed = { controls: [{ index: 0, value: '99' }], custom: { total: 99 } }
-    await send(element.querySelector('iframe')!, { channel: GENUI_HTML_CHANNEL, type: 'state', value: changed })
+    const frame = element.querySelector('iframe')!
+    const source = frame.srcdoc
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'state', value: changed })
     expect(storage.save).toHaveBeenCalledWith(changed)
-    await act(async () => [...element.querySelectorAll('button')].find(b => b.textContent === '暂停')!.click())
-    await act(async () => [...element.querySelectorAll('button')].find(b => b.textContent === '继续运行')!.click())
-    expect(element.querySelector('iframe')!.srcdoc).toContain('"value":"99"')
+    expect(element.querySelector('iframe')).toBe(frame)
+    expect(frame.srcdoc).toBe(source)
     expect(storage.clear).not.toHaveBeenCalled()
     await act(async () => [...element.querySelectorAll('button')].find(b => b.textContent === '恢复初始值')!.click())
     expect(storage.clear).toHaveBeenCalledOnce()
@@ -114,7 +130,7 @@ describe('isolated interactive HTML', () => {
     expect(storage.save).not.toHaveBeenCalled()
   })
 
-  it('keeps reset secondary and reserves the measured height through pause and resume', async () => {
+  it('provides only fullscreen/download in the toolbar and expands the same live iframe', async () => {
     const element = await mount()
     expect(element.querySelector('.clawGenuiHtmlToolbar')!.textContent).not.toContain('恢复初始值')
     expect(element.querySelector('details')!.open).toBe(false)
@@ -124,15 +140,58 @@ describe('isolated interactive HTML', () => {
     const frame = element.querySelector('iframe')!
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'height', value: 420 })
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'ready', value: true })
+    const source = frame.srcdoc
+    fullscreenMock(element.querySelector('section')!)
+    expect([...element.querySelectorAll('.clawGenuiHtmlToolbar button')].map(button => button.getAttribute('aria-label'))).toEqual(['全屏', '下载 HTML'])
     const toggle = element.querySelector<HTMLButtonElement>('.clawGenuiHtmlToolbar button')!
     await act(async () => toggle.click())
-    expect(viewport.style.height).toBe('420px')
-    expect(element.querySelector('iframe')).toBeNull()
+    expect(frame.style.height).toBe('100%')
+    expect(toggle.getAttribute('aria-label')).toBe('退出全屏')
+    expect(element.querySelector('iframe')).toBe(frame)
+    expect(frame.srcdoc).toBe(source)
     expect(element.querySelector('details')!.open).toBe(false)
     expect(element.querySelector('.clawGenuiHtmlToolbar button')).toBe(toggle)
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'height', value: 700 })
     await act(async () => toggle.click())
     expect(viewport.style.height).toBe('420px')
-    expect(element.querySelector('iframe')!.style.visibility).toBe('hidden')
+    expect(frame.style.visibility).toBe('visible')
+    expect(element.querySelector('iframe')).toBe(frame)
+  })
+
+  it('downloads self-contained HTML with bounded current state without restarting the live fragment', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('Blob', NodeBlob)
+    let exported: Blob | undefined
+    const revoke = vi.fn()
+    const NativeUrl = URL
+    vi.stubGlobal('URL', class extends NativeUrl {
+      static override createObjectURL(blob: Blob) { exported = blob; return 'blob:download' }
+      static override revokeObjectURL = revoke
+    })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      expect(this.download).toBe('Counter.html')
+      expect(this.href).toBe('blob:download')
+    })
+    const element = await mount()
+    const frame = element.querySelector('iframe')!
+    const source = frame.srcdoc
+    const state = { controls: [{ index: 0, value: '99' }], custom: { total: 100 } }
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'state', value: state })
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="下载 HTML"]')!.click())
+    const html = await exported!.text()
+    expect(html).toContain('<!doctype html>')
+    expect(html).toContain('"total":100')
+    expect(html).toContain('const send=()=>{}')
+    expect(html).toContain('getState:')
+    expect(html).not.toContain('/api/desktop/')
+    expect(element.querySelector('iframe')).toBe(frame)
+    expect(frame.srcdoc).toBe(source)
+    expect(click).toHaveBeenCalledOnce()
+    await act(async () => vi.advanceTimersByTime(1000))
+    expect(revoke).toHaveBeenCalledWith('blob:download')
+  })
+  it.each([['../实验/π', '-实验-π.html'], ['CON', 'visualization-CON.html'], [' ', 'visualization.html']])('uses a portable download name for %s', (title, expected) => {
+    expect(genuiHtmlDownloadName(title)).toBe(expected)
   })
   it('reserves space during saved-input loading instead of inserting a new result area later', async () => {
     const load = Promise.withResolvers<null>()

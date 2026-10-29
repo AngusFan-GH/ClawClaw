@@ -1,152 +1,49 @@
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import { genuiActivity, type GenuiActivity } from './genui-status.ts'
-import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
-import type { ChatSnapshot, ToolChatData, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { AssistantChatData, ChatSnapshot, ToolChatData, TurnProcessChatData } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import { GENUI_ENTRY, GENUI_RENDER_TOOL, type GenuiCell, type GenuiNode, type GenuiSettings } from '../genui-contract.ts'
-import { validateGenuiDocument } from '../genui-core.ts'
-import { GenuiHtmlView } from './genui-html.tsx'
-import { GenuiChartView } from './genui-chart.tsx'
+import { GENUI_ENTRY, GENUI_RENDER_TOOL, type GenuiSettings } from '../genui-contract.ts'
 import { GENUI_STYLES } from './genui-styles.ts'
 import { GenuiTextFallback } from './genui-text-fallback.tsx'
-
-
-
-type TableNode = Extract<GenuiNode, { type: 'table' }>
-function cellText(cell: GenuiCell): string { return cell === null ? '' : String(cell) }
-function compareCells(a: GenuiCell, b: GenuiCell): number {
-  if (a === null) return b === null ? 0 : 1
-  if (b === null) return -1
-  return typeof a === 'number' && typeof b === 'number'
-    ? a - b : cellText(a).localeCompare(cellText(b), undefined, { numeric: true })
-}
-
-function GenuiTable({ node, label }: { node: TableNode; label: string }) {
-  const [sort, setSort] = useState<{ column: number; descending: boolean }>()
-  const rows = node.rows.map((cells, index) => ({ cells, index }))
-  const numeric = node.columns.map((_, column) => node.rows.some(row => typeof row[column] === 'number')
-    && node.rows.every(row => row[column] === null || typeof row[column] === 'number'))
-  if (sort !== undefined) rows.sort((a, b) => {
-    const order = compareCells(a.cells[sort.column] ?? null, b.cells[sort.column] ?? null)
-    return (sort.descending ? -order : order) || a.index - b.index
-  })
-  return <div className="clawGenuiTable" tabIndex={0} role="region" aria-label={label}>
-    <table aria-label={label}>
-      <thead><tr>{node.columns.map((column, index) => <th key={index} scope="col"
-        data-numeric={numeric[index] || undefined} aria-sort={sort?.column === index ? sort.descending ? 'descending' : 'ascending' : 'none'}>
-        <button type="button" onClick={() => setSort({ column: index, descending: sort?.column === index && !sort.descending })}>
-          {column}<span className="clawGenuiSort" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            {sort?.column !== index ? <path d="m5 6 3-3 3 3M5 10l3 3 3-3" />
-              : <path d={sort.descending ? 'm4 6 4 4 4-4' : 'm4 10 4-4 4 4'} />}
-          </svg></span>
-        </button>
-      </th>)}</tr></thead>
-      <tbody>{rows.map(({ cells, index }) => <tr key={index}>{cells.map((cell, c) => <td key={c} data-numeric={typeof cell === 'number' || undefined}>{cellText(cell)}</td>)}</tr>)}</tbody>
-    </table>
-  </div>
-}
-
-function renderNode(node: GenuiNode, key: number, label: string, zh: boolean, identity: { sessionId: string; callId: string; path: string }, repair?: () => Promise<void>): ReactNode {
-  switch (node.type) {
-    case 'html': return <GenuiHtmlView key={key} node={node} zh={zh} identity={identity} {...(repair === undefined ? {} : { repair })} />
-    case 'chart': return <GenuiChartView key={key} node={node} zh={zh} />
-    case 'text': return <p key={key}>{node.content}</p>
-    case 'card': return <section key={key} className="clawGenuiCard"><h4>{node.title}</h4>{node.items.map((child, i) => renderNode(child, i, node.title, zh, { ...identity, path: `${identity.path}.${i}` }, repair))}</section>
-    case 'row': return <div key={key} className="clawGenuiRow">{node.items.map((child, i) => renderNode(child, i, label, zh, { ...identity, path: `${identity.path}.${i}` }, repair))}</div>
-    case 'stat': return <div key={key} className="clawGenuiStat"><span>{node.label}</span><strong>{node.value}</strong></div>
-    case 'table': return <GenuiTable key={key} node={node} label={label} />
-    case 'progress': return <div key={key} className="clawGenuiProgress"><div className="clawGenuiProgressLabel"><span>{node.label}</span><span className="clawGenuiProgressValue">{node.value}%</span></div><progress aria-label={node.label} value={node.value} max={100} /></div>
-    case 'callout': {
-      const tones = zh ? { info: '提示', success: '成功', warning: '注意', error: '错误' } : { info: 'Info', success: 'Success', warning: 'Warning', error: 'Error' }
-      return <aside key={key} className="clawGenuiCallout" data-tone={node.tone}><div className="clawGenuiTone"><span aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6" /><path d={{ info: 'M8 7v4M8 4.5v.1', success: 'm5 8 2 2 4-4', warning: 'M8 4v5M8 11.5v.1', error: 'm6 6 4 4M10 6l-4 4' }[node.tone]} /></svg></span> {tones[node.tone]}</div>{node.content}</aside>
-    }
-    case 'steps': return <ol key={key}>{node.steps.map((step, i) => <li key={i}>{step}</li>)}</ol>
-  }
-}
-
-export interface GenuiResultViewProps {
-  sessionId: string
-  callId: string
-  meta: unknown
-  text: string
-  isError: boolean
-  zh?: boolean
-  repair?: () => Promise<void>
-}
-
-/** Only durable result metadata is eligible; never render incomplete tool args. */
-export function GenuiResultView({ sessionId, callId, meta, text, isError, zh = false, repair }: GenuiResultViewProps) {
-  const parsed = useMemo(() => isError ? undefined : validateGenuiDocument(meta), [isError, meta])
-  if (!parsed?.ok) return <div className="clawGenuiFallback">
-    {!isError && <p className="clawGenuiDiagnostic">{zh ? '此卡片无法显示，以下为保存的文本结果。' : 'This card is unavailable. The saved text result follows.'}</p>}
-    <pre className="clawGenuiFallback">{text}</pre>
-  </div>
-  const inline = parsed.document.items.every(node => node.type === 'html')
-  return <section className={inline ? 'clawGenui clawGenuiInline' : 'clawGenui'} data-genui-session={sessionId} data-genui-call={callId} aria-label={parsed.document.title}>
-    {!inline && <h3>{parsed.document.title}</h3>}
-    {parsed.document.items.map((node, i) => renderNode(node, i, parsed.document.title, zh, { sessionId, callId, path: String(i) }, repair))}
-  </section>
-}
+import { GenuiResultView } from './genui-result.tsx'
+import { genuiResultId, genuiResults } from './genui-results.ts'
+import { inlineGenuiIds } from './genui-placement.ts'
+import { installGenuiInline } from './genui-inline.tsx'
+export { GenuiResultView, type GenuiResultViewProps } from './genui-result.tsx'
+export { genuiResults, latestGenuiResult } from './genui-results.ts'
 
 export function GenuiToolView(props: ToolCallViewProps & { zh?: boolean }) {
   if (props.phase !== 'result') return <p role="status">{props.zh ? '正在生成交互内容…' : 'Generating interactive content…'}</p>
-  // The turn tail owns the interactive instance. Expanding tool history must
+  // The answer owns the interactive instance. Expanding tool history must
   // not run old attempts again or create competing copies of the same iframe.
   return <div className="clawGenuiToolSummary"><p>{props.block.isError
     ? (props.zh ? '本次生成未完成。' : 'This generation attempt did not complete.')
-    : (props.zh ? '已提交交互内容，见本轮回复下方。' : 'Interactive content submitted. See below this turn’s answer.')}</p>
+    : (props.zh ? '已提交交互内容，见本轮回答。' : 'Interactive content submitted. See this turn’s answer.')}</p>
     <details><summary>{props.zh ? '查看工具记录' : 'View tool record'}</summary>
       <pre className="clawGenuiFallback">{props.block.content.filter(block => block.type === 'text').map(block => block.text).join('\n')}</pre>
     </details>
   </div>
 }
 
-const containsHtml = (nodes: GenuiNode[]): boolean => nodes.some(node => node.type === 'html'
-  || (node.type === 'card' || node.type === 'row') && containsHtml(node.items))
-
-/** Unnamed HTML is one replaceable interactive area per turn; explicit IDs stay independent. */
-export function genuiResults(tools: readonly ToolChatData[]): ToolResultNode[] {
-  const calls = new Map<string, ToolResultNode>()
-  const visit = (block: ToolChatData['root']): void => {
-    if ('kind' in block && block.name === GENUI_RENDER_TOOL && !block.isError) {
-      const previous = calls.get(block.callId)
-      if (!previous || block.seq > previous.seq) calls.set(block.callId, block)
-    }
-    for (const child of block.subCalls) visit(child)
-  }
-  for (const tool of tools) visit(tool.root)
-  const results = new Map<string, ToolResultNode>()
-  for (const result of [...calls.values()].sort((a, b) => a.seq - b.seq)) {
-    const parsed = validateGenuiDocument(result.meta)
-    // Invalid updates must not replace a working result; their saved text stays visible separately.
-    const id = parsed.ok ? parsed.document.resultId : undefined
-    const key = id !== undefined ? `result:${id}`
-      : parsed.ok && containsHtml(parsed.document.items) ? 'html:default' : `call:${result.callId}`
-    results.set(key, result)
-  }
-  return [...results.values()]
-}
-
-/** Retained for callers that need the last successful tool event. */
-export function latestGenuiResult(tools: readonly ToolChatData[]): ToolResultNode | undefined {
-  return genuiResults(tools).reduce<ToolResultNode | undefined>((latest, result) =>
-    latest === undefined || result.seq > latest.seq ? result : latest, undefined)
-}
-
 export type GenuiTurnTailProps = PropsRuntime<'conversation.chat.turnTail'> & {
   chat: ObservableSnapshot<ChatSnapshot | undefined>
   zh: boolean
   retry?: (turn: number) => Promise<void>
+  placement?: ObservableSnapshot<boolean>
 }
 
 const EMPTY_TOOL_DATA: readonly ToolChatData[] = []
 const EMPTY_TOOL_SOURCE: ObservableSnapshot<readonly ToolChatData[]> = {
   getSnapshot: () => EMPTY_TOOL_DATA, subscribe: () => () => {},
 }
+const EMPTY_DATA: readonly never[] = []
+const EMPTY_SOURCE = { getSnapshot: () => EMPTY_DATA, subscribe: () => () => {} }
+const NO_PLACEMENT = { getSnapshot: () => false, subscribe: () => () => {} }
 
 function GenuiStatus({ activity, zh, retry, hasResults }: { activity: GenuiActivity; zh: boolean; retry: (() => Promise<void>) | undefined; hasResults: boolean }) {
   const [attempt, setAttempt] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
@@ -164,17 +61,33 @@ function GenuiStatus({ activity, zh, retry, hasResults }: { activity: GenuiActiv
 }
 
 /** The completed answer's public tail stays visible when its process is collapsed. */
-export function GenuiTurnTail({ chat, sessionId, turn, zh, retry }: GenuiTurnTailProps) {
+export function GenuiTurnTail({ chat, sessionId, turn, zh, retry, placement = NO_PLACEMENT }: GenuiTurnTailProps) {
   const snapshot = useSyncExternalStore(listener => chat.subscribe(listener), () => chat.getSnapshot())
   const tools = snapshot?.nodes.turnDataSource(turn.turn, 'tool-call') ?? EMPTY_TOOL_SOURCE
   const data = useSyncExternalStore(listener => tools.subscribe(listener), () => tools.getSnapshot())
-  const results = genuiResults(data)
+  const assistantSource = snapshot?.nodes.turnDataSource(turn.turn, 'assistant-step') ?? EMPTY_SOURCE
+  const processSource = snapshot?.nodes.turnDataSource(turn.turn, 'turn-process') ?? EMPTY_SOURCE
+  const assistants = useSyncExternalStore<readonly AssistantChatData[]>(listener => assistantSource.subscribe(listener), () => assistantSource.getSnapshot())
+  const processes = useSyncExternalStore<readonly TurnProcessChatData[]>(listener => processSource.subscribe(listener), () => processSource.getSnapshot())
+  const enabled = useSyncExternalStore(listener => placement.subscribe(listener), () => placement.getSnapshot())
+  const results = useMemo(() => genuiResults(data), [data])
+  const answerStep = processes[0]?.answerStep
+  const references = useMemo(() => enabled ? inlineGenuiIds(assistants, answerStep) : new Set<string>(), [enabled, assistants, answerStep])
+  let awaitingPlacement = false
+  const visible = results.filter(result => {
+    const id = genuiResultId(result)
+    if (id !== undefined && references.has(id)) return false
+    // Do not start an iframe at the tail and remount it in the answer seconds later.
+    if (enabled && id !== undefined && turn.status === 'open' && answerStep == null) { awaitingPlacement = true; return false }
+    return true
+  })
   const activity = turn.status === 'unknown' ? undefined : genuiActivity(data, turn.status === 'closed' || (snapshot?.legacy?.turnEnds.has(turn.turn) ?? false))
-  if (results.length === 0 && activity === undefined) return null
+    ?? (awaitingPlacement ? 'generating' : undefined)
+  if (visible.length === 0 && activity === undefined) return null
   return <div className="clawGenuiResults">
     {activity === 'failed' && results.length === 0 && snapshot && <GenuiTextFallback snapshot={snapshot} turn={turn.turn} zh={zh} />}
     {activity && <GenuiStatus activity={activity} zh={zh} retry={retry ? () => retry(turn.turn) : undefined} hasResults={results.length > 0} />}
-    {results.map(result => <GenuiResultView key={JSON.stringify([sessionId, result.callId])}
+    {visible.map(result => <GenuiResultView key={JSON.stringify([sessionId, result.callId])}
     sessionId={String(sessionId)} callId={result.callId} meta={result.meta} isError={false} {...(retry === undefined ? {} : { repair: () => retry(turn.turn) })}
     text={result.content.filter(block => block.type === 'text').map(block => block.text).join('\n')} zh={zh} />)}</div>
 }
@@ -192,6 +105,16 @@ export function applyDesktopGenui(ctx: Context): void {
         style.dataset.clawGenui = ''
         style.textContent = GENUI_STYLES
         document.head.appendChild(style)
+        const retry = async (sessionId: Parameters<ISessions['binding']>[0], failedTurn: number) => {
+          const sessions = scope.get('sessions') as unknown as ISessions
+          const target = sessions.binding(sessionId)?.session
+          if (!target) throw new Error('Conversation unavailable')
+          const zh = scope.locale.getSnapshot().active.startsWith('zh')
+          const response = await target.prompt([{ type: 'text', text: zh
+            ? `请修复并重新展示当前对话第 ${failedTurn} 轮无法显示或操作出错的交互内容。检查完整脚本和所有按钮函数，沿用原对话语言和已有说明，直接内联渲染，不要用浏览器页面代替。`
+            : `Fix and redisplay the interactive content in turn ${failedTurn}. Check the complete script and every button handler. Keep the original conversation language and explanation. Render inline instead of opening a browser.` }], 'queue')
+          if (!response.ok) throw new Error(response.error.message)
+        }
         try {
           const stopTool = scope.slots.inject('tool.call.toolview', () => scope.slots.register({
             name: 'tool.call.toolview', key: GENUI_RENDER_TOOL,
@@ -200,29 +123,20 @@ export function applyDesktopGenui(ctx: Context): void {
             return <GenuiToolView {...props} zh={locale.active.startsWith('zh')} />
           }))
           let stopTail: () => void
+          let inline: ReturnType<typeof installGenuiInline> | undefined
           try {
+            inline = installGenuiInline(scope, (id, turn) => retry(id as never, turn))
             stopTail = scope.slots.inject('conversation.chat.turnTail', () => scope.slots.register({
               name: 'conversation.chat.turnTail', id: GENUI_ENTRY, order: 0,
-              inject: sessionId => ({ chat: scope.uiConversation.binding(sessionId).target('chat'),
-                retry: async (failedTurn: number) => {
-                  const sessions = scope.get('sessions') as unknown as ISessions
-                  const target = sessions.binding(sessionId)?.session
-                  if (!target) throw new Error('Conversation unavailable')
-                  const zh = scope.locale.getSnapshot().active.startsWith('zh')
-                  // Address the public Session face directly; a root-scoped
-                  // conversation service cannot submit to this owning session.
-                  const response = await target.prompt([{ type: 'text', text: zh
-                    ? `请修复并重新展示当前对话第 ${failedTurn} 轮无法显示或操作出错的交互内容。检查完整脚本以及所有按钮（包括重置和暂停）的处理函数，沿用原对话语言和已有说明，直接内联渲染，不要用浏览器页面代替。`
-                    : `Fix and redisplay the interactive content in turn ${failedTurn} of this conversation that failed to load or run correctly. Check the complete script and every button handler, including reset and pause. Keep the original conversation language and explanation. Render inline instead of opening a browser.` }], 'queue')
-                  if (!response.ok) throw new Error(response.error.message)
-                },
+              inject: sessionId => ({ chat: scope.uiConversation.binding(sessionId).target('chat'), placement: inline!.available,
+                retry: (turn: number) => retry(sessionId, turn),
               }),
             }, function LocalizedGenuiTurnTail(props) {
               const locale = useSyncExternalStore(listener => scope.locale.subscribe(listener), () => scope.locale.getSnapshot())
               return <GenuiTurnTail {...props} zh={locale.active.startsWith('zh')} />
             }))
-          } catch (cause) { stopTool(); throw cause }
-          dispose = () => { stopTail(); stopTool(); style.remove() }
+          } catch (cause) { inline?.dispose(); stopTool(); throw cause }
+          dispose = () => { stopTail(); inline?.dispose(); stopTool(); style.remove() }
         } catch (cause) { style.remove(); throw cause }
       }
       const stop = settings.subscribe(reconcile)
