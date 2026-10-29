@@ -104,7 +104,7 @@ async function hostFixture() {
     expect(spec.delivery).toBe('caller')
     const session = Session.create(SessionId(spec.childId))
     const child = { id: spec.childId, session,
-      ctx: { systemPrompt: { section: vi.fn(), getSectionOrder: () => 0 }, tools: { restrict: vi.fn() } } } as unknown as Agent
+      ctx: { systemPrompt: { section: vi.fn(), getSectionOrder: () => 0 }, tools: { restrict: vi.fn(), guard: vi.fn() } } } as unknown as Agent
     for (const listener of createdListeners) listener({ agent: child })
     const composition = session.snapshotEvents().map(pluginRecordOf).find(record => record?.type === 'plugin:clawclaw/expert-composition')?.data as { persona: string; deniedTools: string[]; allowedTools?: string[] }
     starts.push({ ...spec.request, persona: composition.persona, toolFilter: { deny: composition.deniedTools, ...(composition.allowedTools === undefined ? {} : { allow: composition.allowedTools }) } })
@@ -141,7 +141,7 @@ async function hostFixture() {
     webServer: {}, logger: { warn: vi.fn(), error: vi.fn() },
   } as unknown as Context
   apply(ctx, { root: catalog, provider: 'spawn', divisions: ['research'], maxDepth: 3 })
-  const parent = { session: { header: { cwd: root } } } as unknown as Agent
+  const parent = { session: { header: { cwd: root } }, ctx: { get: () => undefined } } as unknown as Agent
   const execute = async (name: string, args: Record<string, unknown> = {}, agent: Agent = parent) => {
     const tool = tools.get(name)
     if (!tool) throw new Error(`Tool was not registered: ${name}`)
@@ -340,7 +340,7 @@ describe('Plugin Team Host tools', () => {
     expect(fixture.starts).toHaveLength(0)
     expect(decision.kind).toBe('enter')
     if (decision.kind !== 'enter') throw new Error('Expected admission')
-    expect(decision.messages[0]?.content).toEqual([{ type: 'text', text: 'Investigate this report.' }, image])
+    expect(decision.messages[0]?.content).toEqual([{ type: 'text', text: '【Expert team: Research Team】\nInvestigate this report.' }, image])
     expect(decision.messages.at(-1)).toMatchObject({
       source: { kind: 'clawclaw-capability-result', form: 'instructions' },
       content: [{ type: 'text', text: expect.stringContaining('summon_expert_team') }],
@@ -353,6 +353,23 @@ describe('Plugin Team Host tools', () => {
     await expect(fixture.prepareStep([createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: `${marker} Research.` }] })], {
       session: { header: { parentSession: 'parent' } },
     } as unknown as Agent)).rejects.toThrow('main conversation')
+  })
+
+  it('uses a fresh directory and ordered phases for pipeline teams', async () => {
+    const fixture = await hostFixture()
+    const root = await writeTeamPackage(fixture.home, '1.0.0')
+    const manifestPath = join(root, '.clawclaw-plugin/plugin.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    manifest.teamInfo.execution = 'pipeline'
+    await writeFile(manifestPath, JSON.stringify(manifest))
+    const first = JSON.parse(String((await fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Create a report.' })).report))
+    const second = JSON.parse(String((await fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Create another report.' })).report))
+    expect(first.runDirectory).not.toBe(second.runDirectory)
+    expect(fixture.starts).toHaveLength(8)
+    expect(fixture.starts.slice(0, 4).every(call => call.cwd === first.runDirectory)).toBe(true)
+    expect(fixture.starts.slice(4).every(call => call.cwd === second.runDirectory)).toBe(true)
+    expect(fixture.starts[0]?.toolFilter).toMatchObject({ allow: [] })
+    expect(fixture.starts[1]?.toolFilter).not.toHaveProperty('allow')
   })
 
   it('registers the Plugin Team library as a first-class Host service', async () => {

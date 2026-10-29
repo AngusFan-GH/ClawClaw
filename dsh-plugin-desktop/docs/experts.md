@@ -43,6 +43,23 @@ receipt must not mark an unloaded expert catalog as loaded, and an older query
 must not overwrite a newer settings receipt. The live UI and cache regression
 tests cover these boundaries.
 
+Team selections are admitted before delegation begins. The user message retains
+a readable team label for history replay; its execution ID is carried by a
+separate instruction directing the normal `get_expert_team` and
+`summon_expert_team` tools. Admission never waits for the team to finish.
+
+Plugin teams default to parallel member work. A package may declare
+`teamInfo.execution: "pipeline"` to run planning, source production by the lead,
+members in `teamInfo.memberAgents` order, and final synthesis. Every member
+receives the completed upstream handoffs. An upstream failure skips downstream
+members. The bundled document team uses this mode for writing, formatting, and
+conversion, with a fresh output directory for each invocation. Its personas use
+these direct handoffs rather than another task's legacy pipeline state.
+
+Planning cannot execute work tools. Expert activations also install a scoped
+execution guard because preset-local delegation tools are outside the inherited
+tool mask; these restrictions are restored when an expert session resumes.
+
 ### Expert execution
 
 An expert run is assembled from three parts at summon time:

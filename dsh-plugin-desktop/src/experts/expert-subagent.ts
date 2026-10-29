@@ -30,6 +30,14 @@ function applyComposition(agent: Agent, value: ExpertComposition): void {
     text: value.persona,
   })
   agent.ctx.tools.restrict({ deny: value.deniedTools, ...(value.allowedTools === undefined ? {} : { allow: value.allowedTools }) })
+  // Presets can register agent-local tools after the inherited-tool mask.
+  // A monotonic guard also covers that surface, including native delegation.
+  const allowed = value.allowedTools === undefined ? undefined : new Set(value.allowedTools)
+  agent.ctx.tools.guard(exec => {
+    if (allowed !== undefined && !allowed.has(exec.name)) return 'This planning phase cannot execute tools. Return the plan using the supplied task and roster.'
+    if (['subagent', 'subagent_fork', 'spawn_teammate'].includes(exec.name)) return 'Expert members cannot create additional subagents. Return gaps to the team coordinator.'
+    return undefined
+  })
 }
 
 /** Restore child-owned expert overrides before a resumed Agent can execute. */

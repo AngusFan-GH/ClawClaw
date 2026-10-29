@@ -47,7 +47,8 @@ import { createDesktopSkillsApi } from '../../client/skills-api.js'
 import { createDesktopMcpApi } from '../../client/mcp-api.js'
 import { skillInsertion } from '../../client/conversation-skills.js'
 import { capabilitySubmissionMarker } from '../capability-submission.js'
-import { capabilityTextRule } from './capability-text.js'
+import { capabilityTeamLabelRule, capabilityTextRule } from './capability-text.js'
+import { ReferenceChip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ExpertCapabilityRegistry } from './capability-registry.js'
 import { expertCapabilityHealth, type ExpertCapabilityHealth } from './capability-options.js'
 import { SkillsSettingsSection } from '../../client/SkillsSettingsSection.js'
@@ -1685,6 +1686,10 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   await readEnabled(remote).catch((error: unknown) => console.warn('[clawclaw-experts] 初始名册读取失败，设置页可重试：', error))
   ctx.effect(() => installLegacyTeamReferenceGuard(), 'clawclaw-experts: legacy team message references')
   ctx.inject(['uiConversation'], scope => {
+    scope.uiConversation.userText.register(capabilityTeamLabelRule)
+    scope.slots.inject('conversation.user.text.node', () => scope.slots.register({
+      name: 'conversation.user.text.node', key: 'clawclaw-team-label',
+    }, ({ node }) => React.createElement(ReferenceChip, { appearance: 'session', label: node.data.label })))
     scope.uiConversation.userText.register(capabilityTextRule({
       expert: id => {
         const expert = catalogState(remote).experts.find(item => item.slug === id)

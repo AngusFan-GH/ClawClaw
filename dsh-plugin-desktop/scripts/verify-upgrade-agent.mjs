@@ -5,6 +5,7 @@ import { DESKTOP_RESPONSE_POLICY } from '../lib/response-policy.js'
 import { randomUUID } from 'node:crypto'
 import { LlmAdapter, ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, pluginRecordOf } from '@deepseek-ai/dsh-session'
+import { capabilitySubmissionMarker } from '../src/experts/capability-submission.ts'
 
 /** Read the loop-built system-role message rather than the one-shot system field. */
 function requestSystem(request) {
@@ -89,6 +90,67 @@ export async function verifyUpgradeExpertRun(ctx, cwd, expert) {
   } finally {
     await parent.dispose()
     registration()
+  }
+}
+
+/** Exercise composer admission and every team activation against the real built Profile. */
+export async function verifyUpgradeExpertTeamRun(ctx, cwd) {
+  const teamId = 'plugin-team:migrated-document-production-team'
+  const teams = ctx.get('agencyAgentsTeams')
+  assert.ok(teams, 'team library is unavailable')
+  const snapshot = await teams.snapshot()
+  await teams.recall(teamId, snapshot.revision)
+  const childRequests = []
+  class TeamAdapter extends LlmAdapter {
+    resolveModel(provider, model) { return Promise.resolve({ provider, id: model, name: model }) }
+    async *stream(request) {
+      if (String(request.sessionId).startsWith('expert-')) childRequests.push(request)
+      const text = `OFFLINE_TEAM_PHASE_${childRequests.length}_COMPLETE`
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'text-delta', index: 0, text }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+      yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    }
+  }
+  const release = ctx.llm.registerAdapter(['upgrade-team-smoke'], new TeamAdapter())
+  const parent = await ctx.agents.create({
+    sessionId: SessionId(`upgrade-team-parent-${randomUUID()}`), meta: { cwd, agentPreset: 'standard' },
+    agentOptions: { provider: 'upgrade-team-smoke', model: 'offline' },
+    setup: async scope => { await ctx.agentPresets.mount(scope, 'standard') },
+  })
+  try {
+    const marker = capabilitySubmissionMarker({ expertIds: [], skillNames: [], teamId })
+    parent.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: `${marker}\nCreate an offline test report.` }] }))
+    await parent.agent.whenIdle()
+    const events = parent.agent.session.snapshotEvents()
+    assert.ok(events.some(event => event.type === 'user/message' && event.data.source.kind === 'user'
+      && event.data.content.some(block => block.type === 'text' && /【(?:Expert team:|专家团：)/u.test(block.text))), 'durable team label is missing')
+    assert.ok(!events.some(event => event.type === 'subagent/catalog'), 'team work blocked message admission')
+    for (const name of ['get_expert_team', 'summon_expert_team']) {
+      const result = await ctx.tools.execute({ name, arguments: { team: teamId, ...(name === 'summon_expert_team' ? { task: 'Create an offline test report.' } : {}) },
+        callId: ToolCallId(`team-smoke-${name}`), agent: parent.agent, signal: AbortSignal.timeout(30_000) })
+      assert.equal(result.isError, false, JSON.stringify(result))
+    }
+    assert.equal(childRequests.length, 5, 'plan, source production, two members and synthesis did not all complete')
+    assert.ok(childRequests[0].tools.every(tool => tool.name === 'subagent'), `planning exposed work tools: ${childRequests[0].tools.map(tool => tool.name).join(', ')}`)
+    assert.ok(childRequests[1].tools.length > 0, 'source production tools were disabled with planning tools')
+    assert.ok(JSON.stringify(childRequests[3].messages).includes('OFFLINE_TEAM_PHASE_3_COMPLETE'), 'conversion did not receive formatting handoff')
+    const planner = await ctx.agents.resume({ resumeSessionId: SessionId(String(childRequests[0].sessionId)),
+      agentOptions: { provider: 'upgrade-team-smoke', model: 'offline' },
+      setup: async scope => { await ctx.agentPresets.mount(scope, 'standard') } })
+    try {
+      const denied = await ctx.tools.execute({ name: 'subagent', arguments: { description: 'Unexpected planner delegation', prompt: 'This must be denied.' },
+        callId: ToolCallId('planner-delegation-denied'), agent: planner.agent, signal: AbortSignal.timeout(10_000) })
+      assert.equal(denied.isError, true, 'preset-local planner delegation was allowed')
+      assert.match(JSON.stringify(denied.content), /planning phase cannot execute tools/u)
+      assert.equal(childRequests.length, 5, 'planner guard started an extra model request')
+    } finally { await planner.dispose() }
+    assert.ok(!JSON.stringify(events.filter(event => event.type === 'user/message' && event.data.source.kind === 'user')).includes('<!--clawclaw-capabilities:'), 'wire carrier reached durable user text')
+    console.log('verify-upgrade-team: composer admission, visible tool execution, tool-free planning and all team phases passed')
+  } finally {
+    await parent.dispose()
+    release()
   }
 }
 

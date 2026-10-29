@@ -10,8 +10,9 @@ function fixture() {
   const session = Session.create(SessionId('expert-child'))
   const section = vi.fn()
   const restrict = vi.fn()
+  const guard = vi.fn()
   const child = {
-    id: '', ctx: { systemPrompt: { section, getSectionOrder: () => 10 }, tools: { restrict } },
+    id: '', ctx: { systemPrompt: { section, getSectionOrder: () => 10 }, tools: { restrict, guard } },
     session,
   } as unknown as Agent
   const dispose = vi.fn(async () => {})
@@ -29,7 +30,7 @@ function fixture() {
       return () => { listeners.delete(callback) }
     },
   } as unknown as Context
-  return { ctx, listeners, session, child, section, restrict, dispose, settled, startActivation, getProvider }
+  return { ctx, listeners, session, child, section, restrict, guard, dispose, settled, startActivation, getProvider }
 }
 
 describe('DSH activation expert adaptation', () => {
@@ -72,6 +73,9 @@ describe('DSH activation expert adaptation', () => {
       parent: {} as Agent, prompt: [], persona: 'Plan only', toolFilter: { deny: [], allow: [] },
     })
     expect(f.restrict).toHaveBeenCalledWith({ deny: [], allow: [] })
+    const guard = f.guard.mock.calls[0]![0] as (exec: { name: string }) => string | undefined
+    expect(guard({ name: 'subagent' })).toContain('cannot execute tools')
+    expect(guard({ name: 'bash' })).toContain('cannot execute tools')
     f.restrict.mockClear()
     installExpertCompositionRecovery(f.ctx)
     for (const callback of f.listeners) callback({ agent: f.child })

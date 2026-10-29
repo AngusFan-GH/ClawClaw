@@ -11,6 +11,7 @@
   "expertType": "team",
   "agentName": "doc-writer",
   "teamInfo": {
+    "execution": "pipeline",
     "leadAgent": "doc-writer",
     "memberAgents": [
       "doc-formatter",

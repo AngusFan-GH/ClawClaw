@@ -47,6 +47,7 @@ export const expertPluginManifestSchema = z.object({
   teamInfo: z.object({
     leadAgent: packageNameSchema,
     memberAgents: z.array(packageNameSchema),
+    execution: z.enum(['parallel', 'pipeline']).optional(),
   }).passthrough().optional(),
   members: z.array(memberSchema).optional(),
   profession: expertPluginLocalizedTextSchema,
@@ -101,6 +102,7 @@ export interface ExpertPluginTeamDefinition {
   readonly quickPrompts: readonly ExpertPluginLocalizedText[]
   readonly leadAgentSlug: string
   readonly memberAgentSlugs: readonly string[]
+  readonly execution?: 'parallel' | 'pipeline'
   readonly skills: readonly ExpertCapabilityBinding[]
   readonly connectors: readonly ExpertCapabilityBinding[]
   readonly conversationCreated?: boolean
@@ -413,7 +415,8 @@ export function projectExpertPluginTeam(pkg: ExpertPluginPackage): ExpertPluginT
     tags: manifest.tags ?? [],
     quickPrompts: manifest.quickPrompts ?? [],
     leadAgentSlug: lead.expert.slug,
-    memberAgentSlugs: projected.filter(agent => agent.role === 'member').map(agent => agent.expert.slug),
+    memberAgentSlugs: manifest.teamInfo!.memberAgents.map(id => projected.find(agent => agent.packageAgentId === id)!.expert.slug),
+    ...(manifest.teamInfo!.execution === undefined ? {} : { execution: manifest.teamInfo!.execution }),
     skills: capabilities.skills,
     connectors: capabilities.mcpServers,
   }

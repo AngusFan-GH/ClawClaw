@@ -30,7 +30,7 @@ import { importLegacyDesktopSetupWizardSettings } from '../lib/setup-wizard-sett
 import { verifyChannelHarness } from './verify-channel-harness.mjs'
 import { verifyGitGraph } from './verify-git-graph.mjs'
 import { verifyGenui } from './verify-genui.mjs'
-import { verifyUpgradeExpertRun, verifyDesktopSchedule } from './verify-upgrade-agent.mjs'
+import { verifyUpgradeExpertRun, verifyUpgradeExpertTeamRun, verifyDesktopSchedule } from './verify-upgrade-agent.mjs'
 import { selectOptionalBundles, verifyOptionalInventory, verifyAutoSelection, verifyOptionalRenderer } from './verify-optional-plugins.mjs'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
@@ -432,6 +432,7 @@ try {
   const hostServiceProbe = ctx.get(HOST_SERVICE_PROBE_KEY)
   await verifyContextRequests(ctx, home)
   await verifyUpgradeExpertRun(ctx, home, firstExpert)
+  await verifyUpgradeExpertTeamRun(ctx, home)
   await verifyDesktopSchedule(ctx)
   await verifyChannelHarness(ctx)
   if (hostServiceProbe?.current?.name !== 'desktop'

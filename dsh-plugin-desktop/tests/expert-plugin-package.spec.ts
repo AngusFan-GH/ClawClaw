@@ -74,7 +74,7 @@ describe('ClawClaw expert plugin packages', () => {
     ])
     expect(packages.find(pkg => pkg.manifest.name === 'migrated-document-production-team')?.manifest).toMatchObject({
       expertType: 'team',
-      teamInfo: { leadAgent: 'doc-writer', memberAgents: ['doc-formatter', 'doc-converter'] },
+      teamInfo: { leadAgent: 'doc-writer', memberAgents: ['doc-formatter', 'doc-converter'], execution: 'pipeline' },
     })
   })
   it('loads and projects an Agent package without rewriting its fields', async () => {

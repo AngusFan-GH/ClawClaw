@@ -41,7 +41,7 @@ import { createUserMessage, freezeMessage, type UserMessage } from '@deepseek-ai
 import type {} from '@deepseek-ai/dsh-skill'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { existsSync } from 'node:fs'
-import { open, readdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, open, readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -1139,14 +1139,26 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
             const provider = ctx.subagents.getProvider(config.provider);
             if (provider === undefined || !supportsExpertComposition(provider) || (maxDepth !== undefined && !provider.capabilities.depthLimit))
                 throw new Error(teamTx("当前子代理服务不支持该专家团所需的身份、工具过滤或深度限制。"));
+            let runDirectory: string | undefined;
+            if (pluginTeam.execution === 'pipeline') {
+                const parent = exec.agent!;
+                const cwd = parent.ctx.get('workingDirectory')?.get(parent.session) ?? parent.session.header.cwd ?? process.cwd();
+                const outputRoot = join(cwd, 'output');
+                await mkdir(outputRoot, { recursive: true });
+                runDirectory = await mkdtemp(join(outputRoot, 'expert-team-'));
+            }
             const result = await executeExpertPluginTeam({
                 team: pluginTeam, experts: catalog.experts, enabled: catalog.enabled, task: String(args.task ?? ''), signal: exec.signal,
+                ...(runDirectory === undefined ? {} : { runDirectory }),
                 readPersona: async expert => (await personaSource.getPrompt(expert.slug, expert.division, activeLocale())).prompt,
                 runAgent: async (agentRun: ExpertPluginAgentRun) => {
                     exec.signal?.throwIfAborted();
                     const composition = await resolveExpertComposition(ctx, agentRun.expert, exec.agent!, agentRun.persona, exec.signal);
                     const run = await startExpertSubagent(ctx, config.provider, { label: agentRun.expert.name, parent: exec.agent!,
-                        prompt: [{ type: 'text', text: agentRun.prompt }], persona: sanitize(composition.persona),
+                        ...(runDirectory === undefined ? {} : { cwd: runDirectory }),
+                        prompt: [{ type: 'text', text: [agentRun.prompt, ...(runDirectory === undefined ? [] : [
+                            `Bundled workflow resources (read-only): ${resolve(BUNDLED_PLUGIN_ROOT, '../skills')}. Read named SKILL.md files directly here when they are not invocable through the Skill tool. Never infer resource paths from member IDs or search the filesystem.`,
+                        ])].join('\n\n') }], persona: sanitize(composition.persona),
                         toolFilter: { deny: composition.deniedTools, ...(agentRun.phase === 'plan' ? { allow: [] } : {}) }, ...(maxDepth === undefined ? {} : { maxDepth }), signal: exec.signal });
                     try {
                         const value = await run.result;
@@ -1155,7 +1167,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                     } finally { await run.dispose(); }
                 },
             });
-            return { report: JSON.stringify({ ...result, runtime: 'lead' }) };
+            return { report: JSON.stringify({ ...result, runtime: 'lead', ...(runDirectory === undefined ? {} : { runDirectory }) }) };
         }
         const team = snapshot.teams.filter(candidate => candidate.runtime.mode === 'coordinator').map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
         if (!team || !isTeamRecalled(team, snapshot.enabledExperts, snapshot.recalledTeams))
@@ -1204,7 +1216,7 @@ ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecisio
     const decision = await next();
     if (decision.kind === 'reject') return decision;
     const selections: Array<ReturnType<typeof parseCapabilitySubmission>['selection']> = [];
-    const rewritten = decision.messages.map((message): UserMessage => {
+    let rewritten = decision.messages.map((message): UserMessage => {
         if (message.source.kind !== 'user') return message;
         const content = message.content.map(block => {
             if (block.type !== 'text') return block;
@@ -1240,6 +1252,16 @@ ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecisio
         const selected = snapshot.teams.find(team => team.id === teamIds[0]);
         if (!selected || !isTeamRecalled(selected, snapshot.enabledExperts, snapshot.recalledTeams))
             throw new Error(teamTx("专家团不存在或成员未就绪。"));
+        const label = activeLocale() === 'en' ? `Expert team: ${selected.name}` : `专家团：${selected.name}`;
+        rewritten = rewritten.map((message, index) => {
+            if (message.source.kind !== 'user') return message;
+            const content = message.content.map((block, blockIndex) => {
+                const original = decision.messages[index]?.content[blockIndex];
+                return block.type === 'text' && original?.type === 'text' && parseCapabilitySubmission(original.text).selection.teamId !== undefined
+                    ? { ...block, text: `【${label.replace(/[】\r\n]/gu, ' ')}】\n${block.text}` } : block;
+            });
+            return freezeMessage({ ...message, content });
+        });
         // Admission must finish before any long-running delegation. Let the normal
         // tool lifecycle publish progress, failures and cancellation in the chat.
         injections.push(createUserMessage({
