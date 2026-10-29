@@ -584,10 +584,12 @@ function normalizeExpertName(value: unknown): string {
   return String(value ?? '').trim().toLowerCase()
 }
 
-/** 仅按本地化名称解析智能体；名称重名时拒绝调用，防止召唤到错误角色。 */
+/** 优先精确匹配输入框提交的稳定 ID；名称重名时拒绝调用，防止召唤到错误角色。 */
 export function resolveExpert<T extends { readonly slug: string; readonly name: string; readonly nameEn?: string }>(experts: readonly T[], query: unknown, locale: LocaleId = 'zh'): T {
   const q = normalizeExpertName(query)
   if (q.length === 0) throw new Error(formatHost(locale, 'error.expertRequired'))
+  const exactIds = experts.filter(expert => normalizeExpertName(expert.slug) === q)
+  if (exactIds.length === 1) return exactIds[0]!
   const exactNames = experts.filter((expert) => normalizeExpertName(expert.name) === q || normalizeExpertName(expert.nameEn) === q)
   if (exactNames.length === 1) return exactNames[0]!
   const matches = exactNames.length > 1

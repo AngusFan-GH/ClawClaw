@@ -12,6 +12,7 @@ import {
   clawClawPluginLibraryRoot,
   loadCatalog,
   readLocalizedExpertPrompt,
+  resolveExpert,
   resolveExpertComposition,
   teamRequiresToolFilter,
 } from '../src/experts/index.ts'
@@ -59,6 +60,25 @@ function nativeService(): NativeTeamService {
 }
 
 describe('ClawClaw experts', () => {
+  it('resolves composer IDs and localized names to the same catalog expert', async () => {
+    const catalog = await loadCatalog(catalogRoot, DEFAULT_DIVISIONS)
+    const expert = catalog.get('product-trend-researcher')!
+    for (const query of [expert.slug, expert.name, expert.nameEn, ` ${expert.slug.toUpperCase()} `]) {
+      expect(resolveExpert([...catalog.values()], query)).toBe(expert)
+    }
+  })
+
+  it('matches IDs exactly before names while preserving ambiguous-name errors', () => {
+    const experts = [
+      { slug: 'trend-researcher', name: '趋势研究员', nameEn: 'Trend Researcher' },
+      { slug: 'other-researcher', name: 'trend-researcher', nameEn: 'Other Researcher' },
+    ]
+    expect(resolveExpert(experts, 'trend-researcher')).toBe(experts[0])
+    expect(() => resolveExpert(experts, 'researcher', 'en')).toThrow('Ambiguous expert')
+    expect(() => resolveExpert(experts, 'other-', 'en')).toThrow('No expert matched')
+    expect(() => resolveExpert(experts, '', 'en')).toThrow()
+  })
+
   it('keeps expert plugin packages in the ClawClaw data directory', () => {
     expect(clawClawPluginLibraryRoot(resolve('/clawclaw-data'))).toBe(join(resolve('/clawclaw-data'), 'plugins', 'marketplaces'))
     expect(clawClawPluginLibraryRoot(resolve('/clawclaw-data'))).toBe(join(resolve('/clawclaw-data'), 'plugins', 'marketplaces'))

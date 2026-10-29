@@ -251,6 +251,25 @@ describe('Plugin Team Host tools', () => {
     expect(expert.mcpServers.some(item => item.name === 'notion')).toBe(false)
   })
 
+  it('runs a composer expert ID through the Host and still rejects disabled experts', async () => {
+    const fixture = await hostFixture()
+    const library = fixture.services.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary
+    await expect(fixture.execute('summon_expert', { expert: 'base', task: 'Analyze the report.' })).rejects.toThrow(/disabled/i)
+    expect(fixture.starts).toHaveLength(0)
+    const catalog = await library.catalog()
+    await library.setEnabled([...catalog.enabled, 'base'], catalog.revision)
+    vi.spyOn(fixture.ctx.skills, 'get').mockResolvedValue({
+      name: 'evidence-research', content: 'Research evidence.', invocation: { modelInvocable: true },
+    } as never)
+
+    await fixture.execute('summon_expert', { expert: 'base', task: 'Analyze the report.' })
+    expect(fixture.starts).toHaveLength(1)
+    expect(fixture.starts[0]).toMatchObject({
+      persona: expect.stringContaining('Base persona.'),
+      prompt: [{ type: 'text', text: 'Analyze the report.' }],
+    })
+  })
+
   it('rejects a required missing Skill before starting even the team lead', async () => {
     const fixture = await hostFixture()
     const root = await writeTeamPackage(fixture.home, '1.0.0')
