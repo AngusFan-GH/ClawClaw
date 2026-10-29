@@ -40,7 +40,7 @@ import { DEFAULT_EXPERT_EMOJI, type CustomExpertInput, type CatalogSnapshot } fr
 import { CustomExpertEditor, CustomDeleteDialog, CUSTOM_EDITOR_CSS } from './custom-editor.js'
 import { acceptEnabled, acceptCatalog, catalogState, refreshCatalog, subscribeCatalog, type ExpertView as CatalogExpertView } from './catalog.js'
 import { acceptTeamSnapshot, refreshTeams, teamState } from './team-cache.js'
-import { installNativeTeamNames } from './native-team-names.js'
+import { installNativeTeamNames, legacyExpertTeamNames } from './native-team-names.js'
 import { installLegacyTeamReferenceGuard } from './legacy-team-reference.js'
 import type { AgencyCatalogRemote } from './remote.js'
 import { createDesktopSkillsApi } from '../../client/skills-api.js'
@@ -1702,14 +1702,16 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   })
   ctx.effect(() => {
     const names = installNativeTeamNames(async () => {
-      if (!remote.getTeams) return new Map<string, string>()
+      const experts = catalogState(remote).experts
+      const labels = legacyExpertTeamNames(experts, getActive())
+      if (!remote.getTeams) return labels
       const teamsRemote = remote as TeamRemote
       const snapshot = teamState(teamsRemote) ?? await refreshTeams(teamsRemote)
-      const experts = catalogState(remote).experts
-      return new Map(Object.entries(snapshot.nativeMembers ?? {}).flatMap(([identity, slug]) => {
+      for (const [identity, name] of Object.entries(snapshot.nativeMembers ?? {}).flatMap(([identity, slug]) => {
         const expert = experts.find(item => item.slug === slug && !item.conflict)
         return expert ? [[identity, displayName(expert, getActive())] as const] : []
-      }))
+      })) labels.set(identity, name)
+      return labels
     }, error => console.warn('[clawclaw-experts] 原生成员显示名读取失败：', error))
     const localeDispose = ctx.locale.subscribe(() => { void names.refresh() })
     const catalogDispose = subscribeCatalog(remote, () => { void names.refresh() })
