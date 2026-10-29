@@ -87,7 +87,7 @@ describe('GenUI Host integration', () => {
       expect(JSON.stringify(rejected.content)).toContain('document_json')
       expect(JSON.stringify(rejected.content)).toContain('Do not open a browser')
       const checked = await invoke(GENUI_VALIDATE_TOOL, { document_json: JSON.stringify(document) })
-      expect(checked.content).toEqual([{ type: 'text', text: JSON.stringify({ ok: true, format: GENUI_FORMAT }) }])
+      expect(JSON.parse((checked.content[0] as { text: string }).text)).toMatchObject({ ok: true, format: GENUI_FORMAT, next_step: expect.stringContaining('Call clawclaw_render_ui now') })
       const rendered = await invoke(GENUI_RENDER_TOOL, { document_json: JSON.stringify(document) })
       expect(rendered.isError).toBe(false)
       expect(rendered.meta).toEqual(document)

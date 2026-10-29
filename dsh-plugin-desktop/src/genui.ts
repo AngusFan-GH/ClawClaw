@@ -5,6 +5,7 @@ import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-settings'
 import { GENUI_FORMAT, GENUI_RENDER_TOOL, GENUI_VALIDATE_TOOL, GENUI_LIMITS, type GenuiSettings } from './genui-contract.ts'
+import { genuiPresentationGuard } from './genui-presentation-policy.ts'
 import { applyGenuiState } from './genui-state.ts'
 import { genuiText, validateGenuiDocument } from './genui-core.ts'
 
@@ -69,7 +70,7 @@ export function createGenuiTool(mode: 'render' | 'validate', enabled: () => bool
       }
       const parsed = parseError === undefined ? validateGenuiDocument(input)
         : { ok: false as const, diagnostics: [{ path: '$.document_json', message: parseError }] }
-      if (mode === 'validate') return parsed.ok ? { ok: true, format: GENUI_FORMAT } : { ...parsed, hint: retry }
+      if (mode === 'validate') return parsed.ok ? { ok: true, format: GENUI_FORMAT, next_step: 'Validation only; nothing has been displayed. Call clawclaw_render_ui now with the same document_json to show it in this conversation. Do not switch to a local browser.' } : { ...parsed, hint: retry }
       if (!parsed.ok) throw new TypeError(parsed.diagnostics.map(d => `${d.path}: ${d.message}`).join('\n') + '\n' + retry)
       return parsed.document
     },
@@ -87,6 +88,7 @@ export function apply(ctx: Context): void {
         if (!settings.get().enabled) { clear(); return }
         if (active.length > 0) return
         try {
+          active.push(scope.tools.guard(genuiPresentationGuard))
           active.push(scope.tools.register(createGenuiTool('render', () => settings.get().enabled)))
           active.push(scope.tools.register(createGenuiTool('validate', () => settings.get().enabled)))
           active.push(scope.systemPrompt.section({ name: 'clawclaw:genui',
