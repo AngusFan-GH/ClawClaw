@@ -454,7 +454,7 @@ describe('Plugin Team Host tools', () => {
     expect(fixture.starts.slice(4).every(call => call.cwd === second.runDirectory)).toBe(true)
     expect(fixture.starts[0]?.toolFilter).toMatchObject({ allow: [] })
     expect(fixture.starts[1]?.toolFilter).not.toHaveProperty('allow')
-    expect(fixture.starts.slice(0, 4).map(call => call.label)).toEqual(['Research Lead · Planning', 'Research Lead · Writing', 'Evidence Analyst · Working', 'Research Lead · Synthesis'])
+    expect(fixture.starts.slice(0, 4).map(call => call.label)).toEqual(['Research Lead', 'Research Lead', 'Evidence Analyst', 'Research Lead'])
   })
 
   it('admits an expert selection with its attachments and persistent label without running it early', async () => {

@@ -1152,10 +1152,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                 runAgent: async (agentRun: ExpertPluginAgentRun) => {
                     exec.signal?.throwIfAborted();
                     const composition = await resolveExpertComposition(ctx, agentRun.expert, exec.agent!, agentRun.persona, exec.signal);
-                    const phase = activeLocale() === 'en'
-                        ? { plan: 'Planning', produce: 'Writing', member: 'Working', synthesize: 'Synthesis' }[agentRun.phase]
-                        : { plan: '规划', produce: '成稿', member: '执行', synthesize: '汇总' }[agentRun.phase];
-                    const run = await startExpertSubagent(ctx, config.provider, { label: `${localizedExpertName(agentRun.expert, activeLocale())} · ${phase}`, parent: exec.agent!,
+                    const run = await startExpertSubagent(ctx, config.provider, { label: localizedExpertName(agentRun.expert, activeLocale()), parent: exec.agent!,
                         ...(runDirectory === undefined ? {} : { cwd: runDirectory }),
                         prompt: [{ type: 'text', text: [agentRun.prompt, ...(runDirectory === undefined ? [] : [
                             `Bundled workflow resources (read-only): ${resolve(BUNDLED_PLUGIN_ROOT, '../skills')}. Read named SKILL.md files directly here when they are not invocable through the Skill tool. Never infer resource paths from member IDs or search the filesystem.`,
