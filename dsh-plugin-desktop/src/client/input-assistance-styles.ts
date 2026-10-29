@@ -1,29 +1,29 @@
 import { COMPOSER_ACTION_CSS } from './composer-action-styles.ts'
 
 export const INPUT_ASSISTANCE_CSS = COMPOSER_ACTION_CSS + `
-/* Generated inline content participates in the real paragraph's wrapping,
-   auto-height and scrollport, while remaining outside editor text/history. */
-/* Lexical leaves a freshly mounted/cleared root childless until its first
-   edit. Render there too; continuations always have a paragraph already. */
-[data-claw-ai-suggestion] [contenteditable="true"]:empty::after,
-[data-claw-ai-suggestion] [contenteditable="true"] > p:last-child::after {
-  content:var(--dsh-ai-suggestion-text);
-  content:var(--dsh-ai-suggestion-text) / "";
+/* Keep suggestions outside the editable line box: a fresh empty root and
+   the empty paragraph left after deletion must position the caret identically.
+   The placeholder shares the editor's origin and grows the scrollport. */
+[data-claw-ai-suggestion] [data-input-scroll] > :has(> [data-composer-placeholder]) {
+  display:grid; min-width:0;
 }
+[data-claw-ai-suggestion] [data-input-scroll] > * > :is([contenteditable="true"], [data-composer-placeholder]) {
+  grid-area:1 / 1; min-width:0; align-self:start;
+}
+[data-claw-ai-suggestion] [data-composer-placeholder] {
+  position:static; inset:auto; box-sizing:border-box; padding:4px 8px 0 14px;
+  font-family:var(--dsw-font-family); font-size:inherit; line-height:inherit;
+  display:block; white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal;
+  overflow:visible; text-overflow:clip; -webkit-line-clamp:unset; line-clamp:unset;
+}
+/* Continuations participate in the real paragraph's wrapping and scrollport,
+   while remaining outside editor text/history. */
 .dshAiContinuationScope[data-claw-ai-continuation] [contenteditable="true"]:focus > p:last-child::after {
   content:var(--dsh-ai-continuation-text);
   content:var(--dsh-ai-continuation-text) / "";
-}
-[data-claw-ai-suggestion] [contenteditable="true"]:empty::after,
-[data-claw-ai-suggestion] [contenteditable="true"] > p:last-child::after,
-.dshAiContinuationScope[data-claw-ai-continuation] [contenteditable="true"]:focus > p:last-child::after {
   font:inherit; line-height:inherit; white-space:inherit; overflow-wrap:inherit; word-break:inherit;
   color:var(--dsw-alias-label-caption); pointer-events:none; user-select:none;
 }
-/* The generated suggestion replaces only the visual placeholder. Hide the
-   empty paragraph's terminal break so it does not add a blank first line. */
-[data-claw-ai-suggestion] [data-composer-placeholder],
-[data-claw-ai-suggestion] [contenteditable="true"] > p:only-child > br:only-child { display:none; }
 button.dshAiOptimizeTrigger { flex:none; white-space:nowrap; }
 .dshAiOptimizeTriggerLabel { display:var(--dsh-composer-model-text-display,inline); }
 .dshAiOptimizeTrigger svg { width:14px; height:14px; flex:none; }
