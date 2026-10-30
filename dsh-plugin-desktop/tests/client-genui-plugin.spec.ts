@@ -28,7 +28,7 @@ it('owns Client registration, scoped retry and cleanup as a disposable child plu
   } } } as never)
   const child = await ctx.plugin(GenuiClient)
   try {
-    expect(registered.map(row => row.name)).toEqual(['tool.call.toolview', 'conversation.chat.node', 'conversation.chat.turnTail', 'settings.general.item'])
+    expect(registered.map(row => row.name)).toEqual(['conversation.chat.node', 'conversation.chat.node', 'tool.call.toolview', 'conversation.chat.turnTail', 'settings.general.item'])
     expect(document.head.querySelectorAll('style[data-claw-genui]')).toHaveLength(1)
     const tail = registered.find(row => row.name === 'conversation.chat.turnTail')!
     await expect(tail.inject!('first' as never).retry(2)).rejects.toThrow('connection unavailable')
@@ -39,7 +39,7 @@ it('owns Client registration, scoped retry and cleanup as a disposable child plu
     expect(promptSecond).not.toHaveBeenCalled()
     await expect(tail.inject!('missing' as never).retry(2)).rejects.toThrow('Conversation unavailable')
     await child.dispose()
-    expect(remove).toHaveBeenCalledTimes(4)
+    expect(remove).toHaveBeenCalledTimes(5)
     expect(stopLocale).toHaveBeenCalledOnce()
     expect(listeners.size).toBe(0)
     expect(document.head.querySelector('style[data-claw-genui]')).toBeNull()

@@ -13,7 +13,17 @@ export function createGenuiHtmlDocument(html: string, options: { dark: boolean; 
 *{box-sizing:border-box}html{background:transparent}body{margin:0;padding:4px;color:var(--text);font:14px/1.6 system-ui,sans-serif;overflow-wrap:anywhere}h1,h2,h3,p{margin:0 0 12px}h1,h2,h3{font-size:16px}button,input,select,textarea{font:inherit;color:inherit}button,select,input,textarea{max-width:100%;border:1px solid var(--border);border-radius:6px;background:var(--bg);padding:6px 10px}button{cursor:pointer;min-height:34px}input[type=range]{padding:0;accent-color:var(--accent)}button:hover{border-color:var(--accent)}:focus-visible{outline:2px solid var(--accent);outline-offset:2px}label{display:block;margin-bottom:8px}svg,canvas,img{max-width:100%}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border)}.muted{color:var(--muted)}.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.card{padding:12px;background:var(--bg);border-radius:8px}output{font-variant-numeric:tabular-nums}
 </style><script>
 (()=>{const initialState=${JSON.stringify(options.state ?? null).replaceAll('<', '\\u003c')};const send=${options.standalone ? '()=>{}' : `(type,value)=>parent.postMessage({channel:'${GENUI_HTML_CHANNEL}',type,value},'*')`};let pending=false;
-const resize=()=>{if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;send('height',Math.max(120,document.body?.scrollHeight||0))})};
+// Prefer an authored content cap; responsive charts/tables keep the full available width.
+const contentWidth=()=>{
+  const body=document.body;if(!body)return null;
+  const visual=Array.from(body.querySelectorAll('canvas,svg,table')).find(el=>el.getBoundingClientRect().width>200);
+  const candidates=visual?[visual,...Array.from(body.children)]:Array.from(body.children);
+  const caps=candidates.filter(el=>getComputedStyle(el).display!=='none').map(el=>getComputedStyle(el).maxWidth).filter(value=>/^\\d+(?:\\.\\d+)?px$/.test(value)).map(Number.parseFloat);
+  const padding=getComputedStyle(body);
+  if(caps.length)return Math.max(...caps)+parseFloat(padding.paddingLeft)+parseFloat(padding.paddingRight);
+  return visual?null:body.querySelector('input,select,textarea,button')?640:null;
+};
+const resize=()=>{if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;send('height',Math.max(120,document.body?.scrollHeight||0));send('width',contentWidth())})};
 addEventListener('message',event=>{if(event.source!==parent||event.data?.channel!=='${GENUI_HTML_CHANNEL}'||event.data.type!=='theme')return;const dark=event.data.value===true;const root=document.documentElement;root.style.colorScheme=dark?'dark':'light';for(const [key,value] of Object.entries(dark?{'--bg':'#202020','--text':'#f0f0f0','--muted':'#bfbfbf','--border':'#595959','--accent':'#69b1ff'}:{'--bg':'#f5f6f8','--text':'#262626','--muted':'#595959','--border':'#d9d9d9','--accent':'#1668dc'}))root.style.setProperty(key,value)});
 addEventListener('error',()=>send('error',true));addEventListener('unhandledrejection',()=>send('error',true));
 ${HTML_STATE_RUNTIME}

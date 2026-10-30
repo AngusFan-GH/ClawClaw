@@ -88,37 +88,80 @@ it('uses readable saved result text for copying, without changing the durable an
   expect(f.node.data.blocks[0]).toMatchObject({ text: expect.stringContaining('[[clawclaw-ui:demo]]') })
 })
 
-it('preserves native child-slot ownership in the real registry and restores renderers on disable', () => {
+it('projects native registrations without mutating their component or releasing their child slots', () => {
   const core = new SlotCore()
   core.register({ name: 'root', children: { 'conversation.chat.node': { kind: 'keyed', scope: 'session' } } } as never, () => null)
   let changed: ((key: string) => void) | undefined
   const stop = vi.fn()
   const ctx = { slots: { entries: core.entries.bind(core), register: core.register.bind(core),
-    inject: (_name: string, setup: () => () => void) => setup() }, on: (_event: string, listener: (key: string) => void) => {
+    inject: (_name: string, setup: () => (() => void) | Iterable<() => void>) => {
+      const installed = setup()
+      if (typeof installed === 'function') return installed
+      const disposers = [...installed]
+      return () => { for (const dispose of disposers.reverse()) dispose() }
+    } }, on: (_event: string, listener: (key: string) => void) => {
     changed = listener; return () => { stop(); changed = undefined }
   } } as unknown as Context
   core.onMutate(key => changed?.(key))
   const inline = installGenuiInline(ctx, async () => {})
   expect(inline.available.getSnapshot()).toBe(false)
   const Native = () => null
-  const inject = () => ({ hooks: { presentation: store({}) } })
-  core.register({ name: 'conversation.chat.node', key: 'assistant-step', locale: 'chat', inject,
+  const hooks = { presentation: store({}) }
+  const inject = () => ({ hooks })
+  const unloadNative = core.register({ name: 'conversation.chat.node', key: 'assistant-step', locale: 'chat', inject,
     children: { 'conversation.chat.reasoning.body': { kind: 'single', scope: 'session' },
       'conversation.chat.message.images': { kind: 'single', scope: 'session' } },
   } as never, Native)
   const entry = core.entries('conversation.chat.node').find(row => row.options.key === 'assistant-step')!
   expect(entry.component).not.toBe(Native)
   expect(inline.available.getSnapshot()).toBe(true)
-  expect(entry.inject).toBe(inject)
+  expect(entry.inject?.('main' as never)).toMatchObject({ hooks, sectionComponent: Native })
+  const original = core.entries('conversation.chat.node').find(row => row.component === Native)!
+  expect(original.component).toBe(Native)
+  expect(original.inject).toBe(inject)
   expect(entry.locale).toBe('chat')
   expect(entry.children).toHaveProperty('conversation.chat.message.images')
   expect(core.entriesOfSlot('conversation.chat.node').find(row => row.options.key === 'assistant-step')).toBe(entry)
   const body = core.register({ name: 'conversation.chat.reasoning.body' } as never, () => null)
   inline.dispose()
-  expect(entry.component).toBe(Native)
+  expect(core.entriesOfSlot('conversation.chat.node')[0]).toBe(original)
+  expect(entry.children).toBeUndefined()
   expect(inline.available.getSnapshot()).toBe(false)
   expect(core.specDynamic('conversation.chat.reasoning.body')).toBeDefined()
   expect(core.entries('conversation.chat.reasoning.body')).toHaveLength(1)
   expect(stop).toHaveBeenCalledOnce()
   body()
+  // Unloading and re-registering a native owner must not project a stale,
+  // already-disposed wrapper, or release another feature's declarations.
+  const again = installGenuiInline(ctx, async () => {})
+  expect(again.available.getSnapshot()).toBe(true)
+  unloadNative()
+  expect(again.available.getSnapshot()).toBe(false)
+  expect(core.entries('conversation.chat.node')).toHaveLength(0)
+  const next = core.register({ name: 'conversation.chat.node', key: 'assistant-step' } as never, Native)
+  expect(again.available.getSnapshot()).toBe(true)
+  expect(core.entries('conversation.chat.node')).toHaveLength(2)
+  again.dispose(); again.dispose()
+  expect(core.entries('conversation.chat.node')).toHaveLength(1)
+  expect(core.entries('conversation.chat.node')[0]?.component).toBe(Native)
+  next()
+})
+
+it('switches historical visuals to native readable text without exposing references or loading another iframe', async () => {
+  const f = fixture()
+  const view = await mount(createElement(GenuiAssistantView, f.props))
+  expect(view.querySelectorAll('iframe')).toHaveLength(1)
+  const root = roots.at(-1)!
+  const fetch = vi.fn()
+  vi.stubGlobal('fetch', fetch)
+  await act(async () => root.render(createElement(GenuiAssistantView, { ...f.props, genui: { ...f.props.genui, visuals: false } })))
+  expect(view.querySelector('iframe')).toBeNull()
+  expect(view.querySelector('.clawGenuiInlineAnswer')).toBeNull()
+  expect(view.textContent).toContain('先讲原理')
+  expect(view.textContent).toContain('再解释结果')
+  expect(view.textContent?.match(/初始总价 60。/g)).toHaveLength(1)
+  expect(view.textContent).not.toContain('[[clawclaw-ui:')
+  expect(fetch).not.toHaveBeenCalled()
+  expect(f.retry).not.toHaveBeenCalled()
+  expect(f.node.data.blocks[0]).toMatchObject({ text: expect.stringContaining('[[clawclaw-ui:demo]]') })
 })

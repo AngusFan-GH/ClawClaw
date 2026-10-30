@@ -3,6 +3,7 @@ import type { GenuiCell, GenuiNode } from '../genui-contract.ts'
 import { validateGenuiDocument } from '../genui-core.ts'
 import { GenuiHtmlView } from './genui-html.tsx'
 import { GenuiChartView } from './genui-chart.tsx'
+import { genuiLayout, genuiSurfaces, type GenuiLayoutNode } from './genui-layout.ts'
 
 type TableNode = Extract<GenuiNode, { type: 'table' }>
 function cellText(cell: GenuiCell): string { return cell === null ? '' : String(cell) }
@@ -38,13 +39,15 @@ function GenuiTable({ node, label }: { node: TableNode; label: string }) {
   </div>
 }
 
-function renderNode(node: GenuiNode, key: number, label: string, zh: boolean, identity: { sessionId: string; callId: string; path: string }, repair?: () => Promise<void>): ReactNode {
+function renderNode(entry: GenuiLayoutNode, label: string, zh: boolean, identity: { sessionId: string; callId: string; path: string }, repair?: () => Promise<void>, nestedCard = false, prose = false): ReactNode {
+  const { node, key } = entry
+  const title = node.type === 'card' && entry.continuation ? `${node.title}${zh ? '（续）' : ' (continued)'}` : node.type === 'card' ? node.title : ''
   switch (node.type) {
-    case 'html': return <GenuiHtmlView key={key} node={node} zh={zh} identity={identity} {...(repair === undefined ? {} : { repair })} />
+    case 'html': return <GenuiHtmlView key={key} node={node} zh={zh} identity={{ ...identity, path: entry.path }} {...(repair === undefined ? {} : { repair })} />
     case 'chart': return <GenuiChartView key={key} node={node} zh={zh} />
     case 'text': return <p key={key}>{node.content}</p>
-    case 'card': return <section key={key} className="clawGenuiCard"><h4>{node.title}</h4>{node.items.map((child, i) => renderNode(child, i, node.title, zh, { ...identity, path: `${identity.path}.${i}` }, repair))}</section>
-    case 'row': return <div key={key} className="clawGenuiRow">{node.items.map((child, i) => renderNode(child, i, label, zh, { ...identity, path: `${identity.path}.${i}` }, repair))}</div>
+    case 'card': return <section key={key} className={prose ? 'clawGenuiProse' : 'clawGenuiCard'} aria-label={node.title}>{nestedCard ? <h4>{title}</h4> : <h3>{title}</h3>}{entry.children?.map(child => renderNode(child, node.title, zh, identity, repair, true, prose))}</section>
+    case 'row': return <div key={key} className={prose ? 'clawGenuiProse' : 'clawGenuiRow'}>{entry.children?.map(child => renderNode(child, label, zh, identity, repair, nestedCard, prose))}</div>
     case 'stat': return <div key={key} className="clawGenuiStat"><span>{node.label}</span><strong>{node.value}</strong></div>
     case 'table': return <GenuiTable key={key} node={node} label={label} />
     case 'progress': return <div key={key} className="clawGenuiProgress"><div className="clawGenuiProgressLabel"><span>{node.label}</span><span className="clawGenuiProgressValue">{node.value}%</span></div><progress aria-label={node.label} value={node.value} max={100} /></div>
@@ -73,9 +76,19 @@ export function GenuiResultView({ sessionId, callId, meta, text, isError, zh = f
     {!isError && <p className="clawGenuiDiagnostic">{zh ? '此卡片无法显示，以下为保存的文本结果。' : 'This card is unavailable. The saved text result follows.'}</p>}
     <pre className="clawGenuiFallback">{text}</pre>
   </div>
-  const inline = parsed.document.items.every(node => node.type === 'html')
-  return <section className={inline ? 'clawGenui clawGenuiInline' : 'clawGenui'} data-genui-session={sessionId} data-genui-call={callId} aria-label={parsed.document.title}>
-    {!inline && <h3>{parsed.document.title}</h3>}
-    {parsed.document.items.map((node, i) => renderNode(node, i, parsed.document.title, zh, { sessionId, callId, path: String(i) }, repair))}
+  const surfaces = genuiSurfaces(genuiLayout(parsed.document.items))
+  let titled = false
+  return <section className={`clawGenui clawGenuiResult${surfaces.every(group => group.nodes.length === 1 && group.nodes[0]!.node.type === 'html') ? ' clawGenuiInline' : ''}`} data-genui-session={sessionId} data-genui-call={callId} aria-label={parsed.document.title}>
+    {surfaces.map(({ kind, nodes }) => {
+      const first = nodes[0]!
+      const content = nodes.map(entry => renderNode(entry, parsed.document.title, zh, { sessionId, callId, path: entry.path }, repair, false, kind === 'prose'))
+      if (kind === 'independent') return content
+      if (kind === 'prose') return <section key={`prose:${first.key}`} className="clawGenuiProse" aria-label={first.node.type === 'card' ? first.node.title : parsed.document.title}>{content}</section>
+      const showTitle = !titled
+      titled = true
+      return <section key={`surface:${first.key}`} className="clawGenuiSurface" aria-label={parsed.document.title}>
+        {showTitle && <h3>{parsed.document.title}</h3>}{content}
+      </section>
+    })}
   </section>
 }

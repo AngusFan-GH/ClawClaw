@@ -77,8 +77,9 @@ describe('GenUI cards outside collapsed tool process', () => {
     const { element } = await mount(store(chatFor({ 1: tools })))
     expect(element.querySelector('.clawGenuiResults iframe')?.getAttribute('title')).toBe('价格计算器')
     expect(element.querySelector('[data-genui-session]')?.classList.contains('clawGenuiInline')).toBe(true)
-    expect(element.querySelector('h3')).toBeNull()
-    expect(element.querySelector('h4')?.textContent).toBe('价格计算器')
+    expect(element.querySelector('.clawGenuiResult > h3')).toBeNull()
+    expect(element.querySelector('.clawGenuiSurface')).toBeNull()
+    expect(element.querySelector('h3')?.textContent).toBe('价格计算器')
     expect(element.querySelector('a')).toBeNull()
     expect(element.querySelector('iframe')?.getAttribute('sandbox')).toBe('allow-scripts')
     const restored = await mount(store(chatFor({ 1: store(JSON.parse(JSON.stringify(tools.getSnapshot()))) })))
@@ -111,12 +112,13 @@ describe('GenUI cards outside collapsed tool process', () => {
     expect(element.textContent).not.toContain('internal error')
     const button = element.querySelector('button')!
     await act(async () => button.click())
-    expect(element.textContent).toContain('重试未能提交')
+    expect(element.textContent).toContain('重新生成请求发送失败')
     await act(async () => button.click())
     expect(retry).toHaveBeenLastCalledWith(1)
-    expect(button.textContent).toBe('已提交重试')
+    expect(button.textContent).toBe('已发送请求')
     expect(button.disabled).toBe(true)
     expect(retry).toHaveBeenCalledTimes(2)
+    expect(element.textContent).toContain('请在后续回答中查看')
   })
   it('does not count successful validation as displayed UI or leave a completed turn loading', async () => {
     const tools = store<readonly ToolChatData[]>([{ root: result(10, { name: 'clawclaw_validate_ui', meta: null,

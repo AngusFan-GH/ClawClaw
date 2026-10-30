@@ -18,7 +18,7 @@ export function splitGenuiText(text: string): GenuiTextPart[] {
       const match = /^ {0,3}\[\[clawclaw-ui:([^\]\r\n]+)\]\][ \t]*$/.exec(line)
       let id: string | undefined
       if (match) try { id = decodeURIComponent(match[1]!) } catch { /* Keep invalid references as literal text. */ }
-      const pending = !match && /^ {0,3}\[\[clawclaw-ui:[^\]\r\n]*$/.test(line) && offset + raw.length === text.length
+      const pending = !match && /^ {0,3}\[\[clawclaw-ui:[^\]\r\n]*\]?$/.test(line) && offset + raw.length === text.length
       if (id?.trim() && id.length <= 160 || pending) {
         if (offset > start) parts.push({ kind: 'text', text: text.slice(start, offset) })
         parts.push(pending ? { kind: 'pending' } : { kind: 'result', id: id! })

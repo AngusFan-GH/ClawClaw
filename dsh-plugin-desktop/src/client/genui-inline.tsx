@@ -1,8 +1,10 @@
 import { createElement, useMemo, useSyncExternalStore, type ComponentType, type ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { AssistantBlock, ChatNodeViewProps, ChatSnapshot, ToolChatData } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { AssistantBlock, ChatNodeViewProps, ChatSnapshot, ToolChatData, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
+import { registerEntryProjection } from './shortcut-presentation.tsx'
 import { GenuiResultView } from './genui-result.tsx'
 import { genuiResultId, genuiResults } from './genui-results.ts'
 import { canPlaceGenuiText, splitGenuiText } from './genui-placement.ts'
@@ -12,6 +14,7 @@ const EMPTY_SOURCE = { getSnapshot: () => EMPTY, subscribe: () => () => {} }
 interface InlineContext {
   chat: ObservableSnapshot<ChatSnapshot | undefined>
   zh: boolean
+  visuals?: boolean
   retry: (turn: number) => Promise<void>
 }
 function useResults(chat: InlineContext['chat'], turn: number) {
@@ -24,6 +27,21 @@ function useResults(chat: InlineContext['chat'], turn: number) {
   })), [tools])
 }
 const withoutMarkers = (text: string) => splitGenuiText(text).flatMap(part => part.kind === 'text' ? [part.text] : []).join('')
+
+/** A native Markdown pass remains readable when visual presentation is disabled. */
+function readableBlocks(blocks: readonly AssistantBlock[], results: ReadonlyMap<string, ToolResultNode>, zh: boolean) {
+  const used = new Set<string>()
+  return blocks.map(block => block.kind !== 'text' ? block : { ...block,
+    text: splitGenuiText(block.text).map(part => {
+      if (part.kind === 'text') return part.text
+      if (part.kind !== 'result' || used.has(part.id)) return ''
+      used.add(part.id)
+      const result = results.get(part.id)
+      return result ? result.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') + '\n'
+        : (zh ? '交互内容暂不可用。\n' : 'Interactive content unavailable.\n')
+    }).join(''),
+  })
+}
 
 /** Keep native Markdown, reasoning, images and file actions; split only explicit block boundaries. */
 export function GenuiAssistantView(props: Parameters<typeof AnchoredAssistantView>[0]) {
@@ -42,6 +60,7 @@ function AnchoredAssistantView({ Native, genui, ...props }: ChatNodeViewProps<'a
     return createElement(Native, props)
   }
   const nodeWith = (subset: readonly AssistantBlock[]) => ({ ...props.node, data: { ...props.node.data, blocks: subset } })
+  if (genui.visuals === false) return createElement(Native, { ...props, node: nodeWith(readableBlocks(blocks, results, genui.zh)) })
   const eligible = props.node.data.status === 'settled' && process?.answerStep === props.node.data.step && props.groupPart !== 'reasoning'
   if (!eligible) return createElement(Native, { ...props, node: nodeWith(blocks.map(block =>
     block.kind === 'text' ? { ...block, text: withoutMarkers(block.text) } : block)) })
@@ -85,63 +104,56 @@ function AnchoredFooterView({ Native, genui, ...props }: ChatNodeViewProps<'turn
   const closing = props.node.data.closing
   if (!closing) return createElement(Native, props)
   if (!closing.blocks.some(block => block.kind === 'text' && splitGenuiText(block.text).some(part => part.kind !== 'text'))) return createElement(Native, props)
-  const used = new Set<string>()
-  const blocks = closing.blocks.map(block => block.kind !== 'text' ? block : { ...block,
-    text: splitGenuiText(block.text).map(part => {
-      if (part.kind === 'text') return part.text
-      if (part.kind !== 'result' || used.has(part.id)) return ''
-      used.add(part.id)
-      const result = results.get(part.id)
-      return result ? result.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') + '\n'
-        : (genui.zh ? '交互内容暂不可用。\n' : 'Interactive content unavailable.\n')
-    }).join(''),
-  })
+  const blocks = readableBlocks(closing.blocks, results, genui.zh)
   return createElement(Native, { ...props, node: { ...props.node, data: { ...props.node.data, closing: { ...closing, blocks } } } })
 }
 
-/**
- * Decorate the existing entry in place: its child declarations, locale, stores
- * and native Hook bindings must stay with their original registry owner.
- * Re-registering the same children would reject duplicate declarations.
- */
-export function installGenuiInline(ctx: Context, retry: (sessionId: string, turn: number) => Promise<void>) {
+const VISUALS_ON = { getSnapshot: () => true, subscribe: () => () => {} }
+
+/** Reuse the desktop projection adapter; the original entries keep child-slot ownership. */
+export function installGenuiInline(ctx: Context, retry: (sessionId: string, turn: number) => Promise<void>,
+  enabled: ObservableSnapshot<boolean> = VISUALS_ON) {
   const available = createSnapshotStore(false)
-  const disposers = new Map<string, { entry: ReturnType<Context['slots']['entries']>[number]; dispose: () => void }>()
+  const records = new Map<string, { source: StoredEntry; component: unknown; dispose: () => void }>()
+  let installing = false
+  let disposed = false
   const install = () => {
-    const entries = ctx.slots.entries('conversation.chat.node')
-    for (const [key, record] of disposers) if (!entries.includes(record.entry)) {
-      record.dispose(); disposers.delete(key)
-      if (key === 'assistant-step') available.set(false)
-    }
-    for (const key of ['assistant-step', 'turn-tail'] as const) {
-      if (disposers.has(key)) continue
-      const native = entries.find(entry => entry.options.key === key)
-      if (!native) continue
-      const Native = native.component as ComponentType<never>
-      const View = key === 'assistant-step' ? GenuiAssistantView : GenuiFooterView
-      function InlineNode(props: Record<string, unknown>) {
-        const locale = useSyncExternalStore(listener => ctx.locale.subscribe(listener), () => ctx.locale.getSnapshot())
-        const id = String(props.sessionId)
-        const chat = ctx.uiConversation.binding(id as never).target('chat')
-        return createElement(View as ComponentType<never>, { ...props, Native, genui: {
-          chat, zh: locale.active.startsWith('zh'), retry: (turn: number) => retry(id, turn),
-        } } as never)
+    if (installing || disposed) return
+    installing = true
+    try {
+      const entries = ctx.slots.entries('conversation.chat.node')
+      for (const [key, record] of records) if (!entries.includes(record.source)) {
+        record.dispose(); records.delete(key)
+        if (key === 'assistant-step') available.set(false)
       }
-      native.component = InlineNode
-      disposers.set(key, { entry: native, dispose: () => { if (native.component === InlineNode) native.component = Native } })
-      if (key === 'assistant-step') available.set(true)
-    }
+      for (const key of ['assistant-step', 'turn-tail'] as const) {
+        const source = ctx.slots.entries('conversation.chat.node').find(entry => entry.options.key === key && ![...records.values()].some(record => record.component === entry.component))
+        if (!source || records.get(key)?.source === source) continue
+        records.get(key)?.dispose(); records.delete(key)
+        const View = key === 'assistant-step' ? GenuiAssistantView : GenuiFooterView
+        function InlineNode({ sectionComponent: Native, ...props }: Record<string, unknown>) {
+          const locale = useSyncExternalStore(listener => ctx.locale.subscribe(listener), () => ctx.locale.getSnapshot())
+          const visuals = useSyncExternalStore(listener => enabled.subscribe(listener), () => enabled.getSnapshot())
+          const id = String(props.sessionId)
+          return createElement(View as ComponentType<never>, { ...props, Native, genui: {
+            chat: ctx.uiConversation.binding(id as never).target('chat'), visuals,
+            zh: locale.active.startsWith('zh'), retry: (turn: number) => retry(id, turn),
+          } } as never)
+        }
+        const dispose = registerEntryProjection(ctx, source, { name: 'conversation.chat.node', key,
+          priority: (source.options.priority ?? 0) - 1 }, InlineNode)
+        records.set(key, { source, component: InlineNode, dispose })
+        if (key === 'assistant-step') available.set(true)
+      }
+    } finally { installing = false }
   }
   const stop = ctx.on('slots/changed', name => { if (name === 'conversation.chat.node') install() })
-  install()
-  // A reserved, never-produced key invalidates the node registry on enable and
-  // dispose, including already-open chats. It declares no children and renders
-  // no UI. The original entries remain the sole owners of native child slots.
-  const refresh = ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
-    { name: 'conversation.chat.node', key: 'desktop-genui-refresh' } as never, () => null))
-  return { available, dispose() {
-    stop(); available.set(false)
-    for (const record of disposers.values()) record.dispose()
-    disposers.clear(); refresh()
-  } }
+  const dispose = () => {
+    if (disposed) return
+    disposed = true; stop(); available.set(false)
+    for (const record of records.values()) record.dispose()
+    records.clear()
+  }
+  try { install() } catch (cause) { dispose(); throw cause }
+  return { available, dispose }
 }

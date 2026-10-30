@@ -13,8 +13,8 @@ describe('inline visual references', () => {
     '[[clawclaw-ui:%ZZ]]', `[[clawclaw-ui:${'a'.repeat(161)}]]`])('keeps literal/code examples intact: %s', text => {
     expect(splitGenuiText(text)).toEqual([{ kind: 'text', text }])
   })
-  it('does not expose an unfinished streaming marker', () => {
-    expect(splitGenuiText('原理\n[[clawclaw-ui:pi')).toEqual([{ kind: 'text', text: '原理\n' }, { kind: 'pending' }])
+  it.each(['pi', 'pi]'])('does not expose an unfinished streaming marker: %s', tail => {
+    expect(splitGenuiText(`原理\n[[clawclaw-ui:${tail}`)).toEqual([{ kind: 'text', text: '原理\n' }, { kind: 'pending' }])
   })
   it('leaves reference-link and footnote documents in one native Markdown pass', () => {
     expect(canPlaceGenuiText('解释[^a]\n[[clawclaw-ui:demo]]\n[^a]: 来源')).toBe(false)

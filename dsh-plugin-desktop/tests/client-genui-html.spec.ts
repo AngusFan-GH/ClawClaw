@@ -97,13 +97,15 @@ describe('isolated interactive HTML', () => {
     expect(element.textContent).toContain('部分操作执行出错')
     expect(element.querySelector('details')?.open).toBe(true)
     expect(repair).not.toHaveBeenCalled()
-    const button = [...element.querySelectorAll('button')].find(button => button.textContent === '重新生成')!
+    const button = [...element.querySelectorAll('button')].find(button => button.textContent === '请求重新生成')!
     await act(async () => button.click())
-    expect(element.textContent).toContain('修复请求未能提交')
+    expect(element.textContent).toContain('重新生成请求发送失败')
     await act(async () => button.click())
-    expect(button.textContent).toBe('已提交修复')
+    expect(button.textContent).toBe('已发送请求')
     expect(button.disabled).toBe(true)
     expect(repair).toHaveBeenCalledTimes(2)
+    expect(element.textContent).toContain('请在后续回答中查看')
+    expect(element.querySelector('iframe')).toBe(frame)
   })
   it('restores persisted inputs and saves bounded state without reloading; Reset explicitly clears', async () => {
     const saved = { controls: [{ index: 0, value: '42' }], custom: { total: 42 } }
@@ -128,6 +130,26 @@ describe('isolated interactive HTML', () => {
     expect(element.querySelector('iframe')).toBeNull()
     expect(element.textContent).toContain('无法读取已保存的输入')
     expect(storage.save).not.toHaveBeenCalled()
+    expect([...element.querySelectorAll('button')].some(button => button.textContent === '重新读取输入')).toBe(true)
+  })
+
+  it('accepts bounded content widths only from the owning frame without restarting it', async () => {
+    const element = await mount()
+    const section = element.querySelector<HTMLElement>('.clawGenuiHtml')!
+    const frame = element.querySelector('iframe')!
+    const source = frame.srcdoc
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'width', value: 500 }, 'https://attacker.test')
+    expect(section.style.maxWidth).toBe('640px')
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'width', value: 200 })
+    expect(section.style.maxWidth).toBe('320px')
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'width', value: 99999 })
+    expect(section.style.maxWidth).toBe('960px')
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'width', value: NaN })
+    expect(section.style.maxWidth).toBe('960px')
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'width', value: null })
+    expect(section.style.maxWidth).toBe('')
+    expect(element.querySelector('iframe')).toBe(frame)
+    expect(frame.srcdoc).toBe(source)
   })
 
   it('provides only fullscreen/download in the toolbar and expands the same live iframe', async () => {
@@ -136,16 +158,21 @@ describe('isolated interactive HTML', () => {
     expect(element.querySelector('details')!.open).toBe(false)
     expect(element.querySelector('.clawGenuiHtmlReset')!.getAttribute('title')).toContain('清除保存的输入')
     const viewport = element.querySelector<HTMLElement>('.clawGenuiHtmlViewport')!
+    const section = element.querySelector<HTMLElement>('.clawGenuiHtml')!
     expect(viewport.style.height).toBe('240px')
     const frame = element.querySelector('iframe')!
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'height', value: 420 })
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'ready', value: true })
     const source = frame.srcdoc
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'width', value: 488 })
+    expect(section.style.maxWidth).toBe('488px')
     fullscreenMock(element.querySelector('section')!)
     expect([...element.querySelectorAll('.clawGenuiHtmlToolbar button')].map(button => button.getAttribute('aria-label'))).toEqual(['全屏', '下载 HTML'])
     const toggle = element.querySelector<HTMLButtonElement>('.clawGenuiHtmlToolbar button')!
     await act(async () => toggle.click())
     expect(frame.style.height).toBe('100%')
+    expect(section.style.maxWidth).toBe('')
+    await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'width', value: 960 })
     expect(toggle.getAttribute('aria-label')).toBe('退出全屏')
     expect(element.querySelector('iframe')).toBe(frame)
     expect(frame.srcdoc).toBe(source)
@@ -154,6 +181,7 @@ describe('isolated interactive HTML', () => {
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'height', value: 700 })
     await act(async () => toggle.click())
     expect(viewport.style.height).toBe('420px')
+    expect(section.style.maxWidth).toBe('488px')
     expect(frame.style.visibility).toBe('visible')
     expect(element.querySelector('iframe')).toBe(frame)
   })
@@ -211,19 +239,42 @@ describe('isolated interactive HTML', () => {
     const frame = element.querySelector('iframe')!
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'state', value: saved })
     expect(element.querySelector('.clawGenuiHtmlNotice')!.textContent).toContain('保存失败')
+    expect(element.querySelector('.clawGenuiHtmlNotice button')?.textContent).toBe('重试保存')
     await act(async () => element.querySelector<HTMLButtonElement>('.clawGenuiHtmlNotice button')!.click())
     expect(storage.save).toHaveBeenLastCalledWith(saved)
     expect(storage.save).toHaveBeenCalledTimes(2)
     expect(element.querySelector('.clawGenuiHtmlNotice')).toBeNull()
     expect(element.querySelector('iframe')).toBe(frame)
   })
+  it('distinguishes retrying a failed reset from saving, reloading and model regeneration', async () => {
+    const reset = Promise.withResolvers<void>()
+    const repair = vi.fn(async () => {})
+    const storage = { load: vi.fn(async () => null), save: vi.fn(async () => {}),
+      clear: vi.fn().mockRejectedValueOnce(new Error('offline')).mockImplementationOnce(() => reset.promise) }
+    const element = await mount(storage, repair)
+    const frame = element.querySelector('iframe')!
+    await act(async () => element.querySelector<HTMLButtonElement>('.clawGenuiHtmlReset')!.click())
+    const retry = element.querySelector<HTMLButtonElement>('.clawGenuiHtmlNotice button')!
+    expect(retry.textContent).toBe('重试恢复')
+    await act(async () => retry.click())
+    expect(retry.textContent).toBe('正在恢复…')
+    expect(retry.disabled).toBe(true)
+    expect(element.querySelector('iframe')).toBe(frame)
+    expect(repair).not.toHaveBeenCalled()
+    expect(storage.save).not.toHaveBeenCalled()
+    await act(async () => reset.resolve())
+    expect(storage.clear).toHaveBeenCalledTimes(2)
+    expect(element.querySelector('.clawGenuiHtmlNotice')).toBeNull()
+    expect(element.querySelector('iframe')).not.toBe(frame)
+  })
+
   it('reloads a failed runtime with its current inputs rather than clearing storage', async () => {
     const saved = { controls: [{ index: 0, value: '99' }], custom: null }
     const storage = { load: vi.fn(async () => saved), save: vi.fn(async () => {}), clear: vi.fn(async () => {}) }
     const element = await mount(storage)
     const frame = element.querySelector('iframe')!
     await send(frame, { channel: GENUI_HTML_CHANNEL, type: 'error', value: true })
-    const reload = [...element.querySelectorAll('button')].find(button => button.textContent === '重新加载')!
+    const reload = [...element.querySelectorAll('button')].find(button => button.textContent === '重新加载内容')!
     await act(async () => reload.click())
     expect(element.querySelector('iframe')).not.toBe(frame)
     expect(element.querySelector('iframe')!.srcdoc).toContain('"value":"99"')

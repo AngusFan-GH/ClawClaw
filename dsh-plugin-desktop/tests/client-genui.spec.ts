@@ -94,18 +94,65 @@ describe('GenUI result card', () => {
     expect(register).not.toHaveBeenCalled()
     expect(document.head.querySelector('style[data-claw-genui]')).toBeNull()
     enabled = true; sync(); sync()
-    expect(register).toHaveBeenCalledTimes(3)
+    expect(register).toHaveBeenCalledTimes(2)
     expect(register.mock.calls[0]?.[0]).toMatchObject({ name: 'tool.call.toolview', key: GENUI_RENDER_TOOL })
-    expect(register.mock.calls[2]?.[0]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'desktop-genui' })
+    expect(register.mock.calls[1]?.[0]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'desktop-genui' })
     expect(document.head.querySelectorAll('style[data-claw-genui]')).toHaveLength(1)
     enabled = false; sync()
-    expect(removeView).toHaveBeenCalledTimes(3)
+    expect(removeView).toHaveBeenCalledTimes(2)
     expect(document.head.querySelector('style[data-claw-genui]')).toBeNull()
     enabled = true; sync()
     cleanup?.()
-    expect(removeView).toHaveBeenCalledTimes(6)
+    expect(removeView).toHaveBeenCalledTimes(4)
     expect(listeners.size).toBe(0)
     expect(document.head.querySelector('style[data-claw-genui]')).toBeNull()
+  })
+
+  it('renders HTML and explicit cards as independent siblings in a mixed result', async () => {
+    vi.stubGlobal('crypto', { subtle: { digest: async () => new Uint8Array(32).buffer } })
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ state: null }) }))
+    const { element } = await mount({ ...props, meta: { format: GENUI_FORMAT, title: '独立展示', items: [
+      { type: 'card', title: '统计', items: [{ type: 'stat', label: '样本', value: 100 }] },
+      { type: 'html', title: '交互模拟', html: '<button>运行</button>', fallback: '点击运行模拟。' },
+      { type: 'card', title: '结论', items: [{ type: 'text', content: '样本更多时通常更准确。' }] },
+    ] } })
+    const result = element.querySelector('.clawGenuiResult')!
+    expect([...result.children].map(child => child.getAttribute('aria-label'))).toEqual(['统计', '交互模拟', '结论'])
+    expect(result.querySelectorAll('.clawGenuiSurface')).toHaveLength(0)
+    expect(result.querySelectorAll('.clawGenuiCard')).toHaveLength(1)
+    expect(result.querySelector('.clawGenuiProse')?.textContent).toContain('结论')
+    expect(result.querySelectorAll('iframe')).toHaveLength(1)
+    expect(result.querySelector('.clawGenuiHtml')?.parentElement).toBe(result)
+  })
+
+  it.each([true, false])('lifts nested HTML and retains state address and prose context (zh=%s)', async zh => {
+    vi.stubGlobal('crypto', { subtle: { digest: async () => new Uint8Array(32).buffer } })
+    const fetch = vi.fn(async () => ({ ok: true, json: async () => ({ state: null }) }))
+    vi.stubGlobal('fetch', fetch)
+    const nested = { format: GENUI_FORMAT, title: '旧版结果', items: [{ type: 'card', title: '说明', items: [
+      { type: 'text', content: '先讲原理' },
+      { type: 'row', items: [{ type: 'html', title: '计算器', html: '<input value="3">', fallback: '输入数字。' }] },
+      { type: 'text', content: '再解释结果' },
+    ] }] }
+    const saved = JSON.stringify(nested)
+    const { element } = await mount({ ...props, meta: nested, zh })
+    const result = element.querySelector('.clawGenuiResult')!
+    expect([...result.children].map(child => child.getAttribute('aria-label'))).toEqual(['说明', '计算器', '说明'])
+    const html = result.querySelector('.clawGenuiHtml')!
+    expect(html.parentElement).toBe(result)
+    expect(html.closest('.clawGenuiCard')).toBeNull()
+    expect(html.closest('.clawGenuiSurface')).toBeNull()
+    expect(html.closest('.clawGenuiRow')).toBeNull()
+    expect(result.querySelectorAll('h3')).toHaveLength(3)
+    expect(result.textContent).toContain(zh ? '说明（续）' : '说明 (continued)')
+    expect(result.querySelectorAll('.clawGenuiCard')).toHaveLength(0)
+    expect(result.querySelectorAll('.clawGenuiSurface')).toHaveLength(0)
+    expect(result.textContent!.indexOf('先讲原理')).toBeLessThan(result.textContent!.indexOf('计算器'))
+    expect(result.textContent!.indexOf('计算器')).toBeLessThan(result.textContent!.indexOf('再解释结果'))
+    expect(JSON.parse((fetch.mock.calls as unknown as [string, RequestInit][])[0]![1].body as string)).toMatchObject({
+      sessionId: 'main', callId: 'call-1', path: '0.1.0', action: 'load',
+    })
+    expect(JSON.stringify(nested)).toBe(saved)
   })
 
   it('shows tool history as a compact record without executing another interactive copy', async () => {

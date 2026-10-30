@@ -34,6 +34,7 @@ export function GenuiHtmlView({ node, zh, identity, storage, repair }: { node: G
   const [actionError, setActionError] = useState<'fullscreen' | 'download'>()
   const [revision, setRevision] = useState(0)
   const [height, setHeight] = useState(240)
+  const [width, setWidth] = useState<number | undefined>(640)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [interactionError, setInteractionError] = useState(false)
   const [repairAttempt, setRepairAttempt] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
@@ -72,6 +73,10 @@ export function GenuiHtmlView({ node, zh, identity, storage, repair }: { node: G
         if (!validHtmlState(data.value)) { setSaveError('unsupported'); return }
         latest.current = data.value
         if (persistence) void persistence.save(data.value).then(() => setSaveError(undefined)).catch(() => setSaveError('save'))
+      }
+      if (data.type === 'width' && 'value' in data && document.fullscreenElement !== container.current) {
+        if (data.value === null) setWidth(undefined)
+        else if (typeof data.value === 'number' && Number.isFinite(data.value)) setWidth(Math.min(960, Math.max(320, Math.ceil(data.value))))
       }
       if (data.type === 'height' && 'value' in data && typeof data.value === 'number' && Number.isFinite(data.value)) {
         if (document.fullscreenElement !== container.current) setHeight(Math.min(720, Math.max(120, Math.ceil(data.value))))
@@ -120,11 +125,11 @@ export function GenuiHtmlView({ node, zh, identity, storage, repair }: { node: G
       try { link.click() } finally { link.remove() }
     } catch { setActionError('download') }
   }
-  const repairButton = repair && <button type="button" disabled={repairAttempt === 'sending' || repairAttempt === 'sent'} onClick={requestRepair}>
-    {repairAttempt === 'sending' ? (zh ? '正在提交…' : 'Submitting…') : repairAttempt === 'sent' ? (zh ? '已提交修复' : 'Repair submitted') : (zh ? '重新生成' : 'Regenerate')}
+  const repairButton = repair && <button type="button" title={zh ? '请求助手在后续回答中重新生成内容' : 'Ask the assistant to regenerate this content in a follow-up answer'} disabled={repairAttempt === 'sending' || repairAttempt === 'sent'} onClick={requestRepair}>
+    {repairAttempt === 'sending' ? (zh ? '正在发送…' : 'Sending…') : repairAttempt === 'sent' ? (zh ? '已发送请求' : 'Request sent') : (zh ? '请求重新生成' : 'Request regeneration')}
   </button>
-  return <section ref={container} className="clawGenuiHtml" aria-label={node.title}>
-    <div className="clawGenuiHtmlToolbar"><h4>{node.title}</h4>
+  return <section ref={container} className="clawGenuiHtml" aria-label={node.title} style={{ maxWidth: fullscreen ? undefined : width }}>
+    <div className="clawGenuiHtmlToolbar"><h3>{node.title}</h3>
       <button type="button" aria-label={fullscreen ? (zh ? '退出全屏' : 'Exit fullscreen') : (zh ? '全屏' : 'Fullscreen')}
         title={fullscreen ? (zh ? '退出全屏' : 'Exit fullscreen') : (zh ? '全屏' : 'Fullscreen')} onClick={() => { void toggleFullscreen() }}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -144,17 +149,18 @@ export function GenuiHtmlView({ node, zh, identity, storage, repair }: { node: G
     {interactionError && <p className="clawGenuiHtmlNotice" role="status">
       <span>{zh ? '部分操作执行出错，其余内容仍可使用。' : 'An interaction failed. The remaining content is still available.'}</span>{repairButton}
     </p>}
-    {repairAttempt === 'error' && <p className="clawGenuiHtmlNotice" role="status">{zh ? '修复请求未能提交，请再试一次。' : 'The repair request could not be submitted. Try again.'}</p>}
+    {repairAttempt === 'sent' && <p className="clawGenuiChartNote" role="status">{zh ? '请在后续回答中查看重新生成的内容。' : 'Look for the regenerated content in a follow-up answer.'}</p>}
+    {repairAttempt === 'error' && <p className="clawGenuiHtmlNotice" role="status">{zh ? '重新生成请求发送失败，请再试一次。' : 'The regeneration request could not be sent. Try again.'}</p>}
     {saveError && <p className="clawGenuiHtmlNotice" role="status">
       {saveError === 'unsupported'
         ? (zh ? '部分输入无法保存，可继续使用当前内容。' : 'Some inputs cannot be saved. You can keep using this view.')
         : saveError === 'reset' ? (zh ? '未能恢复初始值。' : 'Could not restore initial values.') : (zh ? '保存失败。' : 'Could not save inputs.')}
-      {saveError !== 'unsupported' && <button type="button" disabled={retrying || resetting} onClick={() => { void (saveError === 'reset' ? reset() : retrySave()) }}>{zh ? '重试' : 'Retry'}</button>}
+      {saveError !== 'unsupported' && <button type="button" disabled={retrying || resetting} onClick={() => { void (saveError === 'reset' ? reset() : retrySave()) }}>{saveError === 'reset' ? (resetting ? (zh ? '正在恢复…' : 'Restoring…') : (zh ? '重试恢复' : 'Retry reset')) : (retrying ? (zh ? '正在保存…' : 'Saving…') : (zh ? '重试保存' : 'Retry save'))}</button>}
     </p>}
     <div className="clawGenuiHtmlViewport" style={{ height: fullscreen ? undefined : height }} aria-busy={status === 'loading' && !loadError}>
       {(loadError || status === 'loading' || status === 'error') && <div className="clawGenuiHtmlPlaceholder" role="status">
-        {loadError ? <><p>{zh ? '无法读取已保存的输入。' : 'Saved inputs could not be loaded.'}</p><button type="button" onClick={() => setLoadAttempt(value => value + 1)}>{zh ? '重试加载' : 'Retry loading'}</button></>
-          : status === 'error' ? <><p>{zh ? '交互内容暂时无法运行，可查看下方说明。' : 'Interactive content could not run. Read the description below.'}</p>{repairButton || <button type="button" onClick={() => restart(latest.current)}>{zh ? '重新加载' : 'Reload'}</button>}</>
+        {loadError ? <><p>{zh ? '无法读取已保存的输入。' : 'Saved inputs could not be loaded.'}</p><button type="button" onClick={() => setLoadAttempt(value => value + 1)}>{zh ? '重新读取输入' : 'Reload saved inputs'}</button></>
+          : status === 'error' ? <><p>{zh ? '交互内容暂时无法运行，可查看下方说明。' : 'Interactive content could not run. Read the description below.'}</p>{repairButton || <button type="button" title={zh ? '重新运行当前内容，保留已保存的输入' : 'Run the current content again with saved inputs'} onClick={() => restart(latest.current)}>{zh ? '重新加载内容' : 'Reload content'}</button>}</>
           : <p>{zh ? '正在准备交互内容…' : 'Preparing interactive content…'}</p>}
       </div>}
       {bootState !== undefined && <iframe
