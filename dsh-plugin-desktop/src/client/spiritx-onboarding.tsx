@@ -5,7 +5,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { SPIRITX_ONBOARDING_COPY, SPIRITX_ONBOARDING_SHADOW, spiritXCredentialState, type SpiritXCredentialState } from './spiritx-onboarding-state.ts'
+import { SPIRITX_ONBOARDING_COPY, SPIRITX_ONBOARDING_SHADOW, SPIRITX_PLATFORM_URL, spiritXCredentialState, type SpiritXCredentialState } from './spiritx-onboarding-state.ts'
 import { hasUsableSpiritXProfile, provisionSpiritX, syncSpiritXModelProtocols, SPIRITX_API_KEY_REF } from './spiritx-provisioning.ts'
 
 const LOCALE_NS = 'desktop.spiritx-onboarding'
@@ -113,15 +113,32 @@ export function SpiritXCredential({ complete, loadCredential, storeCredential, t
       setFailure(t('saveFailed'))
     } finally { saving.current = false; setBusy(false) }
   }
-  return <ProductOnboardingModal title={t('title')}>
+  return <ProductOnboardingModal title={t('title')} focusTitle>
     <p className="spiritxOnboardingDescription">{t('description')}</p>
+    <section className="spiritxOnboardingGuide" aria-labelledby="spiritx-get-key-title">
+      <h3 id="spiritx-get-key-title">{t('getKeyTitle')}</h3>
+      <ol>
+        <li>{t('registerStep')}</li>
+        <li>{t('findKeyStep')}</li>
+        <li>{t('createKeyStep')}</li>
+        <li>{t('connectKeyStep')}</li>
+      </ol>
+      <a className="spiritxOnboardingPlatformLink" href={SPIRITX_PLATFORM_URL} target="_blank" rel="noopener noreferrer"
+        aria-describedby="spiritx-browser-help">{t('getKey')}
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M6 3h7v7M13 3 3 13" />
+        </svg>
+      </a>
+      <p id="spiritx-browser-help">{t('browserHelp')}</p>
+    </section>
     <form aria-busy={busy} onSubmit={event => { event.preventDefault(); void save() }}>
     <label className="spiritxOnboardingField">
       <span>{t('keyLabel')}</span>
-      <input type="password" autoComplete="off" autoFocus value={key} placeholder={t('keyPlaceholder')}
-        aria-invalid={failure !== undefined} aria-describedby="spiritx-onboarding-help spiritx-onboarding-error" disabled={busy || !state.writable}
+      <input type="password" autoComplete="off" value={key} placeholder={t('keyPlaceholder')}
+        aria-invalid={failure !== undefined} aria-describedby="spiritx-key-help spiritx-onboarding-help spiritx-onboarding-error" disabled={busy || !state.writable}
         onChange={(event) => { setKey(event.target.value); setFailure(undefined) }} />
     </label>
+    <p className="spiritxOnboardingDescription" id="spiritx-key-help">{t('keyHelp')}</p>
     <p className="spiritxOnboardingDescription" id="spiritx-onboarding-help">{t('laterHelp')}</p>
     <p className="spiritxOnboardingError" id="spiritx-onboarding-error" role="alert">{failure}</p>
     <div className="spiritxOnboardingActions">
@@ -138,6 +155,13 @@ const STYLES = `
 .spiritxOnboardingTitle { margin: 0; color: var(--dsw-alias-label-primary); font-size: 20px; line-height: 28px; font-weight: 500; letter-spacing: 0; outline: none; }
 .spiritxOnboardingBody { margin-top: 20px; }
 .spiritxOnboardingDescription { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 24px; }
+.spiritxOnboardingGuide { margin-top: 20px; padding: 16px; border: 1px solid var(--dsw-alias-border-l4); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 24px; }
+.spiritxOnboardingGuide h3 { margin: 0; color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 500; }
+.spiritxOnboardingGuide ol { margin: 8px 0 12px; padding-left: 22px; }
+.spiritxOnboardingGuide p { margin: 6px 0 0; font-size: 12px; line-height: 20px; }
+.spiritxOnboardingPlatformLink { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; max-width: 100%; color: var(--dsh-color-accent); text-decoration: underline; text-underline-offset: 3px; }
+.spiritxOnboardingPlatformLink:hover { text-decoration-thickness: 2px; }
+.spiritxOnboardingPlatformLink:focus-visible { outline: 2px solid var(--dsh-color-accent); outline-offset: 3px; border-radius: 4px; }
 .spiritxOnboardingField { display: flex; flex-direction: column; gap: 6px; margin-top: 24px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; font-weight: 500; }
 .spiritxOnboardingField input { box-sizing: border-box; width: 100%; height: 32px; padding: 0 10px; border: .5px solid var(--dsw-alias-border-l4); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; }
 .spiritxOnboardingField input:focus { outline: none; border-color: var(--dsh-color-accent); }
@@ -145,7 +169,7 @@ const STYLES = `
 .spiritxOnboardingField input:disabled { cursor: default; opacity: .6; }
 .spiritxOnboardingError { margin: 12px 0 0; color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 18px; }
 .spiritxOnboardingActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
-@media (max-width: 560px) { .spiritxOnboardingContent { padding: 24px; } .spiritxOnboardingActions > button:only-child { width: 100%; } }
+@media (max-width: 560px) { .spiritxOnboardingContent { padding: 24px; } .spiritxOnboardingActions { flex-wrap: wrap; } .spiritxOnboardingActions > button { flex: 1 1 auto; } }
 `
 
 /** Skip the upstream preview notice and retain product credential onboarding. */

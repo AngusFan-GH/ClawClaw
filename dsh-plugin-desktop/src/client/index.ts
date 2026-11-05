@@ -30,6 +30,7 @@ import { applyShortcutMenu } from './shortcut-menu.tsx'
 import { installShortcutMenuStyles } from './shortcut-menu-styles.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { applySpiritXProviderPriority } from './spiritx-provider-priority.tsx'
+import { applyModelSetupEntry } from './model-setup-entry.tsx'
 import { applySelectionQuote } from './selection-quote.tsx'
 import { applyInputSuggestions, INPUT_SUGGESTIONS_INJECT } from './input-suggestions.tsx'
 import { applyDesktopGitGraph } from './git-graph.ts'
@@ -140,6 +141,7 @@ export function apply(ctx: ClientContext): void {
   applyManagedPluginManager(ctx)
   applySpiritXOnboarding(ctx)
   applySpiritXProviderPriority(ctx)
+  applyModelSetupEntry(ctx)
   applyCronTasksSettings(ctx)
   applyRemindersSettings(ctx)
   applyLegacyAgentPresetDeleteAction(ctx)

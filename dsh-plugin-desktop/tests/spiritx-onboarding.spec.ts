@@ -88,8 +88,8 @@ describe('SpiritX onboarding', () => {
   })
 
   it('owns only the credential copy without DeepSeek branding', () => {
-    for (const copy of Object.values(SPIRITX_ONBOARDING_COPY)) {
-      expect(copy.description).toContain('SpiritX')
+    for (const [locale, copy] of Object.entries(SPIRITX_ONBOARDING_COPY)) {
+      expect(copy.description).toContain(locale === 'zh' ? '神石' : 'SpiritX')
       expect(copy.description).not.toContain('DeepSeek')
     }
   })

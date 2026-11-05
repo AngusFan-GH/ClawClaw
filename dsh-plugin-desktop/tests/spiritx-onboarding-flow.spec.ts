@@ -3,7 +3,7 @@ import { act, createElement, type ComponentType } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SpiritXCredential } from '../src/client/spiritx-onboarding.tsx'
-import { SPIRITX_ONBOARDING_COPY, type SpiritXCredentialState } from '../src/client/spiritx-onboarding-state.ts'
+import { SPIRITX_ONBOARDING_COPY, SPIRITX_PLATFORM_URL, type SpiritXCredentialState } from '../src/client/spiritx-onboarding-state.ts'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', async () => {
   const { createElement } = await import('react')
@@ -56,6 +56,31 @@ async function submit(): Promise<void> {
 }
 
 describe('model onboarding flow', () => {
+  it.each(['en', 'zh'] as const)('guides %s users to get a key without leaving or completing setup', async locale => {
+    const localized = SPIRITX_ONBOARDING_COPY[locale]
+    const props = await render({ t: key => localized[key] })
+    const guide = document.querySelector('section')!
+    expect([...guide.querySelectorAll('li')].map(item => item.textContent))
+      .toEqual([localized.registerStep, localized.findKeyStep, localized.createKeyStep, localized.connectKeyStep])
+    const link = guide.querySelector('a')!
+    expect(link.href).toBe(SPIRITX_PLATFORM_URL)
+    expect(link.href).toBe('https://ai.xzinfra.com/')
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toBe('noopener noreferrer')
+    expect(link.textContent).toContain(localized.getKey)
+    expect(document.getElementById(link.getAttribute('aria-describedby')!)?.textContent).toBe(localized.browserHelp)
+    await enterKey('existing-key')
+    // Browser navigation is handled by Electron's existing external-link handler.
+    link.addEventListener('click', event => { event.preventDefault() })
+    await act(async () => { link.click() })
+    expect(document.querySelector('input')?.value).toBe('existing-key')
+    expect(props.complete).not.toHaveBeenCalled()
+    expect(props.storeCredential).not.toHaveBeenCalled()
+    await submit()
+    expect(props.storeCredential).toHaveBeenCalledWith('existing-key')
+    expect(props.complete).toHaveBeenCalledOnce()
+  })
+
   it('skips already configured models without showing a form', async () => {
     const props = await render({ loadCredential: vi.fn(async () => ({ kind: 'configured' as const })) })
     expect(props.complete).toHaveBeenCalledOnce()

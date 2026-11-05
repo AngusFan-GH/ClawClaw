@@ -8,6 +8,7 @@ import {
   applySpiritXProviderPriority,
   protectSpiritXProviderRow,
   SPIRITX_PROVIDER_PRIORITY_STYLE,
+  SPIRITX_PROVIDER_COPY,
   SpiritXProviderPriorityMarker,
 } from '../src/client/spiritx-provider-priority.tsx'
 
@@ -28,6 +29,29 @@ function injected(overrides: Record<string, unknown> = {}): Record<string, unkno
 }
 
 describe('SpiritX provider priority', () => {
+  it.each(['en', 'zh'] as const)('explains first-time setup and the platform key location in %s', locale => {
+    const copy = SPIRITX_PROVIDER_COPY[locale]
+    const host = document.createElement('div')
+    host.innerHTML = renderToStaticMarkup(SpiritXProviderPriorityMarker({
+      provider: { provider: 'spiritx' }, configured: true, keyConfigured: false,
+      ...injected({ t: (key: keyof typeof copy) => copy[key] }),
+    } as never))
+    expect(host.querySelector('.spiritxProviderTitle')?.textContent).toBe(copy.title)
+    expect(host.querySelector('.spiritxProviderStatus')?.textContent).toBe(copy.pending)
+    expect(host.querySelector('.spiritxProviderGuide')?.textContent).toContain('模型广场')
+    expect(host.querySelector('.spiritxProviderGuide')?.textContent).toContain('API-Key管理')
+    const link = host.querySelector('a')!
+    expect(link.href).toBe('https://ai.xzinfra.com/')
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toBe('noopener noreferrer')
+    expect(link.textContent).toBe(copy.getKey)
+    const input = host.querySelector('input[type="password"]')!
+    expect(input.getAttribute('placeholder')).toBe(copy.placeholder)
+    expect(host.querySelector(`[id="${input.getAttribute('aria-describedby')}"]`)?.textContent).toBe(copy.keyHelp)
+    expect(host.querySelector('.spiritxProviderButtonPrimary')?.textContent).toBe(copy.connect)
+    expect(host.querySelector('.spiritxProviderRoute')).toBeNull()
+  })
+
   it('lets a first-install seeded route fetch its initial models when saving a key', async () => {
     const host = document.createElement('div')
     document.body.append(host)
@@ -68,10 +92,12 @@ describe('SpiritX provider priority', () => {
 
     expect(row.style.getPropertyValue('order')).toBe('-1')
     expect(row.style.getPropertyPriority('order')).toBe('important')
+    expect(row.firstElementChild?.getAttribute('style')).toContain('display: none')
     expect(row.querySelector<HTMLElement>('span > span:nth-child(2)')?.style.display).toBe('none')
     expect(row.querySelector<HTMLElement>('div > span:last-child')?.style.display).toBe('none')
     expect(row.querySelector<HTMLElement>('[role="img"]')?.style.display).not.toBe('none')
     dispose()
+    expect((row.firstElementChild as HTMLElement).style.display).toBe('')
     row.remove()
   })
 
@@ -119,6 +145,9 @@ describe('SpiritX provider priority', () => {
     expect(host.querySelector<HTMLInputElement>('input[type="password"]')?.placeholder)
       .toBe('replacePlaceholder')
     expect(host.querySelector('.spiritxProviderEditor')).not.toBeNull()
+    expect(host.querySelector('.spiritxProviderStatus')?.textContent).toBe('keyConfigured')
+    expect(host.querySelector('.spiritxProviderGuide')).toBeNull()
+    expect(host.textContent).toContain('replaceHelp')
     expect(host.querySelector('summary')?.textContent).toBe('customized')
     expect(host.querySelector<HTMLInputElement>('[aria-label="modelId 1"]')?.value).toBe('chat-first')
     await act(async () => { root.unmount() })

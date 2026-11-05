@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
@@ -21,29 +21,46 @@ import {
   SPIRITX_SETTINGS_NS,
 } from './spiritx-provisioning.ts'
 import type { SpiritXModelDraft, SpiritXProfileDraft, SpiritXResult } from './spiritx-provisioning.ts'
+import { SPIRITX_PLATFORM_URL } from './spiritx-onboarding-state.ts'
 
 const NS = 'desktop.spiritx-provider'
-const COPY = {
+export const SPIRITX_PROVIDER_COPY = {
   en: {
+    title: 'SpiritX', pending: 'Setup required', keyConfigured: 'API key configured',
+    description: 'Connect SpiritX to use its available models in ClawClaw.',
+    getKey: 'Get an API key on SpiritX',
+    getKeyHelp: 'Register or sign in, then open Model Plaza (模型广场) > API-Key Management (API-Key管理). Under My API-Key (我的 API-Key), create a key and click its copy icon.',
+    browserHelp: 'Opens in your browser. Return here after copying your key.',
+    keyHelp: 'Paste your API key, then click Connect models. ClawClaw will fetch the available models automatically.',
+    replaceHelp: 'Leave this field empty to keep your saved API key. Paste a new key to replace it.',
+    connect: 'Connect models', connecting: 'Connecting…',
     edit: 'Edit', collapse: 'Collapse', key: 'API key', required: 'Enter an API key.',
     replacePlaceholder: 'Configured - enter a new value to replace', placeholder: 'Enter your SpiritX API key',
-    customized: 'Custom settings', baseUrl: 'Base URL', models: 'Models', fetch: 'Fetch available models',
+    customized: 'Advanced settings', baseUrl: 'Base URL', models: 'Models', fetch: 'Fetch available models',
     fetching: 'Fetching...', empty: 'No models configured.', addModel: 'Add model', modelId: 'Model ID',
     modelName: 'Model name', advanced: 'Advanced model settings', contextWindow: 'Context window',
     maxTokens: 'Max output tokens', inputTypes: 'Input types', removeModel: 'Remove model',
     invalidModel: 'Add at least one language model and give every model a unique ID.', cancel: 'Cancel', save: 'Save', saving: 'Saving...',
   },
   zh: {
-    edit: '编辑', collapse: '收起', key: 'API 密钥', required: '请输入 API 密钥。',
-    replacePlaceholder: '已配置——输入新值可替换', placeholder: '输入 SpiritX API 密钥',
-    customized: '自定义设置', baseUrl: 'Base URL', models: '模型', fetch: '获取可用模型',
+    title: '神石（SpiritX）', pending: '待配置', keyConfigured: 'API Key 已配置',
+    description: '连接神石平台，在 ClawClaw 中使用可用模型。',
+    getKey: '前往神石平台获取 API Key',
+    getKeyHelp: '注册或登录后，进入“模型广场” > “API-Key管理”，在“我的 API-Key”中创建密钥，再点击密钥旁的复制图标。',
+    browserHelp: '将在浏览器中打开，复制密钥后请回到这里。',
+    keyHelp: '粘贴 API Key 后，点击“连接模型”，ClawClaw 会自动获取可用模型。',
+    replaceHelp: '留空则保留已保存的 API Key；粘贴新密钥可替换。',
+    connect: '连接模型', connecting: '正在连接…',
+    edit: '编辑', collapse: '收起', key: 'API Key（API 密钥）', required: '请输入 API Key。',
+    replacePlaceholder: '已保存 API Key，输入新密钥可替换', placeholder: '粘贴神石平台的 API Key',
+    customized: '高级设置', baseUrl: 'Base URL', models: '模型', fetch: '获取可用模型',
     fetching: '获取中...', empty: '尚未配置模型。', addModel: '添加模型', modelId: '模型 ID',
     modelName: '模型名称', advanced: '模型高级设置', contextWindow: '上下文窗口',
     maxTokens: '最大输出 Token', inputTypes: '输入类型', removeModel: '删除模型',
     invalidModel: '请至少添加一个大语言模型，并确保每个模型都有不重复的模型 ID。', cancel: '取消', save: '保存', saving: '保存中...',
   },
 } as const
-type CopyKey = keyof typeof COPY.en
+type CopyKey = keyof typeof SPIRITX_PROVIDER_COPY.en
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -57,13 +74,17 @@ export const SPIRITX_PROVIDER_PRIORITY_STYLE = `
 li:has([data-dsh-spiritx-provider]) { order: -1; position: relative; }
 li:has([data-dsh-spiritx-provider]) > div:first-child > span:last-child:has(> button) { display: none; }
 li:has([data-dsh-spiritx-provider]) > div:not(.spiritxProviderEditor):not(:has(> span > button)):has(+ .spiritxProviderRoot) { display: none; }
-.spiritxProviderRoot { display: contents; }
-.spiritxProviderEdit { position: absolute; top: 12px; right: 14px; box-sizing: border-box; height: 28px; padding: 0 10px; border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-sm); background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
+.spiritxProviderRoot { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.spiritxProviderEdit { margin-left: auto; flex: none; box-sizing: border-box; height: 28px; padding: 0 10px; border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-sm); background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; }
 .spiritxProviderEdit:hover:not(:disabled), .spiritxProviderIcon:hover:not(:disabled), .spiritxProviderLink:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
 .spiritxProviderEditor { border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-module-platform); padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
-.spiritxProviderHeader { display: flex; align-items: baseline; gap: 8px; }
+.spiritxProviderHeader { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .spiritxProviderTitle { color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 22px; font-weight: 500; }
-.spiritxProviderRoute { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
+.spiritxProviderStatus { padding: 2px 8px; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
+.spiritxProviderHelp { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 22px; }
+.spiritxProviderGuide { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-md); }
+.spiritxProviderPlatformLink { align-self: flex-start; color: var(--dsh-color-accent); font-size: 13px; line-height: 24px; text-decoration: underline; text-underline-offset: 3px; }
+.spiritxProviderPlatformLink:focus-visible { outline: 2px solid var(--dsh-color-accent); outline-offset: 3px; }
 .spiritxProviderField { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .spiritxProviderLabel { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; font-weight: 500; }
 .spiritxProviderInput { box-sizing: border-box; width: 100%; min-width: 0; height: 32px; padding: 0 10px; border: .5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; line-height: 20px; }
@@ -150,6 +171,7 @@ export function protectSpiritXProviderRow(root: HTMLElement): () => void {
       }
     }
     if (head.lastElementChild !== identity) hide(head.lastElementChild)
+    hide(head)
   }
   apply()
   const observer = new MutationObserver(apply)
@@ -163,6 +185,8 @@ export function protectSpiritXProviderRow(root: HTMLElement): () => void {
 }
 
 function SpiritXProviderEditor(props: SpiritXProviderProps): ReactNode {
+  const helpId = useId()
+  const browserHelpId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const [editing, setEditing] = useState(() => !props.configured || !props.keyConfigured)
   const [key, setKey] = useState('')
@@ -237,18 +261,31 @@ function SpiritXProviderEditor(props: SpiritXProviderProps): ReactNode {
   }
 
   return <div ref={rootRef} className="spiritxProviderRoot" data-dsh-spiritx-provider>
+    <div className="spiritxProviderHeader">
+      <span className="spiritxProviderTitle">{props.t('title')}</span>
+      <span className="spiritxProviderStatus">{props.t(props.keyConfigured ? 'keyConfigured' : 'pending')}</span>
     <button type="button" className="spiritxProviderEdit" disabled={busy}
+      aria-expanded={editing}
       onClick={() => { setEditing(current => !current); setFailure(undefined) }}>
       {props.t(editing ? 'collapse' : 'edit')}
     </button>
+    </div>
     {!editing ? null : <div className="spiritxProviderEditor">
-      <div className="spiritxProviderHeader"><span className="spiritxProviderTitle">SpiritX</span><span className="spiritxProviderRoute">spiritx</span></div>
+      <p className="spiritxProviderHelp">{props.t('description')}</p>
+      {!props.keyConfigured ? <div className="spiritxProviderGuide">
+        <p className="spiritxProviderHelp">{props.t('getKeyHelp')}</p>
+        <a className="spiritxProviderPlatformLink" href={SPIRITX_PLATFORM_URL} target="_blank" rel="noopener noreferrer"
+          aria-describedby={browserHelpId}>{props.t('getKey')}</a>
+        <p className="spiritxProviderHelp" id={browserHelpId}>{props.t('browserHelp')}</p>
+      </div> : null}
       <label className="spiritxProviderField">
         <span className="spiritxProviderLabel">{props.t('key')}</span>
-        <input className="spiritxProviderInput" type="password" autoComplete="new-password" autoFocus value={key}
+        <input className="spiritxProviderInput" type="password" autoComplete="new-password" value={key}
+          aria-describedby={helpId}
           placeholder={props.t(props.keyConfigured ? 'replacePlaceholder' : 'placeholder')}
           disabled={disabled} onChange={(event) => { setKey(event.target.value); setFailure(undefined) }} />
       </label>
+      <p className="spiritxProviderHelp" id={helpId}>{props.t(props.keyConfigured ? 'replaceHelp' : 'keyHelp')}</p>
       <details className="spiritxProviderCustom">
         <summary className="spiritxProviderSummary">{props.t('customized')}</summary>
         <div className="spiritxProviderCustomBody">
@@ -307,7 +344,7 @@ function SpiritXProviderEditor(props: SpiritXProviderProps): ReactNode {
           onClick={() => { setEditing(false); setKey(''); setFailure(undefined) }}>{props.t('cancel')}</button>
         <button type="button" className="spiritxProviderButton spiritxProviderButtonPrimary"
           disabled={disabled || (!modelsValid(models) && !(models.length === 0 && key.trim().length > 0))}
-          onClick={() => { void save() }}>{props.t(busy ? 'saving' : 'save')}</button>
+          onClick={() => { void save() }}>{props.t(props.keyConfigured ? (busy ? 'saving' : 'save') : (busy ? 'connecting' : 'connect'))}</button>
       </div>
     </div>}
   </div>
@@ -320,7 +357,7 @@ export function SpiritXProviderPriorityMarker(props: SpiritXProviderProps): Reac
 /** Keep SpiritX first and replace its generic unknown-namespace editor. */
 export function applySpiritXProviderPriority(ctx: ClientContext): void {
   if (typeof document === 'undefined') return
-  ctx.effect(() => ctx.locale.register(NS, COPY), 'dsh-plugin-desktop: SpiritX provider copy')
+  ctx.effect(() => ctx.locale.register(NS, SPIRITX_PROVIDER_COPY), 'dsh-plugin-desktop: SpiritX provider copy')
   const t = ctx.locale.bind(NS) as SpiritXProviderInjected['t']
   ctx.slots.inject('settings.models.provider-card', () => ctx.slots.register({
     name: 'settings.models.provider-card',
