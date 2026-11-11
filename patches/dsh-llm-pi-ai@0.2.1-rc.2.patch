@@ -1,5 +1,5 @@
 diff --git a/lib/index.js b/lib/index.js
-index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..9495b818eb92087e6ba7b01ebdf8363d5ee569cf 100644
+index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d765b9486c2 100644
 --- a/lib/index.js
 +++ b/lib/index.js
 @@ -686,7 +686,8 @@ function resolveRouteModels(request, validation = "strict") {
@@ -147,7 +147,7 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..9495b818eb92087e6ba7b01ebdf8363d
  	const listing = body;
  	const data = listing?.data;
  	let listed;
-@@ -2350,8 +2403,19 @@ function readListing(body) {
+@@ -2350,8 +2403,31 @@ function readListing(body) {
  		const name = label(entry?.name, entry?.display_name, entry?.displayName) ?? id;
  		const contextWindow = capacity(entry?.contextWindow, entry?.context_window, entry?.context_length, entry?.max_input_tokens, entry?.limit?.context);
  		const maxTokens = capacity(entry?.maxOutputTokens, entry?.max_output_tokens, entry?.maxTokens, entry?.max_tokens, entry?.limit?.output, entry?.top_provider?.max_completion_tokens);
@@ -160,14 +160,26 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..9495b818eb92087e6ba7b01ebdf8363d
 +		const api = Array.isArray(endpoints) && endpoints.length > 0
 +			? endpoints.includes(paths[preferredApi]) ? preferredApi : Object.keys(paths).find(protocol => endpoints.includes(paths[protocol]))
 +			: void 0;
++		const catalogModel = builtinProviders().flatMap(provider => getBuiltinModels(provider.id))
++			.find(model => model.id === id && model.api === (api ?? preferredApi));
++		const advertisedEfforts = entry?.reasoningEfforts;
++		const validEfforts = advertisedEfforts === false || (advertisedEfforts && typeof advertisedEfforts === "object"
++			&& !Array.isArray(advertisedEfforts) && Object.keys(advertisedEfforts).length > 0
++			&& Object.entries(advertisedEfforts).every(([level, wire]) => THINKING_LEVELS.includes(level)
++				&& (level === "off" && wire === null || typeof wire === "string" && wire.length > 0))
++			&& Object.keys(advertisedEfforts).some(level => level !== "off"));
++		const reasoningEfforts = validEfforts ? advertisedEfforts : catalogModel?.reasoning
++			? Object.fromEntries(getSupportedThinkingLevels(catalogModel).map(level => [level, catalogModel.thinkingLevelMap?.[level] ?? (level === "off" ? null : level)]))
++			: void 0;
  		models.push({
  			id,
++			...reasoningEfforts === void 0 ? {} : { reasoningEfforts },
 +			...api === void 0 ? {} : { api },
 +			...supportsConversation === void 0 ? {} : { supportsConversation },
  			name,
  			...contextWindow === void 0 ? {} : { contextWindow },
  			...maxTokens === void 0 ? {} : { maxTokens }
-@@ -2432,7 +2496,7 @@ async function discoverModels(request, storedProfile) {
+@@ -2432,7 +2508,7 @@ async function discoverModels(request, storedProfile) {
  	} catch (error) {
  		throw new LlmError(`${url} did not answer with JSON`, "DISCOVERY_FAILED", { cause: error });
  	}
@@ -176,7 +188,7 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..9495b818eb92087e6ba7b01ebdf8363d
  }
  //#endregion
  //#region lib/types/login.js
-@@ -2821,7 +2885,7 @@ const NS = "llm-pi-ai";
+@@ -2821,7 +2897,7 @@ const NS = "llm-pi-ai";
  * not mistaken for a route change.
  */
  function registrationFacts(profiles) {
@@ -185,7 +197,7 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..9495b818eb92087e6ba7b01ebdf8363d
  		provider,
  		displayName: profile.displayName,
  		retryPolicy: profile.retryPolicy
-@@ -2943,7 +3007,7 @@ function apply(ctx, config) {
+@@ -2943,7 +3019,7 @@ function apply(ctx, config) {
  	const ensureRegistrationFacts = () => {
  		const facts = registrationFacts(profiles());
  		if (deepEqualJson(facts, registeredFacts)) return;

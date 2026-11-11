@@ -10,6 +10,7 @@ export const SPIRITX_SETTINGS_NS = 'llm-pi-ai'
 
 export interface SpiritXModelDraft {
   id: string
+  reasoningEfforts?: NonNullable<LlmDiscoveredModel['reasoningEfforts']>
   api?: string
   supportsConversation?: boolean
   name?: string
@@ -25,6 +26,16 @@ export interface SpiritXProfileDraft {
 
 export type SpiritXResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
+export const SPIRITX_REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+
+export function spiritXReasoningValid(efforts: SpiritXModelDraft['reasoningEfforts']): boolean {
+  if (efforts === undefined || efforts === false) return true
+  const entries = Object.entries(efforts)
+  return entries.some(([level]) => level !== 'off') && entries.every(([level, wire]) =>
+    SPIRITX_REASONING_LEVELS.some(candidate => candidate === level)
+    && (level === 'off' && wire === null || typeof wire === 'string' && wire.trim().length > 0))
+}
+
 const NON_LANGUAGE_MODEL = /(?:^|[-_.])(image|embedding|embed|rerank|moderation|tts|speech|whisper|transcri(?:be|ption)|audio)(?:$|[-_.\d])/i
 
 /** Advertised capability wins; names are only a fallback for legacy catalogs without metadata. */
@@ -37,9 +48,38 @@ export function firstLanguageModel(models: readonly LlmDiscoveredModel[]): LlmDi
   return models.find(isConversationModel)
 }
 
+/** Fallbacks for exact IDs returned by SpiritX's /models, which omits effort metadata.
+ * GLM: https://huggingface.co/zai-org/GLM-5.3#note
+ * DeepSeek: https://api-docs.deepseek.com/guides/thinking_mode/
+ * Qwen: https://huggingface.co/Qwen/Qwen3.8-27B
+ */
+const SPIRITX_REASONING: Record<string, NonNullable<SpiritXModelDraft['reasoningEfforts']>> = {
+  'glm-5.3': { low: 'low', high: 'high', max: 'max' },
+  'glm-5.3-flash': { low: 'low', high: 'high', max: 'max' },
+  'deepseek-v4-flash': { off: 'none', low: 'low', high: 'high', max: 'max' },
+  'deepseek-v4-flash-0731': { off: 'none', low: 'low', high: 'high', max: 'max' },
+  'deepseek-v4.1-flash-1017': { off: 'none', low: 'low', high: 'high', xhigh: 'xhigh', max: 'max' },
+  'deepseek-v4.1-flash': { off: 'none', low: 'low', high: 'high', max: 'max' },
+  'startlux-decision-v1.1-9b-instant': false,
+  'qwen3guard-gen-4b': false,
+  'qwen3.8-27b-fp8': { low: 'low', medium: 'medium', xhigh: 'xhigh' },
+  'qwen3.8-flash-next-nvfp4': { low: 'low', medium: 'medium', xhigh: 'xhigh' },
+  'qwen3.8-flash-next': { low: 'low', medium: 'medium', xhigh: 'xhigh' },
+  'qwen3.8-27b': { low: 'low', medium: 'medium', xhigh: 'xhigh' },
+}
+
+function withSpiritXReasoning<T extends SpiritXModelDraft>(model: T): T {
+  if (model.reasoningEfforts !== undefined
+    || (model.api !== undefined && !['openai-completions', 'openai-responses'].includes(model.api))) return model
+  const id = model.id.toLowerCase()
+  const reasoningEfforts = Object.hasOwn(SPIRITX_REASONING, id) ? SPIRITX_REASONING[id] : undefined
+  return reasoningEfforts === undefined ? model : { ...model, reasoningEfforts }
+}
+
 function profileModel(model: LlmDiscoveredModel): JsonValue {
   return {
     id: model.id,
+    ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
     ...model.api === undefined ? {} : { api: model.api },
     ...model.supportsConversation === undefined ? {} : { supportsConversation: model.supportsConversation },
     name: model.name ?? model.id,
@@ -52,6 +92,7 @@ function profileModel(model: LlmDiscoveredModel): JsonValue {
 function modelValue(model: SpiritXModelDraft): JsonValue {
   return {
     id: model.id.trim(),
+    ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
     ...model.api === undefined ? {} : { api: model.api },
     ...model.supportsConversation === undefined ? {} : { supportsConversation: model.supportsConversation },
     ...model.name === undefined ? {} : { name: model.name },
@@ -71,6 +112,7 @@ function modelCatalogValid(models: readonly SpiritXModelDraft[]): boolean {
     && ids.every(id => id.length > 0)
     && new Set(ids).size === ids.length
     && models.every(isConversationModel)
+    && models.every(model => spiritXReasoningValid(model.reasoningEfforts))
 }
 
 function objectAt(value: JsonValue | undefined, path: readonly string[]): Record<string, JsonValue> | undefined {
@@ -90,6 +132,7 @@ function modelDraft(value: JsonValue): SpiritXModelDraft | undefined {
   if (typeof id !== 'string') return undefined
   return {
     id,
+    ...value.reasoningEfforts === undefined ? {} : { reasoningEfforts: value.reasoningEfforts as NonNullable<SpiritXModelDraft['reasoningEfforts']> },
     ...typeof value.api === 'string' ? { api: value.api } : {},
     ...typeof value.supportsConversation === 'boolean' ? { supportsConversation: value.supportsConversation } : {},
     ...typeof value.name === 'string' ? { name: value.name } : {},
@@ -159,11 +202,14 @@ export async function syncSpiritXModelProtocols(ctx: ClientContext): Promise<voi
   const models = profile.models.map(modelDraft)
   if (models.length === 0) return
   const discovered = await fetchSpiritXModels(ctx)
-  if (!discovered.ok) return
-  const advertised = new Map(discovered.value.map(model => [model.id, model]))
+  const advertised = new Map((discovered.ok ? discovered.value : []).map(model => [model.id, model]))
   const ops: SettingsPathOpView[] = []
   models.forEach((model, index) => {
     const live = model === undefined ? undefined : advertised.get(model.id)
+    const reasoningEfforts = live?.reasoningEfforts ?? (model === undefined ? undefined : withSpiritXReasoning(model).reasoningEfforts)
+    if (model !== undefined && model.reasoningEfforts === undefined && reasoningEfforts !== undefined) {
+      ops.push({ op: 'set', path: ['providers', 'spiritx', 'models', String(index), 'reasoningEfforts'], value: reasoningEfforts })
+    }
     const api = live?.api
     if (model !== undefined && live?.supportsConversation !== undefined && model.supportsConversation !== live.supportsConversation) {
       ops.push({ op: 'set', path: ['providers', 'spiritx', 'models', String(index), 'supportsConversation'], value: live.supportsConversation })
@@ -198,7 +244,7 @@ async function fetchSpiritXModels(
     ...apiKey.length === 0 ? {} : { apiKey },
   })
   return discovered.ok
-    ? { ok: true, value: [...discovered.value] }
+    ? { ok: true, value: discovered.value.map(withSpiritXReasoning) }
     : { ok: false, error: discovered.error.message }
 }
 
@@ -234,7 +280,8 @@ export async function saveSpiritXModels(
   ctx: ClientContext,
   models: readonly SpiritXModelDraft[],
 ): Promise<string | undefined> {
-  const normalized = normalizedModels(models)
+  if (!models.every(model => spiritXReasoningValid(model.reasoningEfforts))) return '请为思考档位填写有效的请求值，并至少选择一个开启思考的档位。'
+  const normalized = normalizedModels(models).map(withSpiritXReasoning)
   if (!modelCatalogValid(normalized)) return 'SpiritX 至少需要一个可用且 ID 不重复的大语言模型，且不能包含非对话模型。'
   const namespaces = await settingsView(ctx)
   const spiritx = namespaces === undefined ? undefined : namespaceOf(namespaces, SPIRITX_SETTINGS_NS)
@@ -262,6 +309,7 @@ export async function provisionSpiritX(
   }
   const discovered = await discoverSpiritXModels(ctx, apiKey)
   if (!discovered.ok) return discovered.error
+  if (models !== undefined && !models.every(model => spiritXReasoningValid(model.reasoningEfforts))) return '请为思考档位填写有效的请求值，并至少选择一个开启思考的档位。'
   const editedModels = models !== undefined && models.length > 0
     ? normalizedModels(models)
     : undefined
@@ -269,7 +317,8 @@ export async function provisionSpiritX(
     return 'SpiritX 至少需要一个可用且 ID 不重复的大语言模型，且不能包含非对话模型。'
   }
   const advertised = new Map(discovered.value.map(model => [model.id, model]))
-  const selectedModels = editedModels?.map(model => ({ ...model,
+  const selectedModels = editedModels?.map(model => withSpiritXReasoning({ ...model,
+    ...model.reasoningEfforts !== undefined || advertised.get(model.id)?.reasoningEfforts === undefined ? {} : { reasoningEfforts: advertised.get(model.id)!.reasoningEfforts! },
     ...advertised.get(model.id)?.api === undefined ? {} : { api: advertised.get(model.id)!.api! },
     ...advertised.get(model.id)?.supportsConversation === undefined ? {} : { supportsConversation: advertised.get(model.id)!.supportsConversation! },
   })) ?? discovered.value

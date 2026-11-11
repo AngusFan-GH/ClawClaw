@@ -1,0 +1,155 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "GLM-5.3",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/messages"
+      ]
+    },
+    {
+      "id": "DeepSeek-V4-Flash-0731",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/messages",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "DeepSeek-V4-Flash",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/messages",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "GLM-5.3-Flash",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/messages",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "DeepSeek-V4.1-Flash",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/messages",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "gpt-image-2",
+      "type_code": "TextToImage",
+      "supportedEndpointPaths": [
+        "/v1/images/generations"
+      ]
+    },
+    {
+      "id": "gpt-6-luna",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "gpt-6-sol",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "Qwen3.8-27B",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/messages",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "Qwen3.8-Flash-Next",
+      "type_code": "VLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/messages",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "gpt-6-astra",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "Qwen3Guard-Gen-4B",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/messages",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "type_code": "LLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ]
+    },
+    {
+      "id": "Qwen3.6-27B",
+      "type_code": "VLM",
+      "supportedEndpointPaths": [
+        "/v1/chat/completions",
+        "/v1/messages",
+        "/v1/responses"
+      ]
+    }
+  ]
+}

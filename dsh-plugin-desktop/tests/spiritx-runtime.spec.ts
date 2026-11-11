@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { discoverSpiritXModels } from '../src/client/spiritx-provisioning.ts'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { type LlmConfigurableProvider, type LlmModelDiscoveryRequest, type LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
 import * as PiAi from '@deepseek-ai/dsh-llm-pi-ai'
@@ -87,10 +89,64 @@ describe('SpiritX mixed model protocols', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     try {
-      ctx.llm.registerModelDiscovery('llm-pi-ai', async () => [{ id: 'GLM-5.3', api: 'openai-completions', supportsConversation: true }])
+      ctx.llm.registerModelDiscovery('llm-pi-ai', async () => [{ id: 'GLM-5.3', api: 'openai-completions', supportsConversation: true, reasoningEfforts: { high: 'high' } }])
       await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'spiritx' }))
-        .resolves.toEqual([{ id: 'GLM-5.3', api: 'openai-completions', supportsConversation: true }])
+        .resolves.toEqual([{ id: 'GLM-5.3', api: 'openai-completions', supportsConversation: true, reasoningEfforts: { high: 'high' } }])
     } finally { await ctx.fiber.dispose() }
+  })
+
+  it('offers model-specific efforts for the actual SpiritX model directory', async () => {
+    const runtime = mount(pending)
+    const listing = JSON.parse(readFileSync(new URL('./fixtures/spiritx-models.json', import.meta.url), 'utf8'))
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(listing)))
+    try {
+      const discover = runtime.ctx.llm.registerModelDiscovery.mock.calls[0]![1]
+      const result = await discoverSpiritXModels({ remote: { llm: {
+        discoverModels: async () => ({ ok: true, value: await discover({ provider: 'spiritx', baseURL: pending.baseURL, api: pending.api, apiKey: 'test-key' }) }),
+      } } } as never)
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error(result.error)
+      const configured = mount({ ...pending, setupPending: false, models: result.value })
+      const adapter = configured.registerAdapter.mock.calls[0]![1]
+      const expected: Record<string, string[]> = {
+        'GLM-5.3': ['low', 'high', 'max'],
+        'GLM-5.3-Flash': ['low', 'high', 'max'],
+        'DeepSeek-V4-Flash': ['off', 'low', 'high', 'max'],
+        'DeepSeek-V4-Flash-0731': ['off', 'low', 'high', 'max'],
+        'DeepSeek-V4.1-Flash': ['off', 'low', 'high', 'max'],
+        'Qwen3.8-27B': ['low', 'medium', 'xhigh'],
+        'Qwen3.8-Flash-Next': ['low', 'medium', 'xhigh'],
+      }
+      for (const [id, efforts] of Object.entries(expected)) {
+        expect((await adapter.resolveModel('spiritx', id)).reasoning?.efforts.map(effort => effort.id), id).toEqual(efforts)
+      }
+      expect(result.value.some(model => model.id === 'gpt-image-2')).toBe(false)
+      expect((await adapter.resolveModel('spiritx', 'Qwen3Guard-Gen-4B')).reasoning).toBeUndefined()
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it('discovers explicit thinking mappings and resolves selectable efforts', async () => {
+    const runtime = mount(pending)
+    const reasoningEfforts = { off: null, low: 'low', high: 'high' }
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ data: [
+      { id: 'thinking-chat', reasoningEfforts },
+      { id: 'plain-chat', reasoningEfforts: false },
+      { id: 'invalid-chat', reasoningEfforts: { high: null } },
+    ] })))
+    try {
+      const discover = runtime.ctx.llm.registerModelDiscovery.mock.calls[0]![1]
+      const models = await discover({ provider: 'spiritx', baseURL: pending.baseURL, api: pending.api, apiKey: 'test-key' })
+      expect(models).toEqual([
+        { id: 'thinking-chat', name: 'thinking-chat', reasoningEfforts },
+        { id: 'plain-chat', name: 'plain-chat', reasoningEfforts: false },
+        { id: 'invalid-chat', name: 'invalid-chat' },
+      ])
+      const configured = mount({ ...pending, setupPending: false, models })
+      const adapter = configured.registerAdapter.mock.calls[0]![1]
+      expect((await adapter.resolveModel('spiritx', 'thinking-chat')).reasoning?.efforts.map(effort => effort.id))
+        .toEqual(['off', 'low', 'high'])
+      expect((await adapter.resolveModel('spiritx', 'plain-chat')).reasoning).toBeUndefined()
+    } finally { vi.unstubAllGlobals() }
   })
 
   it('selects protocols from advertised endpoints without guessing from model names', async () => {
@@ -121,11 +177,13 @@ describe('SpiritX mixed model protocols', () => {
 
   it('sends GLM to chat/completions while GPT stays on responses in the same adapter', async () => {
     const runtime = mount({ ...pending, models: [
-      { id: 'GLM-5.3', api: 'openai-completions' },
-      { id: 'gpt-6.1-sol' },
+      { id: 'GLM-5.3', api: 'openai-completions', reasoningEfforts: { high: 'high' } },
+      { id: 'gpt-6.1-sol', reasoningEfforts: { high: 'high' } },
     ] })
     const paths: string[] = []
-    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
       const path = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url).pathname
       paths.push(path)
       const message = { id: 'msg-test', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'OK', annotations: [] }] }
@@ -145,11 +203,14 @@ describe('SpiritX mixed model protocols', () => {
     try {
       const adapter = runtime.registerAdapter.mock.calls[0]![1]
       for (const model of ['GLM-5.3', 'gpt-6.1-sol']) {
+        const reasoningEffort = (await adapter.resolveModel('spiritx', model)).reasoning!.efforts.find(effort => effort.id === 'high')!.id
         const prepared = await adapter.prepareCall('spiritx', model)
         const chunks = []
-        for await (const chunk of prepared.stream({ provider: 'spiritx', model, messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply OK' }] }] })) chunks.push(chunk)
+        for await (const chunk of prepared.stream({ provider: 'spiritx', model, reasoningEffort, messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply OK' }] }] })) chunks.push(chunk)
         expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
       }
+      expect(bodies[0]?.reasoning_effort).toBe('high')
+      expect(bodies[1]?.reasoning).toMatchObject({ effort: 'high' })
       expect(paths).toEqual(['/spiritx-api/v1/chat/completions', '/spiritx-api/v1/responses'])
     } finally { vi.unstubAllGlobals() }
   })

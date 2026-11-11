@@ -17,6 +17,8 @@ import {
   loadSpiritXProfile,
   provisionSpiritX,
   saveSpiritXModels,
+  spiritXReasoningValid,
+  SPIRITX_REASONING_LEVELS,
   SPIRITX_BASE_URL,
   SPIRITX_SETTINGS_NS,
 } from './spiritx-provisioning.ts'
@@ -40,6 +42,9 @@ export const SPIRITX_PROVIDER_COPY = {
     fetching: 'Fetching...', empty: 'No models configured.', addModel: 'Add model', modelId: 'Model ID',
     modelName: 'Model name', advanced: 'Advanced model settings', contextWindow: 'Context window',
     maxTokens: 'Max output tokens', inputTypes: 'Input types', removeModel: 'Remove model',
+    reasoning: 'Thinking levels', reasoningHelp: 'Select supported levels and enter the API value for each. Clear all levels to disable the selector.',
+    reasoningWire: 'API value', reasoningOff: 'Leave blank to omit the reasoning parameter.',
+    reasoningInvalid: 'Select a thinking level beyond off and enter a non-empty API value for each enabled level.',
     invalidModel: 'Add at least one language model and give every model a unique ID.', cancel: 'Cancel', save: 'Save', saving: 'Saving...',
   },
   zh: {
@@ -57,6 +62,9 @@ export const SPIRITX_PROVIDER_COPY = {
     fetching: '获取中...', empty: '尚未配置模型。', addModel: '添加模型', modelId: '模型 ID',
     modelName: '模型名称', advanced: '模型高级设置', contextWindow: '上下文窗口',
     maxTokens: '最大输出 Token', inputTypes: '输入类型', removeModel: '删除模型',
+    reasoning: '思考等级', reasoningHelp: '勾选模型支持的档位，并填写对应的接口参数值。取消全部档位可关闭选择器。',
+    reasoningWire: '接口参数值', reasoningOff: '留空表示不发送思考参数。',
+    reasoningInvalid: '请至少选择一个开启思考的档位，并为已选档位填写有效的接口参数值。',
     invalidModel: '请至少添加一个大语言模型，并确保每个模型都有不重复的模型 ID。', cancel: '取消', save: '保存', saving: '保存中...',
   },
 } as const
@@ -106,6 +114,10 @@ li:has([data-dsh-spiritx-provider]) > div:not(.spiritxProviderEditor):not(:has(>
 .spiritxProviderModel { padding: 6px; border: .5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-lg); }
 .spiritxProviderModelRow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto; align-items: center; gap: 6px; }
 .spiritxProviderModelAdvanced { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px 4px 2px; }
+.spiritxProviderReasoning { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 8px; border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-md); }
+.spiritxProviderReasoningRow { display: grid; grid-template-columns: minmax(88px, .4fr) minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px 0; }
+.spiritxProviderReasoningLevel { display: flex; gap: 8px; align-items: center; min-height: 36px; color: var(--dsw-alias-label-primary); font-size: 13px; cursor: pointer; }
+.spiritxProviderReasoningLevel input:focus-visible { outline: 2px solid var(--dsh-color-accent); outline-offset: 2px; }
 .spiritxProviderInputTypes { grid-column: 1 / -1; }
 .spiritxProviderEmpty { margin: 0; padding: 12px; border: 1px dashed var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg); color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; text-align: center; }
 .spiritxProviderError { margin: 0; color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 18px; }
@@ -114,7 +126,11 @@ li:has([data-dsh-spiritx-provider]) > div:not(.spiritxProviderEditor):not(:has(>
 .spiritxProviderButtonPrimary { border: none; background: var(--dsh-color-primary); color: var(--dsh-color-on-primary); }
 .spiritxProviderButtonPrimary:hover:not(:disabled) { background: var(--dsh-color-primary-hover); }
 .spiritxProviderButton:disabled, .spiritxProviderLink:disabled, .spiritxProviderIcon:disabled { opacity: .4; cursor: default; }
-@media (max-width: 520px) { .spiritxProviderModelRow { grid-template-columns: minmax(0, 1fr) auto auto; } .spiritxProviderModelRow > input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; } .spiritxProviderModelAdvanced { grid-template-columns: 1fr; } .spiritxProviderInputTypes { grid-column: 1; } }
+@media (max-width: 520px) { .spiritxProviderModelRow { grid-template-columns: minmax(0, 1fr) auto auto; } .spiritxProviderModelRow > input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; } .spiritxProviderModelAdvanced { grid-template-columns: 1fr; } .spiritxProviderReasoning { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 8px; border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-md); }
+.spiritxProviderReasoningRow { display: grid; grid-template-columns: minmax(88px, .4fr) minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px 0; }
+.spiritxProviderReasoningLevel { display: flex; gap: 8px; align-items: center; min-height: 36px; color: var(--dsw-alias-label-primary); font-size: 13px; cursor: pointer; }
+.spiritxProviderReasoningLevel input:focus-visible { outline: 2px solid var(--dsh-color-accent); outline-offset: 2px; }
+.spiritxProviderInputTypes { grid-column: 1; } }
 `
 
 interface SpiritXProviderInjected {
@@ -132,6 +148,7 @@ function discoveredDraft(model: LlmDiscoveredModel): SpiritXModelDraft {
     id: model.id,
     ...model.api === undefined ? {} : { api: model.api },
     ...model.supportsConversation === undefined ? {} : { supportsConversation: model.supportsConversation },
+    ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
     ...model.name === undefined ? {} : { name: model.name },
     ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
     ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
@@ -145,6 +162,44 @@ function modelsValid(models: readonly SpiritXModelDraft[]): boolean {
     && ids.every(id => id.length > 0)
     && new Set(ids).size === ids.length
     && models.every(model => firstLanguageModel([model]) !== undefined)
+    && models.every(model => spiritXReasoningValid(model.reasoningEfforts))
+}
+
+function SpiritXReasoningEditor({ model, disabled, change, t }: {
+  model: SpiritXModelDraft
+  disabled: boolean
+  change: (efforts: NonNullable<SpiritXModelDraft['reasoningEfforts']>) => void
+  t: SpiritXProviderInjected['t']
+}): ReactNode {
+  const helpId = useId()
+  const errorId = useId()
+  const efforts = model.reasoningEfforts || {}
+  const valid = spiritXReasoningValid(model.reasoningEfforts)
+  return <fieldset className="spiritxProviderReasoning" disabled={disabled} aria-describedby={helpId}>
+    <legend className="spiritxProviderLabel">{t('reasoning')}</legend>
+    <p id={helpId} className="spiritxProviderHelp">{t('reasoningHelp')}</p>
+    {SPIRITX_REASONING_LEVELS.map(level => {
+      const enabled = efforts[level] !== undefined
+      return <div className="spiritxProviderReasoningRow" key={level}>
+        <label className="spiritxProviderReasoningLevel">
+          <input type="checkbox" checked={enabled} onChange={event => {
+            const next = { ...efforts }
+            if (event.target.checked) next[level] = level === 'off' ? null : level
+            else delete next[level]
+            change(Object.keys(next).length === 0 ? false : next)
+          }} />{level}
+        </label>
+        {enabled ? <label className="spiritxProviderField">
+          <span className="spiritxProviderLabel">{t('reasoningWire')} · {level}</span>
+          <input className="spiritxProviderInput" value={efforts[level] ?? ''}
+            aria-invalid={!valid} aria-describedby={!valid ? errorId : undefined}
+            onChange={event => { change({ ...efforts, [level]: level === 'off' && event.target.value === '' ? null : event.target.value }) }} />
+          {level === 'off' ? <span className="spiritxProviderHelp">{t('reasoningOff')}</span> : null}
+        </label> : null}
+      </div>
+    })}
+    {valid ? null : <p id={errorId} className="spiritxProviderError" role="alert">{t('reasoningInvalid')}</p>}
+  </fieldset>
 }
 
 /** Enforce product-owned card chrome without depending on upstream hashed CSS classes. */
@@ -221,7 +276,7 @@ function SpiritXProviderEditor(props: SpiritXProviderProps): ReactNode {
   const disabled = busy || loading
   const patchModel = (
     index: number,
-    patch: Record<string, string | number | string[] | undefined>,
+    patch: { [Key in keyof SpiritXModelDraft]?: SpiritXModelDraft[Key] | undefined },
   ): void => {
     setModels(current => current.map((model, at) => at === index
       ? Object.fromEntries(Object.entries({ ...model, ...patch }).filter(([, value]) => value !== undefined)) as unknown as SpiritXModelDraft
@@ -237,7 +292,11 @@ function SpiritXProviderEditor(props: SpiritXProviderProps): ReactNode {
     try {
       const result = await props.discover(key.trim().length === 0 ? undefined : key)
       if (!result.ok) { setFailure(result.error); return }
-      setModels(result.value.map(discoveredDraft))
+      setModels(current => result.value.map(model => {
+        const draft = discoveredDraft(model)
+        const existing = current.find(item => item.id === model.id)
+        return existing?.reasoningEfforts === undefined ? draft : { ...draft, reasoningEfforts: existing.reasoningEfforts }
+      }))
       setExpanded(new Set())
     } catch (error) {
       setFailure(errorMessage(error))
@@ -321,6 +380,8 @@ function SpiritXProviderEditor(props: SpiritXProviderProps): ReactNode {
                   </button>
                 </div>
                 {!expanded.has(index) ? null : <div className="spiritxProviderModelAdvanced">
+                  <SpiritXReasoningEditor model={model} disabled={disabled} t={props.t}
+                    change={reasoningEfforts => { patchModel(index, { reasoningEfforts }) }} />
                   <label className="spiritxProviderField"><span className="spiritxProviderLabel">{props.t('contextWindow')}</span>
                     <input className="spiritxProviderInput" type="number" min="1" value={model.contextWindow ?? ''} disabled={disabled}
                       onChange={event => { patchModel(index, { contextWindow: event.target.value === '' ? undefined : Number(event.target.value) }) }} /></label>

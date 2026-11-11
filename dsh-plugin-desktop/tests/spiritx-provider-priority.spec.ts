@@ -219,6 +219,52 @@ describe('SpiritX provider priority', () => {
     host.remove()
   })
 
+  it('edits thinking levels, validates wire values, and preserves edits on refresh', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    const saveModels = vi.fn(async () => undefined)
+    const discover = vi.fn(async () => ({ ok: true, value: [{ id: 'chat-first', reasoningEfforts: { high: 'high' } }] }))
+    await act(async () => { root.render(createElement(SpiritXProviderPriorityMarker, {
+      provider: { provider: 'spiritx' }, configured: true, keyConfigured: true,
+      ...injected({ saveModels, discover }),
+    } as never)) })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderEdit')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('[aria-label="advanced 1"]')!.click() })
+    const row = () => [...host.querySelectorAll<HTMLElement>('.spiritxProviderReasoningRow')]
+      .find(element => element.querySelector('label')?.textContent === 'low')!
+    await act(async () => { row().querySelector<HTMLInputElement>('[type="checkbox"]')!.click() })
+    const wire = row().querySelector<HTMLInputElement>('.spiritxProviderInput')!
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => { setValue.call(wire, ''); wire.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!.disabled).toBe(true)
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('reasoningInvalid')
+    await act(async () => { setValue.call(wire, 'vendor-low'); wire.dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderLink')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!.click() })
+    expect(saveModels).toHaveBeenCalledWith([expect.objectContaining({ id: 'chat-first', reasoningEfforts: { low: 'vendor-low' } })])
+    await act(async () => { root.unmount() })
+    host.remove()
+  })
+
+  it('saves an explicit disabled capability when the last level is unchecked', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    const saveModels = vi.fn(async () => undefined)
+    await act(async () => { root.render(createElement(SpiritXProviderPriorityMarker, {
+      provider: { provider: 'spiritx' }, configured: true, keyConfigured: true,
+      ...injected({ saveModels, load: async () => ({ ok: true, value: { models: [{ id: 'GLM-5.3', reasoningEfforts: { high: 'high' } }] } }) }),
+    } as never)) })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderEdit')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('[aria-label="advanced 1"]')!.click() })
+    await act(async () => { host.querySelector<HTMLInputElement>('input[type="checkbox"]:checked')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!.click() })
+    expect(saveModels).toHaveBeenCalledWith([expect.objectContaining({ reasoningEfforts: false })])
+    await act(async () => { root.unmount() })
+    host.remove()
+  })
+
   it('registers the marker in the official keyed slot and installs ordering styles', () => {
     const register = vi.fn(() => vi.fn())
     const inject = vi.fn((_name: string, registerEntry: () => void) => { registerEntry() })

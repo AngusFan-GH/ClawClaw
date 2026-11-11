@@ -24,6 +24,11 @@ describe('SpiritX provisioning', () => {
     expect(topLevelInject).toContain("'remote.settings'")
   })
 
+  it.each([{ off: null }, { low: '' }, { high: '   ' }])('rejects invalid user effort mappings before saving', async reasoningEfforts => {
+    await expect(saveSpiritXModels({} as never, [{ id: 'chat', reasoningEfforts }]))
+      .resolves.toContain('思考档位')
+  })
+
   it('uses the first returned language model', () => {
     expect(firstLanguageModel([
       { id: 'gpt-image-2', name: 'GPT Image 2' },
@@ -178,14 +183,14 @@ describe('SpiritX provisioning', () => {
       getSnapshot: () => ({ view: { namespaces: [{
         ns: 'llm-pi-ai', revision: 2, value: { providers: { spiritx: {
           baseURL: 'https://example.test/v1',
-          models: [{ id: 'chat-first', api: 'openai-completions', name: 'Chat First', contextWindow: 8192, input: ['text'] }],
+          models: [{ id: 'chat-first', api: 'openai-completions', name: 'Chat First', contextWindow: 8192, input: ['text'], reasoningEfforts: { low: 'low', high: 'high' } }],
         } } },
       }] } }),
     }) } } as never
 
     await expect(loadSpiritXProfile(ctx)).resolves.toEqual({ ok: true, value: {
       baseURL: 'https://example.test/v1',
-      models: [{ id: 'chat-first', api: 'openai-completions', name: 'Chat First', contextWindow: 8192, input: ['text'] }],
+      models: [{ id: 'chat-first', api: 'openai-completions', name: 'Chat First', contextWindow: 8192, input: ['text'], reasoningEfforts: { low: 'low', high: 'high' } }],
     } })
     expect(ensure).toHaveBeenCalledOnce()
   })
@@ -275,10 +280,10 @@ describe('SpiritX provisioning', () => {
 
 
 describe('SpiritX legacy protocol sync', () => {
-  function fixture(baseURL = 'https://ai.xzinfra.com/spiritx-api/v1', ok = true) {
+  function fixture(baseURL = 'https://ai.xzinfra.com/spiritx-api/v1', ok = true, legacyGlm = false) {
     const mutate = vi.fn(async () => ({ ok: true, value: {} }))
     const discoverModels = vi.fn(async () => ok ? { ok: true, value: [
-      { id: 'GLM-5.3', api: 'openai-completions' },
+      { id: 'chat-only', api: 'openai-completions' },
       { id: 'gpt-6.1-sol', api: 'openai-responses' },
       { id: 'explicit', api: 'openai-completions' },
     ] } : { ok: false, error: { message: 'offline' } })
@@ -287,8 +292,8 @@ describe('SpiritX legacy protocol sync', () => {
       configForms: { describe: () => ({ ensure: async () => {}, getSnapshot: () => ({ view: { namespaces: [{
         ns: 'llm-pi-ai', revision: 12, value: { providers: { spiritx: {
           api: 'openai-responses', apiKeyEnv: 'SPIRITX_API_KEY', baseURL,
-          models: [{ id: 'GLM-5.3', name: 'Custom GLM', maxTokens: 1234 }, { id: 'gpt-6.1-sol' },
-            { id: 'explicit', api: 'anthropic-messages' }, { id: 'unknown' }],
+          models: legacyGlm ? [{ id: 'GLM-5.3', api: 'openai-completions' }] : [{ id: 'chat-only', name: 'Custom GLM', maxTokens: 1234 }, { id: 'gpt-6.1-sol' },
+            { id: 'explicit', api: 'anthropic-messages', reasoningEfforts: false }, { id: 'unknown' }],
         } } },
       }] } }) }) },
     } as never
@@ -303,6 +308,57 @@ describe('SpiritX legacy protocol sync', () => {
       { op: 'set', path: ['providers', 'spiritx', 'models', '1', 'api'], value: 'openai-responses' },
       { op: 'set', path: ['providers', 'spiritx', 'models', '2', 'api'], value: 'openai-completions' },
     ], 12)
+  })
+
+  it('backfills missing thinking mappings while preserving explicit settings', async () => {
+    const { ctx, mutate, discoverModels } = fixture()
+    discoverModels.mockResolvedValueOnce({ ok: true, value: [
+      { id: 'chat-only', reasoningEfforts: { high: 'high' } },
+      { id: 'explicit', reasoningEfforts: { high: 'high' } },
+    ] } as never)
+    await syncSpiritXModelProtocols(ctx)
+    expect(mutate).toHaveBeenCalledWith('llm-pi-ai', [
+      { op: 'set', path: ['providers', 'spiritx', 'models', '0', 'reasoningEfforts'], value: { high: 'high' } },
+    ], 12)
+  })
+
+  it('migrates a legacy GLM-5.3 without gateway metadata, even offline', async () => {
+    for (const online of [true, false]) {
+      const { ctx, mutate } = fixture(undefined, online, true)
+      await syncSpiritXModelProtocols(ctx)
+      expect(mutate).toHaveBeenCalledWith('llm-pi-ai', [
+        { op: 'set', path: ['providers', 'spiritx', 'models', '0', 'reasoningEfforts'], value: { low: 'low', high: 'high', max: 'max' } },
+      ], 12)
+    }
+  })
+
+  it('enriches the real GLM-5.3 gateway ID on discovery', async () => {
+    const { ctx, discoverModels } = fixture()
+    discoverModels.mockResolvedValueOnce({ ok: true, value: [{ id: 'GLM-5.3', api: 'openai-completions' }] })
+    await expect(discoverSpiritXModels(ctx)).resolves.toEqual({ ok: true, value: [
+      { id: 'GLM-5.3', api: 'openai-completions', reasoningEfforts: { low: 'low', high: 'high', max: 'max' } },
+    ] })
+  })
+
+  it('recognizes the supplied SpiritX IDs and preserves decision and classifier capabilities', async () => {
+    const { ctx, discoverModels } = fixture()
+    discoverModels.mockResolvedValueOnce({ ok: true, value: [
+      { id: 'DeepSeek-V4.1-Flash-1017', api: 'openai-responses' },
+      { id: 'StartLux-Decision-v1.1-9B-Instant', api: 'openai-completions' },
+      { id: 'Qwen3.8-27B-FP8', api: 'openai-responses' },
+      { id: 'Qwen3.8-Flash-Next-NVFP4', api: 'openai-responses' },
+      { id: 'Qwen3Guard-Gen-4B', api: 'openai-responses' },
+    ] })
+    const result = await discoverSpiritXModels(ctx)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(result.error)
+    expect(result.value.map(model => model.reasoningEfforts)).toEqual([
+      { off: 'none', low: 'low', high: 'high', xhigh: 'xhigh', max: 'max' },
+      false,
+      { low: 'low', medium: 'medium', xhigh: 'xhigh' },
+      { low: 'low', medium: 'medium', xhigh: 'xhigh' },
+      false,
+    ])
   })
 
   it('leaves custom endpoints alone', async () => {
