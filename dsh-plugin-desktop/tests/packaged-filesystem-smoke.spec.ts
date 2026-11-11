@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { expect, it } from 'vitest'
 import { verifyBundledSkills } from '../src/packaged-filesystem-smoke.ts'
 
+// The fixture copies the full skills tree, including PPT Master's icon catalog.
 it('discovers and reads shipped Cordis skills through fs-local in a plain app directory', async () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-packaged-skills-'))
   try {
@@ -25,4 +26,4 @@ it('discovers and reads shipped Cordis skills through fs-local in a plain app di
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
-})
+}, 30_000)
