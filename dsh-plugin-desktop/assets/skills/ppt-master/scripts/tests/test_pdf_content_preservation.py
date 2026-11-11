@@ -121,4 +121,3 @@ class TableContentPreservationTests(unittest.TestCase):
             self._extract_table(rows),
             "|Label|Value|\n|---|---|\n|First|alpha<br>beta|\n|Pipe|left\\|right|",
         )
-

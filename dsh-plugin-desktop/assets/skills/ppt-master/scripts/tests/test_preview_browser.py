@@ -114,4 +114,3 @@ class PreviewBrowserTests(unittest.TestCase):
             with patch.object(common.webbrowser, 'open', return_value=False):
                 with self.assertLogs('server_common', level='WARNING'):
                     self.assertFalse(common.open_preview_browser(URL))
-

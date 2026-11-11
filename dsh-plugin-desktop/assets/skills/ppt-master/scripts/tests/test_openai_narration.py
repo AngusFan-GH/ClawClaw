@@ -475,4 +475,3 @@ class OpenAINarrationTests(unittest.TestCase):
         url, options = session.calls[0]
         self.assertEqual(parse_qs(urlsplit(url).query)["model"], ["file-model"])
         self.assertEqual(options["headers"]["Authorization"], "Bearer offline-test-key")
-
