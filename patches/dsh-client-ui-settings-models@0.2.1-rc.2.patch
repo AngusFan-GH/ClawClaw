@@ -1,0 +1,1170 @@
+diff --git a/lib/client.js b/lib/client.js
+index c6f5f273cd..c9d2a36212 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -259,224 +259,316 @@ window.__ModuleLoader__.load({
+ 			});
+ 		}
+ 		//#endregion
+-		//#region lib/types/client/ModelReasoningEfforts.js
+-		/** Reasoning-level declarations for a model on a hand-declared pi-ai route. */
+-		/** Levels a model offers when the switch is turned on, where the schema lists them: Off plus the common OpenAI-compatible trio. */
+-		const INITIAL_LEVELS = [
+-			"off",
+-			"low",
+-			"medium",
+-			"high"
+-		];
+-		/** The wire value a level sends unless its row says otherwise; `null` is the Off entry that sends nothing. */
+-		function defaultValue(level) {
+-			return level === "off" ? null : level;
+-		}
+-		/**
+-		* Whether pi-ai accepts a stored value: a non-empty string, or nothing for Off.
+-		* @param level - the declared level.
+-		* @param wire - the value stored for it.
+-		* @returns whether the adapter would resolve the entry.
+-		*/
+-		function acceptedValue(level, wire) {
+-			return typeof wire === "string" ? wire.length > 0 : wire === null && level === "off";
+-		}
+-		/**
+-		* Read the declared levels from a row in their stored order, including a key
+-		* the offered levels do not name, so an edit never drops it.
+-		* @param model - model row as drafted.
+-		* @returns the entries; empty for a valueless field, which pi-ai refuses, and
+-		* `undefined` when the field is absent or `false`.
+-		*/
+-		function readEfforts(model) {
+-			const value = model["reasoningEfforts"];
+-			if (value === null) return [];
+-			if (typeof value !== "object" || Array.isArray(value)) return void 0;
+-			return Object.entries(value);
+-		}
+-		/**
+-		* Replace a row's declared levels, preserving every other field.
+-		* @param model - model row as drafted.
+-		* @param entries - the levels to write in row order, or `undefined` to remove the field.
+-		* @returns the replacement row.
+-		*/
+-		function withEfforts(model, entries) {
+-			const next = { ...model };
+-			if (entries === void 0) {
+-				Reflect.deleteProperty(next, "reasoningEfforts");
+-				return next;
+-			}
+-			next["reasoningEfforts"] = Object.fromEntries(entries);
+-			return next;
+-		}
+-		/**
+-		* Mirror the pi-ai refusals of a hand-declared `reasoningEfforts`, so a card
+-		* names the row instead of failing at the write.
+-		* @param value - drafted `models` value, or `undefined` while inherited.
+-		* @returns the first refused row, or `undefined` when the adapter will accept every row.
+-		*/
+-		function validateReasoningEfforts(value) {
+-			for (const [index, model] of modelDrafts(value).entries()) {
+-				const entries = readEfforts(model);
+-				if (entries === void 0) continue;
+-				if (entries.some(([level, wire]) => !acceptedValue(level, wire))) return {
+-					index,
+-					key: "modelReasoningValueRequired"
+-				};
+-				if (!entries.some(([level]) => level !== "off")) return {
+-					index,
+-					key: "modelReasoningNeedsLevel"
+-				};
+-			}
+-		}
+-		/**
+-		* Edit the `reasoningEfforts` a hand-declared pi-ai model offers: a switch,
+-		* then one row per level pairing the level with the value sent for it. Every
+-		* row is read from the model, so a reused instance shows its new model.
+-		* @param props - model declaration and row replacement action.
+-		* @returns the reasoning-level group.
+-		*/
+-		function ModelReasoningEfforts({ model, levels, position, disabled, t, onChange }) {
+-			const entries = readEfforts(model);
+-			const [typing, setTyping] = (0, react.useState)(void 0);
+-			const label = `${t("modelReasoning")} ${String(position)}`;
+-			const used = entries?.map(([level]) => level) ?? [];
+-			const write = (next) => {
+-				onChange(withEfforts(model, next));
+-			};
+-			const replaceAt = (current, index, entry) => current.map((existing, at) => at === index ? entry : existing);
+-			const changeLevel = (current, index, from, wire, to) => {
+-				write(replaceAt(current, index, [to, typeof wire === "string" && wire.length > 0 && wire !== from && from !== "off" && to !== "off" ? wire : defaultValue(to)]));
+-			};
+-			const addLevel = (current) => {
+-				const highest = Math.max(-1, ...used.map((level) => levels.indexOf(level)));
+-				const level = levels.find((candidate, index) => index > highest && !used.includes(candidate)) ?? levels.find((candidate) => !used.includes(candidate));
+-				/* v8 ignore next -- the add button is disabled once every level has a row */
+-				if (level === void 0) return;
+-				write([...current, [level, defaultValue(level)]]);
+-			};
+-			const editValue = (current, index, level, text) => {
+-				setTyping({
+-					level,
+-					text
+-				});
+-				const trimmed = text.trim();
+-				write(replaceAt(current, index, [level, trimmed.length === 0 ? defaultValue(level) : trimmed]));
+-			};
+-			const leaveValue = (current, index, level, wire) => {
+-				setTyping(void 0);
+-				if (!acceptedValue(level, wire)) write(replaceAt(current, index, [level, defaultValue(level)]));
+-			};
+-			const choicesFor = (level) => [...levels.includes(level) ? [] : [level], ...levels.filter((choice) => choice === level || !used.includes(choice))];
+-			const initialEntries = INITIAL_LEVELS.filter((level) => levels.includes(level)).map((level) => [level, defaultValue(level)]);
+-			const refused = entries?.some(([level, wire]) => !acceptedValue(level, wire)) === true;
+-			const missingLevel = entries !== void 0 && !used.some((level) => level !== "off");
+-			return (0, react_jsx_runtime.jsxs)("div", {
+-				className: ModelsSection_module_css_default["modelReasoning"],
+-				role: "group",
+-				"aria-label": label,
+-				children: [(0, react_jsx_runtime.jsxs)("div", {
+-					className: ModelsSection_module_css_default["modelReasoningHead"],
+-					children: [(0, react_jsx_runtime.jsxs)("span", {
+-						className: `${ModelsSection_module_css_default["modelFieldLabel"]} ${ModelsSection_module_css_default["modelReasoningLabel"]}`,
+-						children: [t("modelReasoning"), (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
+-							label: t("modelReasoningHelpText"),
+-							side: "right",
+-							delayMs: 0,
+-							focusDelayMs: 0,
+-							portal: true,
+-							openOnClick: true,
+-							children: (0, react_jsx_runtime.jsx)("button", {
+-								type: "button",
+-								className: ModelsSection_module_css_default["helpButton"],
+-								"aria-label": t("modelReasoningHelp"),
+-								children: "?"
+-							})
+-						})]
+-					}), (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Switch, {
+-						checked: entries !== void 0,
+-						label,
+-						disabled,
+-						onChange: (on) => {
+-							write(on ? initialEntries : void 0);
+-						}
+-					})]
+-				}), entries === void 0 ? null : (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+-					entries.length > 0 ? (0, react_jsx_runtime.jsxs)("div", {
+-						className: ModelsSection_module_css_default["modelReasoningRow"],
+-						"aria-hidden": "true",
+-						children: [(0, react_jsx_runtime.jsx)("span", {
+-							className: ModelsSection_module_css_default["modelFieldLabel"],
+-							children: t("modelReasoningLevel")
+-						}), (0, react_jsx_runtime.jsx)("span", {
+-							className: ModelsSection_module_css_default["modelFieldLabel"],
+-							children: t("modelReasoningValue")
+-						})]
+-					}) : null,
+-					entries.map(([level, wire], index) => (0, react_jsx_runtime.jsxs)("div", {
+-						className: ModelsSection_module_css_default["modelReasoningRow"],
+-						children: [
+-							(0, react_jsx_runtime.jsx)("select", {
+-								className: `${ModelsSection_module_css_default["input"]} ${ModelsSection_module_css_default["selectInput"]}`,
+-								value: level,
+-								"aria-label": `${t("modelReasoningLevel")} ${String(index + 1)}`,
+-								disabled,
+-								onChange: (event) => {
+-									changeLevel(entries, index, level, wire, event.target.value);
+-								},
+-								children: choicesFor(level).map((choice) => (0, react_jsx_runtime.jsx)("option", {
+-									value: choice,
+-									children: choice
+-								}, choice))
+-							}),
+-							(0, react_jsx_runtime.jsx)("input", {
+-								className: `${ModelsSection_module_css_default["input"]} ${ModelsSection_module_css_default["modelReasoningValueInput"]}`,
+-								type: "text",
+-								value: typing?.level === level ? typing.text : typeof wire === "string" ? wire : "",
+-								placeholder: level === "off" ? t("modelReasoningOffValuePlaceholder") : level,
+-								"aria-label": `${level} ${t("modelReasoningValue")}`,
+-								"aria-invalid": !acceptedValue(level, wire),
+-								disabled: disabled || level === "off",
+-								onChange: (event) => {
+-									editValue(entries, index, level, event.target.value);
+-								},
+-								onBlur: () => {
+-									leaveValue(entries, index, level, wire);
+-								}
+-							}),
+-							(0, react_jsx_runtime.jsx)("button", {
+-								type: "button",
+-								className: `${ModelsSection_module_css_default["iconButton"]} ${ModelsSection_module_css_default["iconButtonDanger"]}`,
+-								"aria-label": `${t("modelReasoningRemove")} ${level}`,
+-								title: t("modelReasoningRemove"),
+-								disabled,
+-								onClick: () => {
+-									write(entries.filter((_entry, at) => at !== index));
+-								},
+-								children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconTrashOutlineRegular, { size: 14 })
+-							})
+-						]
+-					}, index)),
+-					refused ? (0, react_jsx_runtime.jsx)("p", {
+-						className: ModelsSection_module_css_default["error"],
+-						children: t("modelReasoningValueRequired")
+-					}) : missingLevel ? (0, react_jsx_runtime.jsx)("p", {
+-						className: ModelsSection_module_css_default["error"],
+-						children: t("modelReasoningNeedsLevel")
+-					}) : null,
+-					(0, react_jsx_runtime.jsxs)("button", {
+-						type: "button",
+-						className: ModelsSection_module_css_default["addModelButton"],
+-						disabled: disabled || levels.every((level) => used.includes(level)),
+-						onClick: () => {
+-							addLevel(entries);
+-						},
+-						children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconPlusOutlineRegular, { size: 14 }), t("modelReasoningAdd")]
+-					})
+-				] })]
+-			});
+-		}
+-		//#endregion
++		// Shared reasoning editor, bundled from lib/reasoning-config.js and lib/reasoning-editor.js.
++const REASONING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
++function reasoningMode(model) {
++  if (model.reasoningMode !== void 0) return model.reasoningMode;
++  if (model.reasoningEfforts === false) return "disabled";
++  return model.reasoningEfforts === void 0 ? "auto" : "custom";
++}
++function reasoningConfigError(model, levels = REASONING_LEVELS) {
++  const mode = reasoningMode(model);
++  if (!["auto", "custom", "disabled"].includes(mode)) return "invalid";
++  if (mode === "disabled") return model.defaultReasoningEffort == null ? void 0 : "default";
++  const efforts = model.reasoningEfforts;
++  if (mode === "custom" && (!efforts || typeof efforts !== "object" || Array.isArray(efforts))) return "invalid";
++  if (efforts && typeof efforts === "object") {
++    const entries = Object.entries(efforts);
++    if (!entries.some(([level]) => level !== "off")) return "invalid";
++    if (entries.some(([level, wire]) => !validReasoningId(level) || !(level === "off" && wire === null || typeof wire === "string" && wire.trim().length > 0))) return "invalid";
++  }
++  if (reasoningMappingsError(model)) return "invalid";
++  const selected = model.defaultReasoningEffort;
++  if (efforts === false && selected != null) return "default";
++  if (selected != null && (!validReasoningId(selected) || efforts && typeof efforts === "object" && efforts[selected] === void 0)) return "default";
++  if (model.reasoningOff !== void 0 && !["omit", "value", "qwen-toggle", "deepseek-toggle"].includes(model.reasoningOff)) return "off";
++  if (model.reasoningOff === "value" && (!efforts || typeof efforts.off !== "string" || !efforts.off.trim())) return "off";
++  if (["qwen-toggle", "deepseek-toggle"].includes(model.reasoningOff) && model.api !== void 0 && model.api !== "openai-completions") return "off";
++  return void 0;
++}
++function changeReasoningMode(model, mode) {
++  const next = { ...model, reasoningMode: mode };
++  if (mode === "auto") {
++    delete next.reasoningEfforts;
++    delete next.reasoningMappings;
++    delete next.reasoningOff;
++    delete next.defaultReasoningEffort;
++  } else if (mode === "disabled") {
++    delete next.reasoningMappings;
++    next.reasoningEfforts = false;
++    next.defaultReasoningEffort = null;
++    delete next.reasoningOff;
++  } else if (!next.reasoningEfforts || typeof next.reasoningEfforts !== "object") {
++    next.reasoningEfforts = { low: "low", medium: "medium", high: "high" };
++    next.defaultReasoningEffort = null;
++  }
++  return next;
++}
++const MODEL_REASONING_PRESETS = {
++  "glm-5.3": {
++    "encryptedReasoning": false,
++    "efforts": {
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    },
++    "defaultEffort": "max"
++  },
++  "glm-5.3-flash": {
++    "encryptedReasoning": false,
++    "efforts": {
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    },
++    "defaultEffort": "max"
++  },
++  "deepseek-v4-flash": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    }
++  },
++  "deepseek-v4-flash-0731": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    }
++  },
++  "deepseek-v4.1-flash-1017": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "xhigh": "xhigh",
++      "max": "max"
++    }
++  },
++  "deepseek-v4.1-flash": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    }
++  },
++  "startlux-decision-v1.1-9b-instant": {
++    "efforts": false
++  },
++  "qwen3guard-gen-4b": {
++    "efforts": false
++  },
++  "qwen3.8-27b-fp8": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  },
++  "qwen3.8-flash-next-nvfp4": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  },
++  "qwen3.8-flash-next": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  },
++  "qwen3.8-27b": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  }
++};
++function automaticReasoningPreset(id) {
++  const key = id?.trim().toLowerCase();
++  return key && Object.hasOwn(MODEL_REASONING_PRESETS, key) ? MODEL_REASONING_PRESETS[key] : void 0;
++}
++function inferAutomaticReasoning(model) {
++  if (reasoningMode(model) !== "auto") return model;
++  if (model.api !== void 0 && !["openai-completions", "openai-responses"].includes(model.api)) return model;
++  const preset = automaticReasoningPreset(model.id);
++  const efforts = model.reasoningEfforts ?? preset?.efforts;
++  if (efforts === void 0) return model;
++  const next = { ...model, reasoningMode: "auto", reasoningEfforts: efforts };
++  if (preset?.offByApi && model.api !== undefined) {
++    if (efforts?.off === "none") next.reasoningOff = preset.offByApi[model.api];
++    else delete next.reasoningOff;
++  }
++  if (next.defaultReasoningEffort === void 0 && efforts && preset?.defaultEffort && efforts[preset.defaultEffort] !== void 0) next.defaultReasoningEffort = preset.defaultEffort;
++  if (next.defaultReasoningEffort != null && (efforts === false || efforts && efforts[next.defaultReasoningEffort] === void 0)) next.defaultReasoningEffort = null;
++  return next;
++}
++function validReasoningId(id) {
++  return typeof id === "string" && id.length > 0 && id.trim() === id && !["__proto__", "constructor", "prototype"].includes(id);
++}
++function safeReasoningJson(value) {
++  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
++  if (typeof value === "number") return Number.isFinite(value);
++  if (Array.isArray(value)) return value.every(safeReasoningJson);
++  return !!value && typeof value === "object" && Object.entries(value).every(([key, child]) => validReasoningId(key) && safeReasoningJson(child));
++}
++const REASONING_RESERVED_FIELDS = ["model", "messages", "input", "contents", "tools", "stream", "apiKey", "httpOptions"];
++function validReasoningPath(path) {
++  return typeof path === "string" && path.split(".").every(validReasoningId) && !REASONING_RESERVED_FIELDS.includes(path.split(".")[0]);
++}
++function reasoningMappingsError(model) {
++  if (model.reasoningMappings === void 0) return false;
++  const mappings = model.reasoningMappings;
++  if (!mappings || typeof mappings !== "object" || Array.isArray(mappings)) return true;
++  for (const [id, mapping] of Object.entries(mappings)) {
++    if (!model.reasoningEfforts || !Object.hasOwn(model.reasoningEfforts, id) || !mapping || typeof mapping !== "object") return true;
++    if (mapping.kind === "parameters") {
++      if (!mapping.body || typeof mapping.body !== "object" || Array.isArray(mapping.body) || !Object.keys(mapping.body).length || !safeReasoningJson(mapping.body) || Object.keys(mapping.body).some((key) => REASONING_RESERVED_FIELDS.includes(key))) return true;
++    } else if (["number", "budget", "toggle"].includes(mapping.kind)) {
++      if (!validReasoningPath(mapping.path)) return true;
++      if (mapping.kind === "toggle") {
++        if (typeof mapping.value !== "boolean") return true;
++      } else {
++        const { value, min, max, step } = mapping;
++        if (!Number.isFinite(value) || [min, max, step].some((value2) => value2 !== void 0 && !Number.isFinite(value2))) return true;
++        if (min !== void 0 && value < min || max !== void 0 && value > max || min !== void 0 && max !== void 0 && min > max || step !== void 0 && (step <= 0 || Math.abs((value - (min ?? 0)) / step - Math.round((value - (min ?? 0)) / step)) > 1e-8)) return true;
++        if (mapping.kind === "budget" && (!Number.isInteger(value) || value < 1)) return true;
++      }
++    } else return true;
++  }
++  return false;
++}
++
++const h = react.createElement; const useId = react.useId; const useState = react.useState;
++function ReasoningEditor({ model, levels = REASONING_LEVELS, disabled, labels, onChange }) {
++  model = inferAutomaticReasoning(model);
++  const id = useId();
++  const [newLevel, setNewLevel] = useState("");
++  const [newLevelError, setNewLevelError] = useState(false);
++  const mode = reasoningMode(model);
++  const efforts = model.reasoningEfforts && typeof model.reasoningEfforts === "object" ? model.reasoningEfforts : {};
++  levels = [.../* @__PURE__ */ new Set([...levels, ...Object.keys(efforts)])];
++  const error = reasoningConfigError(model, levels);
++  const columns = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 10, alignItems: "start" };
++  const field = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
++  const input = { width: "100%", minWidth: 0, minHeight: 32, boxSizing: "border-box", border: ".5px solid var(--dsw-alias-border-l3)", borderRadius: "var(--dsw-radius-md)", padding: "4px 8px", background: "var(--dsw-alias-bg-layer-1)", color: "var(--dsw-alias-label-primary)", font: "inherit" };
++  const label = (text, control) => h("label", { style: field }, h("span", null, text), control);
++  const select = (value, choices, change, name) => h("select", { style: input, value, "aria-label": name, onChange: (event) => change(event.target.value) }, choices.map(([value2, text]) => h("option", { key: value2, value: value2 }, text)));
++  const update = (patch) => onChange({ ...model, ...patch });
++  const writeEfforts = (next, patch = {}) => {
++    const selected = model.defaultReasoningEffort;
++    const mappings = Object.fromEntries(Object.entries(model.reasoningMappings ?? {}).filter(([id2]) => Object.hasOwn(next, id2)));
++    update({ reasoningMode: "custom", reasoningEfforts: next, reasoningMappings: mappings, ...patch, ...selected != null && next[selected] === void 0 ? { defaultReasoningEffort: null } : {} });
++  };
++  const writeMapping = (level, mapping) => {
++    const next = { ...model.reasoningMappings };
++    if (mapping) next[level] = mapping;
++    else delete next[level];
++    update({ reasoningMappings: next });
++  };
++  const mappingPanel = (level) => {
++    const mapping = model.reasoningMappings?.[level];
++    const kind = mapping?.kind ?? "effort";
++    const edit = (name, patch) => label(`${labels[name]} \xB7 ${level}`, h("input", { style: input, value: mapping?.[name] ?? "", "aria-label": `${name} \xB7 ${level}`, type: ["value", "min", "max", "step"].includes(name) && kind !== "toggle" ? "number" : "text", onChange: (event) => writeMapping(level, { ...mapping, [name]: patch(event.target.value) }) }));
++    return h(
++      "fieldset",
++      { key: level, disabled: mode !== "custom", style: { ...field, gridColumn: "1 / -1", minWidth: 0, margin: 0, border: 0, padding: 0, borderTop: ".5px solid var(--dsw-alias-border-l3)", paddingTop: 8 } },
++      h(
++        "div",
++        { style: columns },
++        label(`${labels.mapping} \xB7 ${level}`, select(kind, [["effort", labels.effort], ["number", labels.number], ["budget", labels.budget], ["toggle", labels.toggle], ["parameters", labels.parameters]], (value) => {
++          const mapping2 = value === "effort" ? void 0 : value === "parameters" ? { kind: value, body: {} } : { kind: value, path: "", value: value === "toggle" ? false : value === "budget" ? 1024 : 1 };
++          writeMapping(level, mapping2);
++        }, `${labels.mapping} \xB7 ${level}`)),
++        ["number", "budget", "toggle"].includes(kind) ? edit("path", (value) => value) : null
++      ),
++      ["number", "budget"].includes(kind) ? h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 110px), 1fr))", gap: 8 } }, ...["value", "min", "max", "step"].map((name) => edit(name, (value) => value === "" ? void 0 : Number(value)))) : null,
++      kind === "toggle" ? label(labels.apiValue, select(String(mapping.value), [["false", "false"], ["true", "true"]], (value) => writeMapping(level, { ...mapping, value: value === "true" }), `${labels.apiValue} \xB7 ${level}`)) : null,
++      kind === "parameters" ? label(`${labels.parameters} JSON \xB7 ${level}`, h("textarea", { style: { ...input, minHeight: 96, resize: "vertical", fontFamily: "monospace" }, value: typeof mapping.body === "string" ? mapping.body : JSON.stringify(mapping.body, null, 2), onChange: (event) => {
++        let body = event.target.value;
++        try {
++          body = JSON.parse(body);
++        } catch {
++        }
++        writeMapping(level, { ...mapping, body });
++      } })) : null
++    );
++  };
++  return h(
++    "fieldset",
++    { className: "modelReasoningEditor", disabled, "aria-describedby": `${id}-help`, style: { gridColumn: "1 / -1", minWidth: 0, margin: 0, padding: 10, border: ".5px solid var(--dsw-alias-border-l3)", borderRadius: "var(--dsw-radius-md)", display: "flex", flexDirection: "column", gap: 10, fontSize: 13 } },
++    h("legend", { style: { padding: "0 4px", fontWeight: 500 } }, labels.title),
++    h(
++      "div",
++      { className: "modelReasoningEditorDefaults", style: columns },
++      label(labels.mode, select(mode, [["auto", labels.auto], ["custom", labels.custom], ["disabled", labels.disabled]], (mode2) => onChange(changeReasoningMode(model, mode2)), labels.mode)),
++      mode === "disabled" ? null : label(labels.default, select(model.defaultReasoningEffort ?? "", [["", labels.providerDefault], ...levels.filter((level) => efforts[level] !== void 0 || level === model.defaultReasoningEffort).map((level) => [level, level])], (value) => update({ defaultReasoningEffort: value || null }), labels.default))
++    ),
++    h("p", { id: `${id}-help`, style: { margin: 0, color: "var(--dsw-alias-label-secondary)", lineHeight: 1.6 } }, mode === "auto" ? labels.autoHelp : mode === "disabled" ? labels.disabledHelp : labels.customHelp),
++    mode === "disabled" || mode === "auto" && !Object.keys(efforts).length ? null : levels.filter((level) => efforts[level] !== void 0).map((level) => h(
++      "div",
++      { key: level, className: "modelReasoningEditorRow", style: { display: "grid", gridTemplateColumns: "minmax(80px, .35fr) minmax(0, 1fr)", gap: "4px 10px", alignItems: "center", borderTop: ".5px solid var(--dsw-alias-border-l3)", paddingTop: 8 } },
++      h("label", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, overflowWrap: "anywhere" } }, h("input", { type: "checkbox", disabled: mode !== "custom", checked: efforts[level] !== void 0, onChange: (event) => {
++        const next = { ...efforts };
++        if (event.target.checked) next[level] = level === "off" ? null : level;
++        else delete next[level];
++        writeEfforts(next);
++      } }), level),
++      efforts[level] === void 0 || model.reasoningMappings?.[level] !== void 0 || level === "off" && (model.reasoningOff ?? (efforts.off === null ? "omit" : "value")) !== "value" ? null : h("input", { style: input, "aria-label": `${labels.apiValue} \xB7 ${level}`, disabled: mode !== "custom", value: efforts[level] ?? "", "aria-invalid": error !== void 0, "aria-describedby": error ? `${id}-error` : void 0, onChange: (event) => {
++        writeEfforts({ ...efforts, [level]: event.target.value }, level === "off" ? { reasoningOff: "value" } : {});
++      } }),
++      model.reasoningMappings?.[level] ? h("output", { style: { textAlign: "right", color: "var(--dsw-alias-label-secondary)", overflowWrap: "anywhere", fontSize: 12 }, "aria-label": `${labels.apiValue} · ${level}` }, model.reasoningMappings[level].kind === "parameters" ? `${labels.parameters} JSON` : `${String(model.reasoningMappings[level].value ?? "")} ${model.reasoningMappings[level].kind === "budget" ? "tokens" : ""}`.trim()) : null,
++      efforts[level] !== void 0 && level !== "off" && (mode === "custom" || model.reasoningMappings?.[level]) ? h("details", { style: { gridColumn: "1 / -1", minWidth: 0 } }, h("summary", { style: { cursor: "pointer", padding: "2px 0", fontSize: 12, color: "var(--dsw-alias-label-secondary)" } }, model.reasoningMappings?.[level] ? `${labels.advanced} \xB7 ${labels[model.reasoningMappings[level].kind]}` : labels.advanced), mappingPanel(level)) : null
++    )),
++    mode !== "custom" || efforts.off === void 0 ? null : label(labels.offBehavior, select(model.reasoningOff ?? (efforts.off === null ? "omit" : "value"), [["omit", labels.omit], ["value", labels.explicit], ...model.api === void 0 || model.api === "openai-completions" ? [["qwen-toggle", labels.qwen], ["deepseek-toggle", labels.deepseek]] : []], (value) => update({ reasoningOff: value, reasoningEfforts: { ...efforts, off: value === "value" ? typeof efforts.off === "string" && efforts.off ? efforts.off : "none" : null } }), labels.offBehavior)),
++    mode === "custom" ? h(
++      "div",
++      { style: { display: "flex", gap: 8 } },
++      h("input", { style: input, value: newLevel, list: `${id}-suggestions`, "aria-label": labels.newLevel, "aria-invalid": newLevelError, placeholder: labels.newLevel, onChange: (event) => {
++        setNewLevel(event.target.value);
++        setNewLevelError(false);
++      } }),
++      h("button", { type: "button", style: { ...input, width: "auto", whiteSpace: "nowrap" }, onClick: () => {
++        const level = newLevel.trim();
++        if (!validReasoningId(level) || Object.hasOwn(efforts, level)) {
++          setNewLevelError(true);
++          return;
++        }
++        writeEfforts({ ...efforts, [level]: level === "off" ? null : level });
++        setNewLevel("");
++      } }, labels.addLevel)
++    ) : null,
++    mode === "custom" ? h("datalist", { id: `${id}-suggestions` }, levels.filter((level) => efforts[level] === void 0).map((level) => h("option", { key: level, value: level }))) : null,
++    newLevelError ? h("p", { role: "alert", style: { margin: 0 } }, labels.invalid) : null,
++    error ? h("p", { id: `${id}-error`, role: "alert", style: { margin: 0, color: "var(--dsw-alias-state-error-primary)" } }, error === "default" ? labels.defaultError : error === "off" ? labels.offError : labels.invalid) : null
++  );
++}
++
++function validateReasoningEfforts(value) {
++  for (const [index, model] of modelDrafts(value).entries()) {
++    const error = reasoningConfigError(inferAutomaticReasoning(model));
++    if (error) return { index, key: 'modelReasoningValueRequired' };
++  }
++}
++function ModelReasoningEfforts({ model, levels, disabled, t, onChange }) {
++  const labels = {advanced: t("reasoningEditor_advanced"), path: t("reasoningEditor_path"), value: t("reasoningEditor_value"), min: t("reasoningEditor_min"), max: t("reasoningEditor_max"), step: t("reasoningEditor_step"), mapping: t("reasoningEditor_mapping"), effort: t("reasoningEditor_effort"), number: t("reasoningEditor_number"), budget: t("reasoningEditor_budget"), toggle: t("reasoningEditor_toggle"), parameters: t("reasoningEditor_parameters"), newLevel: t("reasoningEditor_newLevel"), addLevel: t("reasoningEditor_addLevel"), title: t("reasoningEditor_title"), mode: t("reasoningEditor_mode"), auto: t("reasoningEditor_auto"), custom: t("reasoningEditor_custom"), disabled: t("reasoningEditor_disabled"), autoHelp: t("reasoningEditor_autoHelp"), customHelp: t("reasoningEditor_customHelp"), disabledHelp: t("reasoningEditor_disabledHelp"), default: t("reasoningEditor_default"), providerDefault: t("reasoningEditor_providerDefault"), apiValue: t("reasoningEditor_apiValue"), offBehavior: t("reasoningEditor_offBehavior"), omit: t("reasoningEditor_omit"), explicit: t("reasoningEditor_explicit"), qwen: t("reasoningEditor_qwen"), deepseek: t("reasoningEditor_deepseek"), invalid: t("reasoningEditor_invalid"), defaultError: t("reasoningEditor_defaultError"), offError: t("reasoningEditor_offError")};
++  return h(ReasoningEditor, { model, levels, disabled, labels, onChange });
++}
+ 		//#region lib/types/client/ModelRow.js
+ 		/**
+ 		* Render consistent model identity, capacity, and input-type controls.
+@@ -859,15 +951,23 @@ window.__ModuleLoader__.load({
+ 			return value === void 0 ? "" : formatCapacity(value);
+ 		}
+ 		/** Adopt a candidate, preserving disclosed capacities and input types. */
+-		function adopt(candidate) {
+-			return {
+-				id: candidate.id,
+-				...candidate.name === void 0 ? {} : { name: candidate.name },
+-				...candidate.contextWindow === void 0 ? {} : { contextWindow: candidate.contextWindow },
+-				...candidate.maxTokens === void 0 ? {} : { maxTokens: candidate.maxTokens },
+-				...candidate.inputModalities === void 0 ? {} : { input: [...candidate.inputModalities] }
+-			};
+-		}
++        function adopt(candidate) {
++          return inferAutomaticReasoning({
++            id: candidate.id,
++            ...candidate.name === void 0 ? {} : { name: candidate.name },
++            ...candidate.contextWindow === void 0 ? {} : { contextWindow: candidate.contextWindow },
++            ...candidate.maxTokens === void 0 ? {} : { maxTokens: candidate.maxTokens },
++            ...candidate.inputModalities === void 0 ? {} : { input: [...candidate.inputModalities] },
++            ...candidate.api === void 0 ? {} : { api: candidate.api },
++            ...candidate.supportsConversation === void 0 ? {} : { supportsConversation: candidate.supportsConversation },
++            ...candidate.modelType === void 0 ? {} : { modelType: candidate.modelType },
++            ...candidate.supportedEndpointPaths === void 0 ? {} : { supportedEndpointPaths: [...candidate.supportedEndpointPaths] },
++            ...candidate.reasoningEfforts === void 0 ? {} : { reasoningMode: "auto", reasoningEfforts: candidate.reasoningEfforts },
++            ...candidate.reasoningMappings === void 0 ? {} : { reasoningMappings: candidate.reasoningMappings },
++            ...candidate.defaultReasoningEffort === void 0 ? {} : { defaultReasoningEffort: candidate.defaultReasoningEffort },
++          });
++        }
++
+ 		/**
+ 		* Render the model list with its fetch action.
+ 		* @param props - the drafted rows, probe target, wire face, and copy.
+@@ -966,6 +1066,16 @@ window.__ModuleLoader__.load({
+ 						setFailure(t("fetchEmpty"));
+ 						return;
+ 					}
++                    onChange(models.map(model => {
++                      if (reasoningMode(model) !== "auto") return model;
++                      const candidate = found.find(candidate => candidate.id === model.id);
++                      if (!candidate) return model;
++                      return inferAutomaticReasoning({ ...model,
++                        ...candidate.reasoningEfforts === void 0 ? {} : { reasoningEfforts: candidate.reasoningEfforts },
++                        reasoningMappings: candidate.reasoningMappings,
++                        ...model.defaultReasoningEffort === void 0 && candidate.defaultReasoningEffort !== void 0 ? { defaultReasoningEffort: candidate.defaultReasoningEffort } : {},
++                      });
++                    }));
+ 					const known = new Set(models.map((model) => textOf(model, "id")));
+ 					setCandidateQuery("");
+ 					setCandidates(found);
+@@ -1267,7 +1377,8 @@ window.__ModuleLoader__.load({
+ 				"0",
+ 				"reasoningEfforts"
+ 			];
+-			return (((schema.nodeAtPath(schema.rehydrate(namespace.schema), path)?.list ?? []).find((branch) => branch.type === "dict")?.sKey)?.list ?? []).map((entry) => entry.value).filter((value) => typeof value === "string");
++			const keys = (schema.nodeAtPath(schema.rehydrate(namespace.schema), path)?.list ?? []).find(branch => branch.type === "dict")?.sKey;
++            return keys?.type === "string" ? REASONING_LEVELS : (keys?.list ?? []).map(entry => entry.value).filter(value => typeof value === "string");
+ 		}
+ 		/** The credential reference a resolved profile names (its `apiKeyEnv` field). */
+ 		function apiKeyEnvOf(namespace, path, schema) {
+@@ -3297,6 +3408,42 @@ window.__ModuleLoader__.load({
+ 			modelInputText: "Text",
+ 			modelInputImage: "Image",
+ 			modelReasoning: "Reasoning levels",
++            reasoningEditor_title: "Reasoning levels",
++    reasoningEditor_advanced: "Advanced parameters",
++    reasoningEditor_path: "Parameter path",
++    reasoningEditor_value: "Value",
++    reasoningEditor_min: "Minimum",
++    reasoningEditor_max: "Maximum",
++    reasoningEditor_step: "Step",
++
++            reasoningEditor_mapping: "Parameter mapping",
++            reasoningEditor_effort: "Effort value",
++            reasoningEditor_number: "Numeric effort",
++            reasoningEditor_budget: "Token budget",
++            reasoningEditor_toggle: "Boolean toggle",
++            reasoningEditor_parameters: "Combined parameters",
++            reasoningEditor_newLevel: "New level ID, e.g. ultra",
++            reasoningEditor_addLevel: "Add level",
++
++            reasoningEditor_mode: "Configuration",
++            reasoningEditor_auto: "Detect automatically",
++            reasoningEditor_custom: "Custom",
++            reasoningEditor_disabled: "Disabled",
++            reasoningEditor_autoHelp: "Use detected model capabilities. Future discoveries can update these levels.",
++            reasoningEditor_customHelp: "Add model-specific options and configure their API values or parameters.",
++            reasoningEditor_disabledHelp: "Hide the reasoning selector and follow the provider default.",
++            reasoningEditor_default: "Default level",
++            reasoningEditor_providerDefault: "Provider default",
++            reasoningEditor_apiValue: "API value",
++            reasoningEditor_offBehavior: "When selecting Off",
++            reasoningEditor_omit: "Omit reasoning parameters (provider default)",
++            reasoningEditor_explicit: "Send the configured API value",
++            reasoningEditor_qwen: "Send Qwen enable_thinking: false (Chat Completions)",
++            reasoningEditor_deepseek: "Send thinking.type: disabled (Chat Completions)",
++            reasoningEditor_invalid: "Check option IDs, API values, parameter paths and numeric ranges.",
++            reasoningEditor_defaultError: "Choose a default from the enabled levels.",
++            reasoningEditor_offError: "Check the Off value and the selected API protocol.",
++
+ 			modelReasoningLevel: "Level",
+ 			modelReasoningValue: "API value",
+ 			modelReasoningHelp: "About reasoning levels",
+@@ -3434,6 +3581,42 @@ window.__ModuleLoader__.load({
+ 			modelInputText: "文本",
+ 			modelInputImage: "图片",
+ 			modelReasoning: "推理等级",
++            reasoningEditor_title: "推理等级",
++    reasoningEditor_advanced: "高级参数",
++    reasoningEditor_path: "参数路径",
++    reasoningEditor_value: "数值",
++    reasoningEditor_min: "最小值",
++    reasoningEditor_max: "最大值",
++    reasoningEditor_step: "步长",
++
++            reasoningEditor_mapping: "参数映射",
++            reasoningEditor_effort: "等级值",
++            reasoningEditor_number: "数值 effort",
++            reasoningEditor_budget: "Token 预算",
++            reasoningEditor_toggle: "布尔开关",
++            reasoningEditor_parameters: "组合参数",
++            reasoningEditor_newLevel: "新等级 ID，例如 ultra",
++            reasoningEditor_addLevel: "添加等级",
++
++            reasoningEditor_mode: "配置方式",
++            reasoningEditor_auto: "自动识别",
++            reasoningEditor_custom: "自定义",
++            reasoningEditor_disabled: "禁用",
++            reasoningEditor_autoHelp: "使用识别到的模型能力，后续获取模型时可自动更新档位。",
++            reasoningEditor_customHelp: "配置模型支持的选项，以及对应的 API 等级值或参数。",
++            reasoningEditor_disabledHelp: "隐藏推理等级选择器，使用服务端默认行为。",
++            reasoningEditor_default: "默认等级",
++            reasoningEditor_providerDefault: "遵循服务端默认",
++            reasoningEditor_apiValue: "API 参数值",
++            reasoningEditor_offBehavior: "选择 Off 时",
++            reasoningEditor_omit: "省略推理参数（遵循服务端）",
++            reasoningEditor_explicit: "发送配置的 API 参数值",
++            reasoningEditor_qwen: "发送 Qwen enable_thinking: false（Chat Completions）",
++            reasoningEditor_deepseek: "发送 thinking.type: disabled（Chat Completions）",
++            reasoningEditor_invalid: "请检查选项 ID、API 参数值、参数路径及数值范围。",
++            reasoningEditor_defaultError: "请从已启用的档位中选择默认等级。",
++            reasoningEditor_offError: "请检查 Off 参数值及当前 API 协议。",
++
+ 			modelReasoningLevel: "档位",
+ 			modelReasoningValue: "API 参数值",
+ 			modelReasoningHelp: "推理等级说明",
+diff --git a/lib/reasoning-config.js b/lib/reasoning-config.js
+new file mode 100644
+index 0000000000..1adafc3c33
+--- /dev/null
++++ b/lib/reasoning-config.js
+@@ -0,0 +1,203 @@
++const REASONING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
++function reasoningMode(model) {
++  if (model.reasoningMode !== void 0) return model.reasoningMode;
++  if (model.reasoningEfforts === false) return "disabled";
++  return model.reasoningEfforts === void 0 ? "auto" : "custom";
++}
++function reasoningConfigError(model, levels = REASONING_LEVELS) {
++  const mode = reasoningMode(model);
++  if (!["auto", "custom", "disabled"].includes(mode)) return "invalid";
++  if (mode === "disabled") return model.defaultReasoningEffort == null ? void 0 : "default";
++  const efforts = model.reasoningEfforts;
++  if (mode === "custom" && (!efforts || typeof efforts !== "object" || Array.isArray(efforts))) return "invalid";
++  if (efforts && typeof efforts === "object") {
++    const entries = Object.entries(efforts);
++    if (!entries.some(([level]) => level !== "off")) return "invalid";
++    if (entries.some(([level, wire]) => !validReasoningId(level) || !(level === "off" && wire === null || typeof wire === "string" && wire.trim().length > 0))) return "invalid";
++  }
++  if (reasoningMappingsError(model)) return "invalid";
++  const selected = model.defaultReasoningEffort;
++  if (efforts === false && selected != null) return "default";
++  if (selected != null && (!validReasoningId(selected) || efforts && typeof efforts === "object" && efforts[selected] === void 0)) return "default";
++  if (model.reasoningOff !== void 0 && !["omit", "value", "qwen-toggle", "deepseek-toggle"].includes(model.reasoningOff)) return "off";
++  if (model.reasoningOff === "value" && (!efforts || typeof efforts.off !== "string" || !efforts.off.trim())) return "off";
++  if (["qwen-toggle", "deepseek-toggle"].includes(model.reasoningOff) && model.api !== void 0 && model.api !== "openai-completions") return "off";
++  return void 0;
++}
++function changeReasoningMode(model, mode) {
++  const next = { ...model, reasoningMode: mode };
++  if (mode === "auto") {
++    delete next.reasoningEfforts;
++    delete next.reasoningMappings;
++    delete next.reasoningOff;
++    delete next.defaultReasoningEffort;
++  } else if (mode === "disabled") {
++    delete next.reasoningMappings;
++    next.reasoningEfforts = false;
++    next.defaultReasoningEffort = null;
++    delete next.reasoningOff;
++  } else if (!next.reasoningEfforts || typeof next.reasoningEfforts !== "object") {
++    next.reasoningEfforts = { low: "low", medium: "medium", high: "high" };
++    next.defaultReasoningEffort = null;
++  }
++  return next;
++}
++const MODEL_REASONING_PRESETS = {
++  "glm-5.3": {
++    "encryptedReasoning": false,
++    "efforts": {
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    },
++    "defaultEffort": "max"
++  },
++  "glm-5.3-flash": {
++    "encryptedReasoning": false,
++    "efforts": {
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    },
++    "defaultEffort": "max"
++  },
++  "deepseek-v4-flash": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    }
++  },
++  "deepseek-v4-flash-0731": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    }
++  },
++  "deepseek-v4.1-flash-1017": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "xhigh": "xhigh",
++      "max": "max"
++    }
++  },
++  "deepseek-v4.1-flash": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    }
++  },
++  "startlux-decision-v1.1-9b-instant": {
++    "efforts": false
++  },
++  "qwen3guard-gen-4b": {
++    "efforts": false
++  },
++  "qwen3.8-27b-fp8": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  },
++  "qwen3.8-flash-next-nvfp4": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  },
++  "qwen3.8-flash-next": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  },
++  "qwen3.8-27b": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  }
++};
++function automaticReasoningPreset(id) {
++  const key = id?.trim().toLowerCase();
++  return key && Object.hasOwn(MODEL_REASONING_PRESETS, key) ? MODEL_REASONING_PRESETS[key] : void 0;
++}
++function inferAutomaticReasoning(model) {
++  if (reasoningMode(model) !== "auto") return model;
++  if (model.api !== void 0 && !["openai-completions", "openai-responses"].includes(model.api)) return model;
++  const preset = automaticReasoningPreset(model.id);
++  const efforts = model.reasoningEfforts ?? preset?.efforts;
++  if (efforts === void 0) return model;
++  const next = { ...model, reasoningMode: "auto", reasoningEfforts: efforts };
++  if (preset?.offByApi && model.api !== undefined) {
++    if (efforts?.off === "none") next.reasoningOff = preset.offByApi[model.api];
++    else delete next.reasoningOff;
++  }
++  if (next.defaultReasoningEffort === void 0 && efforts && preset?.defaultEffort && efforts[preset.defaultEffort] !== void 0) next.defaultReasoningEffort = preset.defaultEffort;
++  if (next.defaultReasoningEffort != null && (efforts === false || efforts && efforts[next.defaultReasoningEffort] === void 0)) next.defaultReasoningEffort = null;
++  return next;
++}
++function validReasoningId(id) {
++  return typeof id === "string" && id.length > 0 && id.trim() === id && !["__proto__", "constructor", "prototype"].includes(id);
++}
++function safeReasoningJson(value) {
++  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
++  if (typeof value === "number") return Number.isFinite(value);
++  if (Array.isArray(value)) return value.every(safeReasoningJson);
++  return !!value && typeof value === "object" && Object.entries(value).every(([key, child]) => validReasoningId(key) && safeReasoningJson(child));
++}
++const REASONING_RESERVED_FIELDS = ["model", "messages", "input", "contents", "tools", "stream", "apiKey", "httpOptions"];
++function validReasoningPath(path) {
++  return typeof path === "string" && path.split(".").every(validReasoningId) && !REASONING_RESERVED_FIELDS.includes(path.split(".")[0]);
++}
++function reasoningMappingsError(model) {
++  if (model.reasoningMappings === void 0) return false;
++  const mappings = model.reasoningMappings;
++  if (!mappings || typeof mappings !== "object" || Array.isArray(mappings)) return true;
++  for (const [id, mapping] of Object.entries(mappings)) {
++    if (!model.reasoningEfforts || !Object.hasOwn(model.reasoningEfforts, id) || !mapping || typeof mapping !== "object") return true;
++    if (mapping.kind === "parameters") {
++      if (!mapping.body || typeof mapping.body !== "object" || Array.isArray(mapping.body) || !Object.keys(mapping.body).length || !safeReasoningJson(mapping.body) || Object.keys(mapping.body).some((key) => REASONING_RESERVED_FIELDS.includes(key))) return true;
++    } else if (["number", "budget", "toggle"].includes(mapping.kind)) {
++      if (!validReasoningPath(mapping.path)) return true;
++      if (mapping.kind === "toggle") {
++        if (typeof mapping.value !== "boolean") return true;
++      } else {
++        const { value, min, max, step } = mapping;
++        if (!Number.isFinite(value) || [min, max, step].some((value2) => value2 !== void 0 && !Number.isFinite(value2))) return true;
++        if (min !== void 0 && value < min || max !== void 0 && value > max || min !== void 0 && max !== void 0 && min > max || step !== void 0 && (step <= 0 || Math.abs((value - (min ?? 0)) / step - Math.round((value - (min ?? 0)) / step)) > 1e-8)) return true;
++        if (mapping.kind === "budget" && (!Number.isInteger(value) || value < 1)) return true;
++      }
++    } else return true;
++  }
++  return false;
++}
++export {
++  REASONING_LEVELS,
++  automaticReasoningPreset,
++  changeReasoningMode,
++  inferAutomaticReasoning,
++  reasoningConfigError,
++  reasoningMappingsError,
++  reasoningMode,
++  validReasoningId
++};
+diff --git a/lib/reasoning-editor.js b/lib/reasoning-editor.js
+new file mode 100644
+index 0000000000..dfbeda5995
+--- /dev/null
++++ b/lib/reasoning-editor.js
+@@ -0,0 +1,108 @@
++import { createElement as h, useId, useState } from "react";
++import { REASONING_LEVELS, reasoningMode, reasoningConfigError, changeReasoningMode, inferAutomaticReasoning, validReasoningId } from "./reasoning-config.js";
++function ReasoningEditor({ model, levels = REASONING_LEVELS, disabled, labels, onChange }) {
++  model = inferAutomaticReasoning(model);
++  const id = useId();
++  const [newLevel, setNewLevel] = useState("");
++  const [newLevelError, setNewLevelError] = useState(false);
++  const mode = reasoningMode(model);
++  const efforts = model.reasoningEfforts && typeof model.reasoningEfforts === "object" ? model.reasoningEfforts : {};
++  levels = [.../* @__PURE__ */ new Set([...levels, ...Object.keys(efforts)])];
++  const error = reasoningConfigError(model, levels);
++  const columns = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 10, alignItems: "start" };
++  const field = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
++  const input = { width: "100%", minWidth: 0, minHeight: 32, boxSizing: "border-box", border: ".5px solid var(--dsw-alias-border-l3)", borderRadius: "var(--dsw-radius-md)", padding: "4px 8px", background: "var(--dsw-alias-bg-layer-1)", color: "var(--dsw-alias-label-primary)", font: "inherit" };
++  const label = (text, control) => h("label", { style: field }, h("span", null, text), control);
++  const select = (value, choices, change, name) => h("select", { style: input, value, "aria-label": name, onChange: (event) => change(event.target.value) }, choices.map(([value2, text]) => h("option", { key: value2, value: value2 }, text)));
++  const update = (patch) => onChange({ ...model, ...patch });
++  const writeEfforts = (next, patch = {}) => {
++    const selected = model.defaultReasoningEffort;
++    const mappings = Object.fromEntries(Object.entries(model.reasoningMappings ?? {}).filter(([id2]) => Object.hasOwn(next, id2)));
++    update({ reasoningMode: "custom", reasoningEfforts: next, reasoningMappings: mappings, ...patch, ...selected != null && next[selected] === void 0 ? { defaultReasoningEffort: null } : {} });
++  };
++  const writeMapping = (level, mapping) => {
++    const next = { ...model.reasoningMappings };
++    if (mapping) next[level] = mapping;
++    else delete next[level];
++    update({ reasoningMappings: next });
++  };
++  const mappingPanel = (level) => {
++    const mapping = model.reasoningMappings?.[level];
++    const kind = mapping?.kind ?? "effort";
++    const edit = (name, patch) => label(`${labels[name]} \xB7 ${level}`, h("input", { style: input, value: mapping?.[name] ?? "", "aria-label": `${name} \xB7 ${level}`, type: ["value", "min", "max", "step"].includes(name) && kind !== "toggle" ? "number" : "text", onChange: (event) => writeMapping(level, { ...mapping, [name]: patch(event.target.value) }) }));
++    return h(
++      "fieldset",
++      { key: level, disabled: mode !== "custom", style: { ...field, gridColumn: "1 / -1", minWidth: 0, margin: 0, border: 0, padding: 0, borderTop: ".5px solid var(--dsw-alias-border-l3)", paddingTop: 8 } },
++      h(
++        "div",
++        { style: columns },
++        label(`${labels.mapping} \xB7 ${level}`, select(kind, [["effort", labels.effort], ["number", labels.number], ["budget", labels.budget], ["toggle", labels.toggle], ["parameters", labels.parameters]], (value) => {
++          const mapping2 = value === "effort" ? void 0 : value === "parameters" ? { kind: value, body: {} } : { kind: value, path: "", value: value === "toggle" ? false : value === "budget" ? 1024 : 1 };
++          writeMapping(level, mapping2);
++        }, `${labels.mapping} \xB7 ${level}`)),
++        ["number", "budget", "toggle"].includes(kind) ? edit("path", (value) => value) : null
++      ),
++      ["number", "budget"].includes(kind) ? h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 110px), 1fr))", gap: 8 } }, ...["value", "min", "max", "step"].map((name) => edit(name, (value) => value === "" ? void 0 : Number(value)))) : null,
++      kind === "toggle" ? label(labels.apiValue, select(String(mapping.value), [["false", "false"], ["true", "true"]], (value) => writeMapping(level, { ...mapping, value: value === "true" }), `${labels.apiValue} \xB7 ${level}`)) : null,
++      kind === "parameters" ? label(`${labels.parameters} JSON \xB7 ${level}`, h("textarea", { style: { ...input, minHeight: 96, resize: "vertical", fontFamily: "monospace" }, value: typeof mapping.body === "string" ? mapping.body : JSON.stringify(mapping.body, null, 2), onChange: (event) => {
++        let body = event.target.value;
++        try {
++          body = JSON.parse(body);
++        } catch {
++        }
++        writeMapping(level, { ...mapping, body });
++      } })) : null
++    );
++  };
++  return h(
++    "fieldset",
++    { className: "modelReasoningEditor", disabled, "aria-describedby": `${id}-help`, style: { gridColumn: "1 / -1", minWidth: 0, margin: 0, padding: 10, border: ".5px solid var(--dsw-alias-border-l3)", borderRadius: "var(--dsw-radius-md)", display: "flex", flexDirection: "column", gap: 10, fontSize: 13 } },
++    h("legend", { style: { padding: "0 4px", fontWeight: 500 } }, labels.title),
++    h(
++      "div",
++      { className: "modelReasoningEditorDefaults", style: columns },
++      label(labels.mode, select(mode, [["auto", labels.auto], ["custom", labels.custom], ["disabled", labels.disabled]], (mode2) => onChange(changeReasoningMode(model, mode2)), labels.mode)),
++      mode === "disabled" ? null : label(labels.default, select(model.defaultReasoningEffort ?? "", [["", labels.providerDefault], ...levels.filter((level) => efforts[level] !== void 0 || level === model.defaultReasoningEffort).map((level) => [level, level])], (value) => update({ defaultReasoningEffort: value || null }), labels.default))
++    ),
++    h("p", { id: `${id}-help`, style: { margin: 0, color: "var(--dsw-alias-label-secondary)", lineHeight: 1.6 } }, mode === "auto" ? labels.autoHelp : mode === "disabled" ? labels.disabledHelp : labels.customHelp),
++    mode === "disabled" || mode === "auto" && !Object.keys(efforts).length ? null : levels.filter((level) => efforts[level] !== void 0).map((level) => h(
++      "div",
++      { key: level, className: "modelReasoningEditorRow", style: { display: "grid", gridTemplateColumns: "minmax(80px, .35fr) minmax(0, 1fr)", gap: "4px 10px", alignItems: "center", borderTop: ".5px solid var(--dsw-alias-border-l3)", paddingTop: 8 } },
++      h("label", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, overflowWrap: "anywhere" } }, h("input", { type: "checkbox", disabled: mode !== "custom", checked: efforts[level] !== void 0, onChange: (event) => {
++        const next = { ...efforts };
++        if (event.target.checked) next[level] = level === "off" ? null : level;
++        else delete next[level];
++        writeEfforts(next);
++      } }), level),
++      efforts[level] === void 0 || model.reasoningMappings?.[level] !== void 0 || level === "off" && (model.reasoningOff ?? (efforts.off === null ? "omit" : "value")) !== "value" ? null : h("input", { style: input, "aria-label": `${labels.apiValue} \xB7 ${level}`, disabled: mode !== "custom", value: efforts[level] ?? "", "aria-invalid": error !== void 0, "aria-describedby": error ? `${id}-error` : void 0, onChange: (event) => {
++        writeEfforts({ ...efforts, [level]: event.target.value }, level === "off" ? { reasoningOff: "value" } : {});
++      } }),
++      model.reasoningMappings?.[level] ? h("output", { style: { textAlign: "right", color: "var(--dsw-alias-label-secondary)", overflowWrap: "anywhere", fontSize: 12 }, "aria-label": `${labels.apiValue} · ${level}` }, model.reasoningMappings[level].kind === "parameters" ? `${labels.parameters} JSON` : `${String(model.reasoningMappings[level].value ?? "")} ${model.reasoningMappings[level].kind === "budget" ? "tokens" : ""}`.trim()) : null,
++      efforts[level] !== void 0 && level !== "off" && (mode === "custom" || model.reasoningMappings?.[level]) ? h("details", { style: { gridColumn: "1 / -1", minWidth: 0 } }, h("summary", { style: { cursor: "pointer", padding: "2px 0", fontSize: 12, color: "var(--dsw-alias-label-secondary)" } }, model.reasoningMappings?.[level] ? `${labels.advanced} \xB7 ${labels[model.reasoningMappings[level].kind]}` : labels.advanced), mappingPanel(level)) : null
++    )),
++    mode !== "custom" || efforts.off === void 0 ? null : label(labels.offBehavior, select(model.reasoningOff ?? (efforts.off === null ? "omit" : "value"), [["omit", labels.omit], ["value", labels.explicit], ...model.api === void 0 || model.api === "openai-completions" ? [["qwen-toggle", labels.qwen], ["deepseek-toggle", labels.deepseek]] : []], (value) => update({ reasoningOff: value, reasoningEfforts: { ...efforts, off: value === "value" ? typeof efforts.off === "string" && efforts.off ? efforts.off : "none" : null } }), labels.offBehavior)),
++    mode === "custom" ? h(
++      "div",
++      { style: { display: "flex", gap: 8 } },
++      h("input", { style: input, value: newLevel, list: `${id}-suggestions`, "aria-label": labels.newLevel, "aria-invalid": newLevelError, placeholder: labels.newLevel, onChange: (event) => {
++        setNewLevel(event.target.value);
++        setNewLevelError(false);
++      } }),
++      h("button", { type: "button", style: { ...input, width: "auto", whiteSpace: "nowrap" }, onClick: () => {
++        const level = newLevel.trim();
++        if (!validReasoningId(level) || Object.hasOwn(efforts, level)) {
++          setNewLevelError(true);
++          return;
++        }
++        writeEfforts({ ...efforts, [level]: level === "off" ? null : level });
++        setNewLevel("");
++      } }, labels.addLevel)
++    ) : null,
++    mode === "custom" ? h("datalist", { id: `${id}-suggestions` }, levels.filter((level) => efforts[level] === void 0).map((level) => h("option", { key: level, value: level }))) : null,
++    newLevelError ? h("p", { role: "alert", style: { margin: 0 } }, labels.invalid) : null,
++    error ? h("p", { id: `${id}-error`, role: "alert", style: { margin: 0, color: "var(--dsw-alias-state-error-primary)" } }, error === "default" ? labels.defaultError : error === "off" ? labels.offError : labels.invalid) : null
++  );
++}
++export {
++  ReasoningEditor
++};
+diff --git a/lib/types/client/locales.d.ts b/lib/types/client/locales.d.ts
+index 0db99a2b1b..6cf177f494 100644
+--- a/lib/types/client/locales.d.ts
++++ b/lib/types/client/locales.d.ts
+@@ -72,6 +72,42 @@ export declare const en: {
+     modelInputText: string;
+     modelInputImage: string;
+     modelReasoning: string;
++    reasoningEditor_title: string;
++    reasoningEditor_advanced: string;
++    reasoningEditor_path: string;
++    reasoningEditor_value: string;
++    reasoningEditor_min: string;
++    reasoningEditor_max: string;
++    reasoningEditor_step: string;
++
++    reasoningEditor_mapping: string;
++    reasoningEditor_effort: string;
++    reasoningEditor_number: string;
++    reasoningEditor_budget: string;
++    reasoningEditor_toggle: string;
++    reasoningEditor_parameters: string;
++    reasoningEditor_newLevel: string;
++    reasoningEditor_addLevel: string;
++
++    reasoningEditor_mode: string;
++    reasoningEditor_auto: string;
++    reasoningEditor_custom: string;
++    reasoningEditor_disabled: string;
++    reasoningEditor_autoHelp: string;
++    reasoningEditor_customHelp: string;
++    reasoningEditor_disabledHelp: string;
++    reasoningEditor_default: string;
++    reasoningEditor_providerDefault: string;
++    reasoningEditor_apiValue: string;
++    reasoningEditor_offBehavior: string;
++    reasoningEditor_omit: string;
++    reasoningEditor_explicit: string;
++    reasoningEditor_qwen: string;
++    reasoningEditor_deepseek: string;
++    reasoningEditor_invalid: string;
++    reasoningEditor_defaultError: string;
++    reasoningEditor_offError: string;
++
+     modelReasoningLevel: string;
+     modelReasoningValue: string;
+     modelReasoningHelp: string;
+diff --git a/lib/types/reasoning-config.d.ts b/lib/types/reasoning-config.d.ts
+new file mode 100644
+index 0000000000..234dcffd1e
+--- /dev/null
++++ b/lib/types/reasoning-config.d.ts
+@@ -0,0 +1,26 @@
++export type ReasoningLevel = string;
++export type ReasoningMode = 'auto' | 'custom' | 'disabled';
++export type ReasoningOff = 'omit' | 'value' | 'qwen-toggle' | 'deepseek-toggle';
++export interface ReasoningConfiguration {
++  id?: string;
++  reasoningEfforts?: false | Partial<Record<ReasoningLevel, string | null>>;
++  reasoningMappings?: Record<string, ReasoningMapping>;
++  reasoningMode?: ReasoningMode;
++  defaultReasoningEffort?: ReasoningLevel | null;
++  reasoningOff?: ReasoningOff;
++  api?: string;
++}
++export declare const REASONING_LEVELS: readonly ReasoningLevel[];
++export declare function reasoningMode(model: ReasoningConfiguration): ReasoningMode;
++export declare function reasoningConfigError(model: ReasoningConfiguration, levels?: readonly string[]): 'invalid' | 'default' | 'off' | undefined;
++export declare function changeReasoningMode<T extends ReasoningConfiguration>(model: T, mode: ReasoningMode): T;
++
++export declare function automaticReasoningPreset(id?: string): { efforts: NonNullable<ReasoningConfiguration["reasoningEfforts"]>; defaultEffort?: ReasoningLevel; offByApi?: Record<string, ReasoningOff>; encryptedReasoning?: boolean } | undefined;
++export declare function inferAutomaticReasoning<T extends ReasoningConfiguration>(model: T): T;
++
++export type ReasoningMapping =
++  | { kind: 'parameters'; body: Record<string, unknown> }
++  | { kind: 'number' | 'budget'; path: string; value: number; min?: number; max?: number; step?: number }
++  | { kind: 'toggle'; path: string; value: boolean };
++export declare function validReasoningId(id: unknown): boolean;
++export declare function reasoningMappingsError(model: ReasoningConfiguration): boolean;
+diff --git a/lib/types/reasoning-editor.d.ts b/lib/types/reasoning-editor.d.ts
+new file mode 100644
+index 0000000000..544f4e238b
+--- /dev/null
++++ b/lib/types/reasoning-editor.d.ts
+@@ -0,0 +1,38 @@
++import type { ReactNode } from 'react';
++import type { ReasoningConfiguration } from './reasoning-config.js';
++export interface ReasoningEditorLabels {
++  title: string;
++  advanced: string;
++  path: string;
++  value: string;
++  min: string;
++  max: string;
++  step: string;
++  mapping: string;
++  effort: string;
++  number: string;
++  budget: string;
++  toggle: string;
++  parameters: string;
++  newLevel: string;
++  addLevel: string;
++  mode: string;
++  auto: string;
++  custom: string;
++  disabled: string;
++  autoHelp: string;
++  customHelp: string;
++  disabledHelp: string;
++  default: string;
++  providerDefault: string;
++  apiValue: string;
++  offBehavior: string;
++  omit: string;
++  explicit: string;
++  qwen: string;
++  deepseek: string;
++  invalid: string;
++  defaultError: string;
++  offError: string;
++}
++export declare function ReasoningEditor<T extends ReasoningConfiguration>(props: { model: T; levels?: readonly string[]; disabled?: boolean; labels: ReasoningEditorLabels; onChange: (model: T) => void }): ReactNode;
+diff --git a/package.json b/package.json
+index faa6aa4129..986986e11f 100644
+--- a/package.json
++++ b/package.json
+@@ -24,7 +24,15 @@
+     },
+     "./src/*": "./src/*",
+     "./package.json": "./package.json",
+-    "./locale/*.json": "./locale/*.json"
++    "./locale/*.json": "./locale/*.json",
++    "./reasoning-config": {
++      "types": "./lib/types/reasoning-config.d.ts",
++      "default": "./lib/reasoning-config.js"
++    },
++    "./reasoning-editor": {
++      "types": "./lib/types/reasoning-editor.d.ts",
++      "default": "./lib/reasoning-editor.js"
++    }
+   },
+   "dsh": {
+     "client": {
+@@ -63,10 +71,14 @@
+     "locale/*.json",
+     "lib/index.js",
+     "lib/client.js",
+-    "lib/types/**/*.d.ts"
++    "lib/types/**/*.d.ts",
++    "lib/reasoning-config.js",
++    "lib/types/reasoning-config.d.ts",
++    "lib/reasoning-editor.js",
++    "lib/types/reasoning-editor.d.ts"
+   ],
+   "scripts": {
+     "bundle": "tsdown",
+     "watch": "tsdown --watch"
+   }
+-}
+\ No newline at end of file
++}

@@ -158,7 +158,7 @@ export default defineConfig([
         '@deepseek-ai/dsh-client-ui-renderer',
         '@deepseek-ai/dsh-client-ui-primitives',
       ],
-      alwaysBundle: (id: string) => id.startsWith('@deepseek-ai/') ? undefined : true,
+      alwaysBundle: (id: string) => id.startsWith('@deepseek-ai/dsh-client-ui-settings-models/reasoning-') ? true : id.startsWith('@deepseek-ai/') ? undefined : true,
     },
     outputOptions: {
       entryFileNames: 'client.js',

@@ -1,8 +1,333 @@
 diff --git a/lib/index.js b/lib/index.js
-index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d765b9486c2 100644
+index 4b1e5adba9..f8c7514fc2 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -686,7 +686,8 @@ function resolveRouteModels(request, validation = "strict") {
+@@ -253,6 +253,201 @@ function toPiAssistant(message, onDegrade) {
+ 	}
+ }
+ //#endregion
++// Shared reasoning policy, bundled from the model editor.
++const REASONING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
++function reasoningMode(model) {
++  if (model.reasoningMode !== void 0) return model.reasoningMode;
++  if (model.reasoningEfforts === false) return "disabled";
++  return model.reasoningEfforts === void 0 ? "auto" : "custom";
++}
++function reasoningConfigError(model, levels = REASONING_LEVELS) {
++  const mode = reasoningMode(model);
++  if (!["auto", "custom", "disabled"].includes(mode)) return "invalid";
++  if (mode === "disabled") return model.defaultReasoningEffort == null ? void 0 : "default";
++  const efforts = model.reasoningEfforts;
++  if (mode === "custom" && (!efforts || typeof efforts !== "object" || Array.isArray(efforts))) return "invalid";
++  if (efforts && typeof efforts === "object") {
++    const entries = Object.entries(efforts);
++    if (!entries.some(([level]) => level !== "off")) return "invalid";
++    if (entries.some(([level, wire]) => !validReasoningId(level) || !(level === "off" && wire === null || typeof wire === "string" && wire.trim().length > 0))) return "invalid";
++  }
++  if (reasoningMappingsError(model)) return "invalid";
++  const selected = model.defaultReasoningEffort;
++  if (efforts === false && selected != null) return "default";
++  if (selected != null && (!validReasoningId(selected) || efforts && typeof efforts === "object" && efforts[selected] === void 0)) return "default";
++  if (model.reasoningOff !== void 0 && !["omit", "value", "qwen-toggle", "deepseek-toggle"].includes(model.reasoningOff)) return "off";
++  if (model.reasoningOff === "value" && (!efforts || typeof efforts.off !== "string" || !efforts.off.trim())) return "off";
++  if (["qwen-toggle", "deepseek-toggle"].includes(model.reasoningOff) && model.api !== void 0 && model.api !== "openai-completions") return "off";
++  return void 0;
++}
++function changeReasoningMode(model, mode) {
++  const next = { ...model, reasoningMode: mode };
++  if (mode === "auto") {
++    delete next.reasoningEfforts;
++    delete next.reasoningMappings;
++    delete next.reasoningOff;
++    delete next.defaultReasoningEffort;
++  } else if (mode === "disabled") {
++    delete next.reasoningMappings;
++    next.reasoningEfforts = false;
++    next.defaultReasoningEffort = null;
++    delete next.reasoningOff;
++  } else if (!next.reasoningEfforts || typeof next.reasoningEfforts !== "object") {
++    next.reasoningEfforts = { low: "low", medium: "medium", high: "high" };
++    next.defaultReasoningEffort = null;
++  }
++  return next;
++}
++const MODEL_REASONING_PRESETS = {
++  "glm-5.3": {
++    "encryptedReasoning": false,
++    "efforts": {
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    },
++    "defaultEffort": "max"
++  },
++  "glm-5.3-flash": {
++    "encryptedReasoning": false,
++    "efforts": {
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    },
++    "defaultEffort": "max"
++  },
++  "deepseek-v4-flash": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    }
++  },
++  "deepseek-v4-flash-0731": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    }
++  },
++  "deepseek-v4.1-flash-1017": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "xhigh": "xhigh",
++      "max": "max"
++    }
++  },
++  "deepseek-v4.1-flash": {
++    "offByApi": { "openai-completions": "deepseek-toggle", "openai-responses": "value" },
++    "efforts": {
++      "off": "none",
++      "low": "low",
++      "high": "high",
++      "max": "max"
++    }
++  },
++  "startlux-decision-v1.1-9b-instant": {
++    "efforts": false
++  },
++  "qwen3guard-gen-4b": {
++    "efforts": false
++  },
++  "qwen3.8-27b-fp8": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  },
++  "qwen3.8-flash-next-nvfp4": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  },
++  "qwen3.8-flash-next": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  },
++  "qwen3.8-27b": {
++    "efforts": {
++      "low": "low",
++      "medium": "medium",
++      "xhigh": "xhigh"
++    },
++    "defaultEffort": "xhigh"
++  }
++};
++function automaticReasoningPreset(id) {
++  const key = id?.trim().toLowerCase();
++  return key && Object.hasOwn(MODEL_REASONING_PRESETS, key) ? MODEL_REASONING_PRESETS[key] : void 0;
++}
++function inferAutomaticReasoning(model) {
++  if (reasoningMode(model) !== "auto") return model;
++  if (model.api !== void 0 && !["openai-completions", "openai-responses"].includes(model.api)) return model;
++  const preset = automaticReasoningPreset(model.id);
++  const efforts = model.reasoningEfforts ?? preset?.efforts;
++  if (efforts === void 0) return model;
++  const next = { ...model, reasoningMode: "auto", reasoningEfforts: efforts };
++  if (preset?.offByApi && model.api !== undefined) {
++    if (efforts?.off === "none") next.reasoningOff = preset.offByApi[model.api];
++    else delete next.reasoningOff;
++  }
++  if (next.defaultReasoningEffort === void 0 && efforts && preset?.defaultEffort && efforts[preset.defaultEffort] !== void 0) next.defaultReasoningEffort = preset.defaultEffort;
++  if (next.defaultReasoningEffort != null && (efforts === false || efforts && efforts[next.defaultReasoningEffort] === void 0)) next.defaultReasoningEffort = null;
++  return next;
++}
++function validReasoningId(id) {
++  return typeof id === "string" && id.length > 0 && id.trim() === id && !["__proto__", "constructor", "prototype"].includes(id);
++}
++function safeReasoningJson(value) {
++  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
++  if (typeof value === "number") return Number.isFinite(value);
++  if (Array.isArray(value)) return value.every(safeReasoningJson);
++  return !!value && typeof value === "object" && Object.entries(value).every(([key, child]) => validReasoningId(key) && safeReasoningJson(child));
++}
++const REASONING_RESERVED_FIELDS = ["model", "messages", "input", "contents", "tools", "stream", "apiKey", "httpOptions"];
++function validReasoningPath(path) {
++  return typeof path === "string" && path.split(".").every(validReasoningId) && !REASONING_RESERVED_FIELDS.includes(path.split(".")[0]);
++}
++function reasoningMappingsError(model) {
++  if (model.reasoningMappings === void 0) return false;
++  const mappings = model.reasoningMappings;
++  if (!mappings || typeof mappings !== "object" || Array.isArray(mappings)) return true;
++  for (const [id, mapping] of Object.entries(mappings)) {
++    if (!model.reasoningEfforts || !Object.hasOwn(model.reasoningEfforts, id) || !mapping || typeof mapping !== "object") return true;
++    if (mapping.kind === "parameters") {
++      if (!mapping.body || typeof mapping.body !== "object" || Array.isArray(mapping.body) || !Object.keys(mapping.body).length || !safeReasoningJson(mapping.body) || Object.keys(mapping.body).some((key) => REASONING_RESERVED_FIELDS.includes(key))) return true;
++    } else if (["number", "budget", "toggle"].includes(mapping.kind)) {
++      if (!validReasoningPath(mapping.path)) return true;
++      if (mapping.kind === "toggle") {
++        if (typeof mapping.value !== "boolean") return true;
++      } else {
++        const { value, min, max, step } = mapping;
++        if (!Number.isFinite(value) || [min, max, step].some((value2) => value2 !== void 0 && !Number.isFinite(value2))) return true;
++        if (min !== void 0 && value < min || max !== void 0 && value > max || min !== void 0 && max !== void 0 && min > max || step !== void 0 && (step <= 0 || Math.abs((value - (min ?? 0)) / step - Math.round((value - (min ?? 0)) / step)) > 1e-8)) return true;
++        if (mapping.kind === "budget" && (!Number.isInteger(value) || value < 1)) return true;
++      }
++    } else return true;
++  }
++  return false;
++}
++
+ //#region lib/types/catalog.js
+ /**
+ * Materialization of one provider route's model catalog. The installed pi-ai
+@@ -565,32 +760,90 @@ function sharedCatalogApi(defaults) {
+ 	for (const model of defaults.values()) apis.add(model.api);
+ 	return apis.size === 1 ? [...apis][0] : void 0;
+ }
+-/**
+-* Resolve one model's reasoning capability from its declared efforts.
+-*
+-* A declared dict translates to pi-ai's `thinkingLevelMap` with every level
+-* decided explicitly: declared levels carry their wire spelling, undeclared
+-* levels are pinned to `null` (unsupported). Pinning matters because pi-ai's
+-* own defaulting is asymmetric — an absent key means "supported" for the five
+-* base levels but "unsupported" for `xhigh`/`max` — and a profile author
+-* should not need to know that. A declared `off` with no value is the one
+-* exception: it stays absent from the map, which pi-ai reads as "supported,
+-* send nothing" — the correct dispatch where not thinking is the parameter's
+-* absence — while `off` with a value sends that value.
+-* @param provider - provider route key, for diagnostics.
+-* @param entry - the configured model entry.
+-* @param base - the installed catalog entry of the same id, when one exists.
+-* @returns the reasoning fields the materialized model carries.
+-*/
++function clearReasoningPayload(payload) {
++  delete payload.reasoning_effort;
++  if (payload.reasoning && typeof payload.reasoning === "object") {
++    delete payload.reasoning.effort;
++    if (!Object.keys(payload.reasoning).length) delete payload.reasoning;
++  }
++  delete payload.thinking;
++  delete payload.enable_thinking;
++  if (payload.chat_template_kwargs) {
++    delete payload.chat_template_kwargs.enable_thinking;
++    delete payload.chat_template_kwargs.thinking;
++  }
++  if (payload.output_config) delete payload.output_config.effort;
++  if (payload.config) delete payload.config.thinkingConfig;
++}
++function mergeReasoningPayload(target, body) {
++  for (const [key, value] of Object.entries(body)) {
++    if (value && typeof value === "object" && !Array.isArray(value)) {
++      const child = target[key];
++      target[key] = mergeReasoningPayload(child && typeof child === "object" && !Array.isArray(child) ? child : {}, value);
++    } else target[key] = value;
++  }
++  return target;
++}
++function setReasoningPath(payload, path, value) {
++  const parts = path.split(".");
++  let target = payload;
++  for (const key of parts.slice(0, -1)) {
++    if (!target[key] || typeof target[key] !== "object" || Array.isArray(target[key])) target[key] = {};
++    target = target[key];
++  }
++  target[parts.at(-1)] = value;
++}
++function applyReasoningPayload(payload, model, requested, maxTokens) {
++  // GLM returns plaintext reasoning and rejects OpenAI encrypted reasoning inclusion.
++  if (automaticReasoningPreset(model.id)?.encryptedReasoning === false && Array.isArray(payload.include)) {
++    payload.include = payload.include.filter(value => value !== "reasoning.encrypted_content");
++    if (!payload.include.length) delete payload.include;
++  }
++  const config = model.desktopReasoningConfig;
++  const effort = requested;
++  const mapping = config?.reasoningMappings?.[requested];
++  if (mapping) {
++    clearReasoningPayload(payload);
++    if (mapping.kind === "parameters") {
++      if (model.api === "google-generative-ai" && Object.hasOwn(mapping.body, "generationConfig")) {
++        const { generationConfig, ...body } = mapping.body;
++        if (!generationConfig || typeof generationConfig !== "object" || Array.isArray(generationConfig)) throw new LlmError("Gemini generationConfig must be an object", "UNSUPPORTED_REASONING_EFFORT");
++        mergeReasoningPayload(payload, { config: generationConfig });
++        return mergeReasoningPayload(payload, body);
++      }
++      return mergeReasoningPayload(payload, mapping.body);
++    }
++    if (mapping.kind === "budget" && mapping.value >= maxTokens) throw new LlmError("Reasoning budget must be less than max output tokens", "UNSUPPORTED_REASONING_EFFORT");
++    setReasoningPath(payload, model.api === "google-generative-ai" ? mapping.path.replace(/^generationConfig\./, "config.") : mapping.path, mapping.value);
++    return payload;
++  }
++  const off = model.desktopReasoningOff ?? "value";
++  if (effort === undefined || model.desktopReasoningDisabled || effort === "off" && off !== "value") {
++    clearReasoningPayload(payload);
++    if (effort === "off" && !model.desktopReasoningDisabled && off === "qwen-toggle") payload.chat_template_kwargs = { ...payload.chat_template_kwargs, enable_thinking: false };
++    if (effort === "off" && !model.desktopReasoningDisabled && off === "deepseek-toggle") payload.thinking = { ...payload.thinking, type: "disabled" };
++    return payload;
++  }
++  // Existing SDK choices keep their established protocol-specific budget behavior.
++  if (!config || THINKING_LEVELS.includes(effort) && requested === effort) return payload;
++  clearReasoningPayload(payload);
++  const value = config.reasoningEfforts[effort];
++  if (value === null) return payload;
++  if (["openai-responses", "azure-openai-responses", "openai-codex-responses"].includes(model.api)) setReasoningPath(payload, "reasoning.effort", value);
++  else if (model.api === "openai-completions") payload.reasoning_effort = value;
++  else if (model.api === "anthropic-messages") setReasoningPath(payload, "output_config.effort", value);
++  else if (model.api === "google-generative-ai") setReasoningPath(payload, "config.thinkingConfig.thinkingLevel", value);
++  else throw new LlmError(`Configure explicit reasoning parameters for ${model.api}`, "UNSUPPORTED_REASONING_EFFORT");
++  return payload;
++}
++/** Keep arbitrary model options alongside the SDK mapping for historical levels. */
+ function resolveModelReasoning(provider, entry, base) {
+-	const efforts = entry.reasoningEfforts;
++	const efforts = entry.reasoningMode === "disabled" ? false : entry.reasoningEfforts;
+ 	if (efforts === void 0) return { reasoning: base?.reasoning ?? false };
+ 	if (efforts === false) return { reasoning: false };
+ 	if (efforts === null || Object.keys(efforts).length === 0) invalid(provider, `model "${entry.id}" has an empty reasoningEfforts; declare the offered levels, set false for a non-reasoning model, or omit the field to keep the installed catalog's capability`);
+-	const declared = THINKING_LEVELS.flatMap((level) => {
+-		const wire = efforts[level];
+-		return wire === void 0 ? [] : [[level, wire]];
+-	});
++	const declared = Object.entries(efforts);
++	if (reasoningConfigError(entry) === "invalid") invalid(provider, `model "${entry.id}" has invalid reasoning configuration`);
+ 	for (const [level, wire] of declared) if (wire === null) {
+ 		if (level !== "off") invalid(provider, `model "${entry.id}" reasoningEfforts.${level} needs the wire value dispatch should send; only "off" may leave it empty`);
+ 	} else if (wire.length === 0) invalid(provider, `model "${entry.id}" reasoningEfforts.${level} must not be an empty string`);
+@@ -603,7 +856,8 @@ function resolveModelReasoning(provider, entry, base) {
+ 	}
+ 	return {
+ 		reasoning: true,
+-		thinkingLevelMap: map
++		thinkingLevelMap: map,
++        desktopReasoningConfig: entry
+ 	};
+ }
+ /**
+@@ -686,16 +940,18 @@ function resolveRouteModels(request, validation = "strict") {
  		if (seen.has(entry.id)) invalid(provider, `lists model "${entry.id}" more than once`);
  		seen.add(entry.id);
  		const base = defaults.get(entry.id);
@@ -10,17 +335,47 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
 +		const api = entry.api ?? request.api ?? base?.api ?? routeApi;
 +		if (entry.api !== void 0 && !supportedProtocols().includes(entry.api)) invalid(provider, `model "${entry.id}" names unsupported api "${entry.api}"`);
  		if (api === void 0) invalid(provider, `model "${entry.id}" needs an api; the installed catalog does not describe it, so set the route's api to the wire protocol its endpoint speaks`);
- 		const baseUrl = request.baseURL ?? base?.baseUrl ?? providerBaseUrl;
+-		const baseUrl = request.baseURL ?? base?.baseUrl ?? providerBaseUrl;
++		if (!base || entry.reasoningMode === "auto") entry = inferAutomaticReasoning({ ...entry, api });
++        const baseUrl = request.baseURL ?? base?.baseUrl ?? providerBaseUrl;
  		if (baseUrl === void 0) invalid(provider, `model "${entry.id}" needs a baseURL; the installed catalog does not describe this route`);
-@@ -712,6 +713,7 @@ function resolveRouteModels(request, validation = "strict") {
+ 		const contextWindow = entry.contextWindow ?? base?.contextWindow ?? request.defaultContextWindow;
+ 		if (!Number.isInteger(contextWindow) || contextWindow <= 0) invalid(provider, `model "${entry.id}" contextWindow must be a positive integer`);
+ 		const maxTokens = entry.maxTokens ?? base?.maxTokens ?? request.defaultMaxTokens;
+ 		if (!Number.isInteger(maxTokens) || maxTokens <= 0) invalid(provider, `model "${entry.id}" maxTokens must be a positive integer`);
+ 		if (entry.maxTokens !== void 0) configuredMaxTokens.set(entry.id, entry.maxTokens);
+-		return {
++		const resolved = {
+ 			...base,
+ 			id: entry.id,
+ 			name: entry.name ?? base?.name ?? entry.id,
+@@ -709,9 +965,17 @@ function resolveRouteModels(request, validation = "strict") {
+ 			...resolveModelReasoning(provider, entry, base),
+ 			...resolveModelCompat(provider, entry, request.compat, base, api)
+ 		};
++		if (entry.reasoningMode === "custom" && (entry.reasoningEfforts === void 0 || entry.reasoningEfforts === false)) invalid(provider, `model "${entry.id}" needs custom reasoning levels`);
++		if (entry.defaultReasoningEffort != null && !getSupportedThinkingLevels(resolved).includes(entry.defaultReasoningEffort)) invalid(provider, `model "${entry.id}" default reasoning level is not offered`);
++		if ((entry.reasoningMode === "disabled" || entry.reasoningEfforts === false) && entry.defaultReasoningEffort != null) invalid(provider, `model "${entry.id}" cannot set a default while reasoning is disabled`);
++		if (["qwen-toggle", "deepseek-toggle"].includes(entry.reasoningOff) && api !== "openai-completions") invalid(provider, `model "${entry.id}" thinking toggles require openai-completions`);
++		if (entry.reasoningOff === "value" && (typeof entry.reasoningEfforts?.off !== "string" || !entry.reasoningEfforts.off.trim())) invalid(provider, `model "${entry.id}" needs an explicit Off value`);
++		return { ...resolved, desktopReasoningDefault: entry.defaultReasoningEffort, desktopReasoningOff: entry.reasoningOff ?? (entry.reasoningEfforts && typeof entry.reasoningEfforts === "object" && entry.reasoningEfforts.off === null ? "omit" : void 0), desktopReasoningDisabled: entry.reasoningMode === "disabled" || entry.reasoningEfforts === false };
++
  	};
  	const models = [];
  	for (const entry of entries) {
-+		if (entry.supportsConversation === false) continue;
++		if (entry.purpose !== void 0 && entry.purpose !== "conversation" || entry.purpose === void 0 && entry.supportsConversation === false) continue;
  		let model;
  		try {
  			model = resolveEntry(entry);
-@@ -934,7 +936,10 @@ function buildProvider(spec) {
+@@ -770,6 +1034,7 @@ function createProvider(input) {
+ */
+ function getSupportedThinkingLevels(model) {
+ 	if (!model.reasoning) return ["off"];
++    if (model.desktopReasoningConfig) return Object.keys(model.desktopReasoningConfig.reasoningEfforts);
+ 	return THINKING_LEVELS.filter((level) => {
+ 		const mapped = model.thinkingLevelMap?.[level];
+ 		if (mapped === null) return false;
+@@ -934,7 +1199,10 @@ function buildProvider(spec) {
  		...spec.baseURL === void 0 ? {} : { baseUrl: spec.baseURL },
  		auth: routeAuth(spec, catalog),
  		models: spec.models,
@@ -32,16 +387,32 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  	});
  }
  //#endregion
-@@ -1033,6 +1038,8 @@ const compatProfile = z.object({
- const reasoningEfforts = z.dict(z.union([z.string(), z.const(null)]), z.union(THINKING_LEVELS));
+@@ -1030,14 +1298,23 @@ const compatProfile = z.object({
+ * schemastery's `Dict`, which types every literal key as required; dict
+ * validation checks only present keys, so the runtime value is a partial record.
+ */
+-const reasoningEfforts = z.dict(z.union([z.string(), z.const(null)]), z.union(THINKING_LEVELS));
++const reasoningEfforts = z.dict(z.union([z.string(), z.const(null)]), z.string());
  /** The fields a `models` entry and a `modelOverrides` value share; only the id's home differs. */
  const modelFields = {
 +	supportsConversation: z.boolean(),
++	purpose: z.union(["conversation", "decision", "image-generation", "video-generation", "speech-generation", "transcription", "embedding", "rerank", "safety-classifier", "other"]),
++	modelType: z.string(),
++	supportedEndpointPaths: z.array(z.string()),
 +	api: z.union(supportedProtocols()),
  	name: z.string(),
  	contextWindow: z.number().step(1).min(1),
  	maxTokens: z.number().step(1).min(1),
-@@ -1047,6 +1054,7 @@ const modelProfile = z.object({
+ 	input: z.array(z.union(MODALITIES)),
+ 	reasoningEfforts: z.union([z.const(false), reasoningEfforts]),
++	reasoningMode: z.union(["auto", "custom", "disabled"]),
++	defaultReasoningEffort: z.union([z.string(), z.const(null)]),
++    reasoningMappings: z.dict(z.any()),
++	reasoningOff: z.union(["omit", "value", "qwen-toggle", "deepseek-toggle"]),
+ 	compat: compatProfile
+ };
+ const modelProfile = z.object({
+@@ -1047,6 +1324,7 @@ const modelProfile = z.object({
  /** A {@link modelProfile} whose id lives in the `modelOverrides` dict key. */
  const modelOverride = z.object(modelFields);
  const profile = z.object({
@@ -49,7 +420,7 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  	apiKeyEnv: z.string().role("credential-ref"),
  	displayName: z.string(),
  	api: z.union(supportedProtocols()),
-@@ -1135,10 +1143,12 @@ function resolveProfiles(providers, validation = "strict") {
+@@ -1135,10 +1413,12 @@ function resolveProfiles(providers, validation = "strict") {
  		const defaultInput = [...source.defaultInput ?? DEFAULT_INPUT];
  		if (defaultInput.length === 0) throw new Error(`llm-pi-ai: provider "${provider}" defaultInput must name at least one modality`);
  		const displayName = source.displayName ?? provider;
@@ -63,7 +434,7 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  			catalog = resolveRouteModels({
  				provider,
  				...source.api === void 0 ? {} : { api: source.api },
-@@ -1166,6 +1176,7 @@ function resolveProfiles(providers, validation = "strict") {
+@@ -1166,6 +1446,7 @@ function resolveProfiles(providers, validation = "strict") {
  		const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source;
  		resolved.set(provider, {
  			...rest,
@@ -71,7 +442,16 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  			provider,
  			displayName,
  			...apiKeyEnv === void 0 ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
-@@ -1856,7 +1867,8 @@ var PiAiAdapter = class extends LlmAdapter {
+@@ -1808,7 +2089,7 @@ function reasoningInfo(model, defaultLevel) {
+ 	return { reasoning: {
+ 		efforts: getSupportedThinkingLevels(model).map((level) => ({
+ 			id: ReasoningEffortId(level),
+-			name: `${level.charAt(0).toUpperCase()}${level.slice(1)}`
++			name: model.desktopReasoningConfig ? level : `${level.charAt(0).toUpperCase()}${level.slice(1)}`
+ 		})),
+ 		...defaultLevel === void 0 ? {} : { defaultEffort: ReasoningEffortId(defaultLevel) }
+ 	} };
+@@ -1856,7 +2137,8 @@ var PiAiAdapter = class extends LlmAdapter {
  		for (const profile of profiles.values()) if (profile.piProvider !== void 0) models.setProvider(profile.piProvider);
  		this.snapshot = {
  			profiles,
@@ -81,7 +461,7 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  		};
  		return this.snapshot;
  	}
-@@ -1873,7 +1885,12 @@ var PiAiAdapter = class extends LlmAdapter {
+@@ -1873,7 +2155,12 @@ var PiAiAdapter = class extends LlmAdapter {
  		if (failure !== void 0) throw new LlmError(failure, "INVALID_CONFIG");
  		const resolved = snapshot.models.getModel(provider, model);
  		if (resolved === void 0) throw new LlmError(`pi-ai provider "${provider}" has no configured model "${model}"`, "UNKNOWN_MODEL");
@@ -95,7 +475,16 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  	}
  	providerInfo(provider) {
  		return {
-@@ -1935,6 +1952,41 @@ var PiAiAdapter = class extends LlmAdapter {
+@@ -1911,7 +2198,7 @@ var PiAiAdapter = class extends LlmAdapter {
+ 	modelInfo(snapshot, provider, model) {
+ 		const profile = this.profileOf(snapshot, provider);
+ 		const resolvedModel = this.modelOf(snapshot, provider, model);
+-		const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning);
++		const defaultLevel = describableReasoningLevel(resolvedModel, resolvedModel.desktopReasoningDisabled ? void 0 : resolvedModel.desktopReasoningDefault === null ? void 0 : resolvedModel.desktopReasoningDefault ?? profile.reasoning);
+ 		const configuredMaxTokens = profile.configuredMaxTokens.get(model);
+ 		return {
+ 			provider,
+@@ -1935,6 +2222,41 @@ var PiAiAdapter = class extends LlmAdapter {
  		return this.streamWithSnapshot(options, this.current());
  	}
  	async *streamWithSnapshot(options, snapshot) {
@@ -137,7 +526,26 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  		const env_1 = {
  			stack: [],
  			error: void 0,
-@@ -2329,7 +2381,8 @@ async function readBounded(response, url) {
+@@ -1950,7 +2272,7 @@ var PiAiAdapter = class extends LlmAdapter {
+ 				...options,
+ 				tools: [ANTHROPIC_TOOL_UPDATE_PLACEHOLDER, ...tools]
+ 			} : options;
+-			const reasoning = resolveReasoningLevel(model, options.reasoningEffort ?? profile.reasoning);
++			const reasoning = model.desktopReasoningDisabled ? void 0 : resolveReasoningLevel(model, options.reasoningEffort ?? (model.desktopReasoningDefault === null ? void 0 : model.desktopReasoningDefault ?? profile.reasoning));
+ 			const apiKey = await this.config.resolveApiKey(options.provider, profile);
+ 			const consumer = new AbortController();
+ 			const upstream = options.signal === void 0 ? consumer.signal : AbortSignal.any([options.signal, consumer.signal]);
+@@ -1981,7 +2303,8 @@ var PiAiAdapter = class extends LlmAdapter {
+ 					}
+ 				}, onReplayDegrade);
+ 				const iterator = toStreamChunks(snapshot.models.streamSimple(model, context, {
+-					...profileOptions(profile, reasoning, apiKey),
++					...profileOptions(profile, THINKING_LEVELS.includes(reasoning) && !model.desktopReasoningConfig?.reasoningMappings?.[reasoning] ? reasoning : void 0, apiKey),
++                    onPayload: payload => applyReasoningPayload(payload, model, reasoning, options.maxTokens ?? model.maxTokens),
+ 					...options.temperature === void 0 ? {} : { temperature: options.temperature },
+ 					...options.maxTokens === void 0 ? {} : { maxTokens: options.maxTokens },
+ 					...options.sessionId === void 0 ? {} : { sessionId: String(options.sessionId) },
+@@ -2329,7 +2652,8 @@ async function readBounded(response, url) {
  * a working endpoint's catalog. Missing names fall back to the adopted id so
  * the Web form receives a complete human-readable row.
  */
@@ -147,39 +555,51 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  	const listing = body;
  	const data = listing?.data;
  	let listed;
-@@ -2350,8 +2403,31 @@ function readListing(body) {
+@@ -2348,10 +2672,42 @@ function readListing(body) {
+ 		const id = label(key, entry?.id);
+ 		if (id === void 0) continue;
  		const name = label(entry?.name, entry?.display_name, entry?.displayName) ?? id;
- 		const contextWindow = capacity(entry?.contextWindow, entry?.context_window, entry?.context_length, entry?.max_input_tokens, entry?.limit?.context);
+-		const contextWindow = capacity(entry?.contextWindow, entry?.context_window, entry?.context_length, entry?.max_input_tokens, entry?.limit?.context);
++		const contextWindow = capacity(entry?.contextWindow, entry?.context_window, entry?.context_length, entry?.max_input_tokens, entry?.limit?.context, entry?.max_model_len);
  		const maxTokens = capacity(entry?.maxOutputTokens, entry?.max_output_tokens, entry?.maxTokens, entry?.max_tokens, entry?.limit?.output, entry?.top_provider?.max_completion_tokens);
 +		const endpoints = entry?.supportedEndpointPaths;
 +		const modelType = label(entry?.type_code, entry?.modelType);
-+		const supportsConversation = Array.isArray(endpoints) && endpoints.length > 0
-+			? Object.values(paths).some(path => endpoints.includes(path))
-+			: modelType === void 0 ? void 0 : ["LLM", "VLM", "MLLM"].includes(modelType.toUpperCase())
-+				? true : /image|embedding|rerank|speech|audio|tts|asr/i.test(modelType) ? false : void 0;
++		const nonConversationPaths = ["/v1/images/generations", "/v1/images/edits", "/v1/videos", "/v1/audio/speech", "/v1/audio/transcriptions", "/v1/audio/translations", "/v1/embeddings", "/v1/rerank", "/v1/moderations"];
++		const hasChat = Array.isArray(endpoints) && Object.values(paths).some(path => endpoints.includes(path));
++		const hasNonConversation = Array.isArray(endpoints) && nonConversationPaths.some(path => endpoints.includes(path));
++		const supportsConversation = modelType !== void 0 && /^(texttoimage|texttovideo|imagetovideo|texttospeech|speechsynthesis|embedding|embeddings|rerank|reranker|moderation|safetyclassifier|classifier|tts|asr|transcription)$/i.test(modelType.replace(/[^a-z0-9]/gi, ""))
++			? false : hasChat ? true : hasNonConversation ? false
++			: modelType !== void 0 && ["LLM", "VLM", "MLLM"].includes(modelType.toUpperCase()) ? true : void 0;
 +		const api = Array.isArray(endpoints) && endpoints.length > 0
 +			? endpoints.includes(paths[preferredApi]) ? preferredApi : Object.keys(paths).find(protocol => endpoints.includes(paths[protocol]))
 +			: void 0;
 +		const catalogModel = builtinProviders().flatMap(provider => getBuiltinModels(provider.id))
 +			.find(model => model.id === id && model.api === (api ?? preferredApi));
-+		const advertisedEfforts = entry?.reasoningEfforts;
++		const suppliedLevels = entry?.reasoning?.supported_efforts;
++        const advertisedEfforts = entry?.reasoningEfforts ?? (Array.isArray(suppliedLevels) && suppliedLevels.length && suppliedLevels.every(validReasoningId) ? Object.fromEntries(suppliedLevels.map(level => [level === "none" ? "off" : level, level])) : undefined);
 +		const validEfforts = advertisedEfforts === false || (advertisedEfforts && typeof advertisedEfforts === "object"
 +			&& !Array.isArray(advertisedEfforts) && Object.keys(advertisedEfforts).length > 0
-+			&& Object.entries(advertisedEfforts).every(([level, wire]) => THINKING_LEVELS.includes(level)
++			&& Object.entries(advertisedEfforts).every(([level, wire]) => validReasoningId(level)
 +				&& (level === "off" && wire === null || typeof wire === "string" && wire.length > 0))
 +			&& Object.keys(advertisedEfforts).some(level => level !== "off"));
 +		const reasoningEfforts = validEfforts ? advertisedEfforts : catalogModel?.reasoning
 +			? Object.fromEntries(getSupportedThinkingLevels(catalogModel).map(level => [level, catalogModel.thinkingLevelMap?.[level] ?? (level === "off" ? null : level)]))
 +			: void 0;
++        const advertisedDefault = entry?.defaultReasoningEffort !== undefined ? entry.defaultReasoningEffort : entry?.reasoning?.default_effort;
++        const defaultReasoningEffort = advertisedDefault === "none" && !Object.hasOwn(reasoningEfforts || {}, "none") && reasoningEfforts?.off === "none" ? "off" : advertisedDefault;
  		models.push({
  			id,
 +			...reasoningEfforts === void 0 ? {} : { reasoningEfforts },
++            ...!entry?.reasoningMappings || reasoningMappingsError({ reasoningEfforts, reasoningMappings: entry.reasoningMappings }) ? {} : { reasoningMappings: entry.reasoningMappings },
++            ...defaultReasoningEffort === null || typeof defaultReasoningEffort === "string" && Object.hasOwn(reasoningEfforts || {}, defaultReasoningEffort) ? { defaultReasoningEffort } : {},
 +			...api === void 0 ? {} : { api },
 +			...supportsConversation === void 0 ? {} : { supportsConversation },
++			...modelType === void 0 ? {} : { modelType },
++			...Array.isArray(endpoints) && endpoints.every(path => typeof path === "string") ? { supportedEndpointPaths: [...endpoints] } : {},
  			name,
  			...contextWindow === void 0 ? {} : { contextWindow },
  			...maxTokens === void 0 ? {} : { maxTokens }
-@@ -2432,7 +2508,7 @@ async function discoverModels(request, storedProfile) {
+@@ -2432,7 +2788,7 @@ async function discoverModels(request, storedProfile) {
  	} catch (error) {
  		throw new LlmError(`${url} did not answer with JSON`, "DISCOVERY_FAILED", { cause: error });
  	}
@@ -188,7 +608,7 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  }
  //#endregion
  //#region lib/types/login.js
-@@ -2821,7 +2897,7 @@ const NS = "llm-pi-ai";
+@@ -2821,7 +3177,7 @@ const NS = "llm-pi-ai";
  * not mistaken for a route change.
  */
  function registrationFacts(profiles) {
@@ -197,7 +617,7 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  		provider,
  		displayName: profile.displayName,
  		retryPolicy: profile.retryPolicy
-@@ -2943,7 +3019,7 @@ function apply(ctx, config) {
+@@ -2943,7 +3299,7 @@ function apply(ctx, config) {
  	const ensureRegistrationFacts = () => {
  		const facts = registrationFacts(profiles());
  		if (deepEqualJson(facts, registeredFacts)) return;
@@ -207,13 +627,29 @@ index 4b1e5adba9a0834c5d55185944b4056abbef8ab1..e80178eecd45f258afd30ef357e64d76
  			if (routes.length === 0) {
  				registeredFacts = facts;
 diff --git a/lib/types/catalog.d.ts b/lib/types/catalog.d.ts
-index 73d8b43cdc0ad34a971bcac2629cadc48382563b..d78caf864665ae1e7ccc4d213a8f9bfb8c041afb 100644
+index 73d8b43cdc..e1135d6d84 100644
 --- a/lib/types/catalog.d.ts
 +++ b/lib/types/catalog.d.ts
-@@ -266,6 +266,10 @@ type UpstreamCompat = OpenAICompletionsCompat & OpenAIResponsesCompat & Anthropi
+@@ -68,7 +68,7 @@ export declare function catalogModels(provider: string): Map<string, Model<Api>>
+  * absence; every other declared level must name a wire value. A level absent
+  * from the dict is not offered.
+  */
+-export type PiAiReasoningEfforts = Partial<Record<ModelThinkingLevel, string | null>>;
++export type PiAiReasoningEfforts = Record<string, string | null>;
+ /**
+  * Disposition of every `OpenAICompletionsCompat` field. The `Record` key type
+  * is a drift gate: a pi-ai upgrade that adds a field fails compilation here
+@@ -266,6 +266,17 @@ type UpstreamCompat = OpenAICompletionsCompat & OpenAIResponsesCompat & Anthropi
  export type EveryProfileFieldMatchesUpstream = AssertTrue<PiAiCompatProfile extends Partial<Pick<UpstreamCompat, OfferedCompatField>> ? Partial<Pick<UpstreamCompat, OfferedCompatField>> extends PiAiCompatProfile ? true : false : false>;
  /** One configured model entry: an id plus the catalog fields it overrides. */
  export interface PiAiModelProfile {
++    reasoningMode?: "auto" | "custom" | "disabled";
++    defaultReasoningEffort?: string | null;
++    reasoningMappings?: Record<string, PiAiReasoningMapping>;
++    reasoningOff?: "omit" | "value" | "qwen-toggle" | "deepseek-toggle";
++    purpose?: "conversation" | "decision" | "image-generation" | "video-generation" | "speech-generation" | "transcription" | "embedding" | "rerank" | "safety-classifier" | "other";
++    modelType?: string;
++    supportedEndpointPaths?: string[];
 +    /** False excludes a known non-conversational model from inference and listing. */
 +    supportsConversation?: boolean;
 +    /** Per-model wire protocol override for mixed-protocol gateways. */
@@ -221,8 +657,20 @@ index 73d8b43cdc0ad34a971bcac2629cadc48382563b..d78caf864665ae1e7ccc4d213a8f9bfb
      /** Model id sent to the provider and accepted by {@link GenerateOptions.model}. */
      id: string;
      /** Display name for selectors; defaults to the catalog name, then the id. */
+@@ -363,4 +374,9 @@ export interface RouteCatalog {
+  */
+ export declare function resolveRouteModels(request: RouteCatalogRequest, validation?: 'strict' | 'deferred'): RouteCatalog;
+ export {};
+-//# sourceMappingURL=catalog.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=catalog.d.ts.map
++/** Parameters attached to a model-specific reasoning option. */
++export type PiAiReasoningMapping =
++    | { kind: "parameters"; body: Record<string, unknown> }
++    | { kind: "number" | "budget"; path: string; value: number; min?: number; max?: number; step?: number }
++    | { kind: "toggle"; path: string; value: boolean };
 diff --git a/lib/types/config.d.ts b/lib/types/config.d.ts
-index f45d7d97a520ee50a2198357c40bca484c991f1d..2721ee310243b30d2597bb5a8d2d553ac5be09f9 100644
+index f45d7d97a5..2721ee3102 100644
 --- a/lib/types/config.d.ts
 +++ b/lib/types/config.d.ts
 @@ -52,6 +52,8 @@ export declare const DEFAULT_INPUT: readonly PiAiModality[];

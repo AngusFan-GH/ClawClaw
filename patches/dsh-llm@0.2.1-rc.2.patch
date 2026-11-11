@@ -1,34 +1,44 @@
 diff --git a/lib/index.js b/lib/index.js
-index 63d26e90550c1ee7f8ce1dc79d9c3c46be0a3e99..4403c94ade7bfe9b8af276fe8faf266d009c92c8 100644
+index 63d26e9055..56806c7580 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -2007,6 +2007,9 @@ let LlmRuntime = (() => {
+@@ -2007,6 +2007,13 @@ let LlmRuntime = (() => {
  				seen.add(model.id);
  				models.push({
  					id: model.id,
 +					...model.reasoningEfforts === void 0 ? {} : { reasoningEfforts: model.reasoningEfforts },
++            ...model.reasoningMappings === void 0 ? {} : { reasoningMappings: model.reasoningMappings },
++            ...model.defaultReasoningEffort === void 0 ? {} : { defaultReasoningEffort: model.defaultReasoningEffort },
 +					...model.api === void 0 ? {} : { api: model.api },
 +					...model.supportsConversation === void 0 ? {} : { supportsConversation: model.supportsConversation },
++					...model.modelType === void 0 ? {} : { modelType: model.modelType },
++					...model.supportedEndpointPaths === void 0 ? {} : { supportedEndpointPaths: [...model.supportedEndpointPaths] },
  					...model.name === void 0 ? {} : { name: model.name },
  					...model.contextWindow === void 0 ? {} : { contextWindow: model.contextWindow },
  					...model.maxTokens === void 0 ? {} : { maxTokens: model.maxTokens },
-@@ -2093,6 +2096,7 @@ let LlmRuntime = (() => {
+@@ -2093,6 +2100,9 @@ let LlmRuntime = (() => {
  				return {
  					provider: model.provider,
  					id: model.id,
 +					...model.reasoningEfforts === void 0 ? {} : { reasoningEfforts: model.reasoningEfforts },
++            ...model.reasoningMappings === void 0 ? {} : { reasoningMappings: model.reasoningMappings },
++            ...model.defaultReasoningEffort === void 0 ? {} : { defaultReasoningEffort: model.defaultReasoningEffort },
  					name: model.name,
  					...model.description === void 0 ? {} : { description: model.description },
  					...inputModalities === void 0 ? {} : { inputModalities }
 diff --git a/lib/types/types.d.ts b/lib/types/types.d.ts
-index d943b117538f1c52c04a7a6549334288dab3cacd..ac55bef5e74620531b97c390013836c5e8e0a230 100644
+index d943b11753..f755e0ccad 100644
 --- a/lib/types/types.d.ts
 +++ b/lib/types/types.d.ts
-@@ -306,6 +306,11 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
+@@ -306,6 +306,15 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   * a surface adopting one of these still owes the capacities its adapter needs.
   */
  export interface LlmDiscoveredModel {
-+    reasoningEfforts?: false | Partial<Record<"off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max", string | null>>;
++    modelType?: string;
++    supportedEndpointPaths?: string[];
++    defaultReasoningEffort?: string | null;
++    reasoningMappings?: Record<string, LlmReasoningMapping>;
++    reasoningEfforts?: false | Record<string, string | null>;
 +    /** Whether advertised endpoints or model type support conversational inference; absent means unknown. */
 +    supportsConversation?: boolean;
 +    /** Wire protocol selected from the endpoint capabilities, when advertised. */
@@ -36,3 +46,15 @@ index d943b117538f1c52c04a7a6549334288dab3cacd..ac55bef5e74620531b97c390013836c5
      /** Model id the endpoint accepts. */
      id: string;
      /** Human-readable name when the endpoint supplies one. */
+@@ -546,4 +555,9 @@ export interface GenerateOptions {
+      */
+     purpose?: 'compaction' | 'session-title';
+ }
+-//# sourceMappingURL=types.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=types.d.ts.map
++/** Parameters attached to a model-specific reasoning option. */
++export type LlmReasoningMapping =
++    | { kind: "parameters"; body: Record<string, unknown> }
++    | { kind: "number" | "budget"; path: string; value: number; min?: number; max?: number; step?: number }
++    | { kind: "toggle"; path: string; value: boolean };

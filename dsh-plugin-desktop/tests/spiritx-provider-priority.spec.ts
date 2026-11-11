@@ -172,7 +172,7 @@ describe('SpiritX provider priority', () => {
     await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderLink')?.click() })
 
     expect(discover).toHaveBeenCalledWith(undefined)
-    expect(host.querySelector<HTMLInputElement>('[aria-label="modelId 1"]')?.value).toBe('chat-refreshed')
+    expect([...host.querySelectorAll<HTMLInputElement>('input[aria-label^="modelId "]')].map(input => input.value)).toEqual(['chat-first', 'chat-refreshed'])
     await act(async () => { root.unmount() })
     host.remove()
   })
@@ -231,23 +231,53 @@ describe('SpiritX provider priority', () => {
     } as never)) })
     await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderEdit')!.click() })
     await act(async () => { host.querySelector<HTMLButtonElement>('[aria-label="advanced 1"]')!.click() })
-    const row = () => [...host.querySelectorAll<HTMLElement>('.spiritxProviderReasoningRow')]
+    const mode = host.querySelector<HTMLSelectElement>('[aria-label="reasoningEditor_mode"]')!
+    await act(async () => { mode.value = 'custom'; mode.dispatchEvent(new Event('change', { bubbles: true })) })
+    const row = () => [...host.querySelectorAll<HTMLElement>('.modelReasoningEditorRow')]
       .find(element => element.querySelector('label')?.textContent === 'low')!
-    await act(async () => { row().querySelector<HTMLInputElement>('[type="checkbox"]')!.click() })
-    const wire = row().querySelector<HTMLInputElement>('.spiritxProviderInput')!
+    const wire = row().querySelector<HTMLInputElement>('input:not([type="checkbox"])')!
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
     await act(async () => { setValue.call(wire, ''); wire.dispatchEvent(new Event('input', { bubbles: true })) })
     expect(host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!.disabled).toBe(true)
-    expect(host.querySelector('[role="alert"]')?.textContent).toBe('reasoningInvalid')
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('reasoningEditor_invalid')
     await act(async () => { setValue.call(wire, 'vendor-low'); wire.dispatchEvent(new Event('input', { bubbles: true })) })
     await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderLink')!.click() })
     await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!.click() })
-    expect(saveModels).toHaveBeenCalledWith([expect.objectContaining({ id: 'chat-first', reasoningEfforts: { low: 'vendor-low' } })])
+    expect(saveModels).toHaveBeenCalledWith([expect.objectContaining({ id: 'chat-first', reasoningEfforts: { low: 'vendor-low', medium: 'medium', high: 'high' }, reasoningMode: 'custom' })])
     await act(async () => { root.unmount() })
     host.remove()
   })
 
-  it('saves an explicit disabled capability when the last level is unchecked', async () => {
+  it('keeps a management-only model and preserves a user purpose through refresh and save', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    const saveModels = vi.fn(async () => undefined)
+    const discover = async () => ({ ok: true, value: [
+      { id: 'Qwen3Guard-Gen-4B', modelType: 'LLM', supportsConversation: false }, { id: 'chat' },
+    ] })
+    const load = async () => ({ ok: true, value: { models: [
+      { id: 'Qwen3Guard-Gen-4B', modelType: 'LLM', supportsConversation: false }, { id: 'chat' },
+    ] } })
+    await act(async () => { root.render(createElement(SpiritXProviderPriorityMarker, {
+      provider: { provider: 'spiritx' }, configured: true, keyConfigured: true,
+      ...injected({ saveModels, discover, load }),
+    } as never)) })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderEdit')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('[aria-label="advanced 1"]')!.click() })
+    const select = host.querySelector<HTMLSelectElement>('[aria-label="purpose"]')!
+    await act(async () => { select.value = 'conversation'; select.dispatchEvent(new Event('change', { bubbles: true })) })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderLink')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!.click() })
+    expect(saveModels).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'Qwen3Guard-Gen-4B', purpose: 'conversation' }),
+      expect.objectContaining({ id: 'chat' }),
+    ])
+    await act(async () => { root.unmount() })
+    host.remove()
+  })
+
+  it('saves an explicit disabled mode that cannot be re-enabled by inference', async () => {
     const host = document.createElement('div')
     document.body.append(host)
     const root = createRoot(host)
@@ -258,7 +288,8 @@ describe('SpiritX provider priority', () => {
     } as never)) })
     await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderEdit')!.click() })
     await act(async () => { host.querySelector<HTMLButtonElement>('[aria-label="advanced 1"]')!.click() })
-    await act(async () => { host.querySelector<HTMLInputElement>('input[type="checkbox"]:checked')!.click() })
+    const mode = host.querySelector<HTMLSelectElement>('[aria-label="reasoningEditor_mode"]')!
+    await act(async () => { mode.value = 'disabled'; mode.dispatchEvent(new Event('change', { bubbles: true })) })
     await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!.click() })
     expect(saveModels).toHaveBeenCalledWith([expect.objectContaining({ reasoningEfforts: false })])
     await act(async () => { root.unmount() })
@@ -285,4 +316,53 @@ describe('SpiritX provider priority', () => {
     disposers.forEach(dispose => { dispose() })
     expect(style?.isConnected).toBe(false)
   })
+})
+
+it('preserves local model edits and additions while refreshing automatic capabilities', async () => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host)
+  const saveModels = vi.fn(async (_models: unknown[]) => undefined)
+  const edited = { id: 'chat-first', name: 'My model', contextWindow: 65536, maxTokens: 4096, input: ['text', 'image'], reasoningMode: 'custom', reasoningEfforts: { deep: 'high' } }
+  const manual = { id: 'manual-chat', name: 'Manual model' }
+  try {
+    await act(async () => { root.render(createElement(SpiritXProviderPriorityMarker, {
+      provider: { provider: 'spiritx' }, configured: true, keyConfigured: true,
+      ...injected({ saveModels,
+        load: async () => ({ ok: true, value: { models: [edited, manual] } }),
+        discover: async () => ({ ok: true, value: [{ id: 'chat-first', name: 'Server model', contextWindow: 32768, reasoningMode: 'auto', reasoningEfforts: { low: 'low' }, defaultReasoningEffort: 'low' }, { id: 'new-chat' }] }),
+      }),
+    } as never)) })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderEdit')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderLink')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!.click() })
+    expect(saveModels).toHaveBeenCalledWith([expect.objectContaining(edited), expect.objectContaining(manual), expect.objectContaining({ id: 'new-chat' })])
+    expect(saveModels.mock.calls[0]?.[0]?.[0]).not.toHaveProperty('defaultReasoningEffort')
+  } finally {
+    await act(async () => { root.unmount() })
+    host.remove()
+  }
+})
+
+it('clears an automatic default when refreshed levels no longer offer it', async () => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host)
+  const saveModels = vi.fn(async () => undefined)
+  try {
+    await act(async () => { root.render(createElement(SpiritXProviderPriorityMarker, {
+      provider: { provider: 'spiritx' }, configured: true, keyConfigured: true,
+      ...injected({ saveModels,
+        load: async () => ({ ok: true, value: { models: [{ id: 'chat-first', reasoningMode: 'auto', reasoningEfforts: { high: 'high' }, defaultReasoningEffort: 'high' }] } }),
+        discover: async () => ({ ok: true, value: [{ id: 'chat-first', reasoningMode: 'auto', reasoningEfforts: { low: 'low' } }] }),
+      }),
+    } as never)) })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderEdit')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderLink')!.click() })
+    await act(async () => { host.querySelector<HTMLButtonElement>('.spiritxProviderButtonPrimary')!.click() })
+    expect(saveModels).toHaveBeenCalledWith([expect.objectContaining({ reasoningMode: 'auto', reasoningEfforts: { low: 'low' }, defaultReasoningEffort: null })])
+  } finally {
+    await act(async () => { root.unmount() })
+    host.remove()
+  }
 })

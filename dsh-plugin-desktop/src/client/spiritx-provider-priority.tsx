@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { ReasoningEditor } from '@deepseek-ai/dsh-client-ui-settings-models/reasoning-editor'
+import { inferAutomaticReasoning, reasoningMode } from '@deepseek-ai/dsh-client-ui-settings-models/reasoning-config'
 import type { ReactNode } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
@@ -17,12 +19,12 @@ import {
   loadSpiritXProfile,
   provisionSpiritX,
   saveSpiritXModels,
-  spiritXReasoningValid,
-  SPIRITX_REASONING_LEVELS,
+  spiritXReasoningConfigValid,
   SPIRITX_BASE_URL,
   SPIRITX_SETTINGS_NS,
 } from './spiritx-provisioning.ts'
 import type { SpiritXModelDraft, SpiritXProfileDraft, SpiritXResult } from './spiritx-provisioning.ts'
+import { SPIRITX_MODEL_PURPOSES, type SpiritXModelPurpose } from './spiritx-model-purpose.ts'
 import { SPIRITX_PLATFORM_URL } from './spiritx-onboarding-state.ts'
 
 const NS = 'desktop.spiritx-provider'
@@ -42,9 +44,48 @@ export const SPIRITX_PROVIDER_COPY = {
     fetching: 'Fetching...', empty: 'No models configured.', addModel: 'Add model', modelId: 'Model ID',
     modelName: 'Model name', advanced: 'Advanced model settings', contextWindow: 'Context window',
     maxTokens: 'Max output tokens', inputTypes: 'Input types', removeModel: 'Remove model',
-    reasoning: 'Thinking levels', reasoningHelp: 'Select supported levels and enter the API value for each. Clear all levels to disable the selector.',
-    reasoningWire: 'API value', reasoningOff: 'Leave blank to omit the reasoning parameter.',
-    reasoningInvalid: 'Select a thinking level beyond off and enter a non-empty API value for each enabled level.',
+    purpose: 'Model purpose', purposeAuto: 'Detect automatically',
+    'purpose.conversation': 'Conversation / understanding', 'purpose.decision': 'Specialized decision',
+    'purpose.image-generation': 'Image generation', 'purpose.video-generation': 'Video generation',
+    'purpose.speech-generation': 'Speech synthesis', 'purpose.transcription': 'Transcription',
+    'purpose.embedding': 'Embedding', 'purpose.rerank': 'Reranking', 'purpose.safety-classifier': 'Safety classification',
+    'purpose.other': 'Other specialized model', 'purpose.unknown': 'Unknown purpose',
+    inputText: 'Text', inputImage: 'Image',
+    reasoningEditor_title: "Reasoning levels",
+    reasoningEditor_advanced: "Advanced parameters",
+    reasoningEditor_path: "Parameter path",
+    reasoningEditor_value: "Value",
+    reasoningEditor_min: "Minimum",
+    reasoningEditor_max: "Maximum",
+    reasoningEditor_step: "Step",
+
+    reasoningEditor_mapping: "Parameter mapping",
+    reasoningEditor_effort: "Effort value",
+    reasoningEditor_number: "Numeric effort",
+    reasoningEditor_budget: "Token budget",
+    reasoningEditor_toggle: "Boolean toggle",
+    reasoningEditor_parameters: "Combined parameters",
+    reasoningEditor_newLevel: "New level ID, e.g. ultra",
+    reasoningEditor_addLevel: "Add level",
+
+    reasoningEditor_mode: "Configuration",
+    reasoningEditor_auto: "Detect automatically",
+    reasoningEditor_custom: "Custom",
+    reasoningEditor_disabled: "Disabled",
+    reasoningEditor_autoHelp: "Use detected model capabilities. Future discoveries can update these levels.",
+    reasoningEditor_customHelp: "Add model-specific options and configure their API values or parameters.",
+    reasoningEditor_disabledHelp: "Hide the reasoning selector and follow the provider default.",
+    reasoningEditor_default: "Default level",
+    reasoningEditor_providerDefault: "Provider default",
+    reasoningEditor_apiValue: "API value",
+    reasoningEditor_offBehavior: "When selecting Off",
+    reasoningEditor_omit: "Omit reasoning parameters (provider default)",
+    reasoningEditor_explicit: "Send the configured API value",
+    reasoningEditor_qwen: "Send Qwen enable_thinking: false (Chat Completions)",
+    reasoningEditor_deepseek: "Send thinking.type: disabled (Chat Completions)",
+    reasoningEditor_invalid: "Check option IDs, API values, parameter paths and numeric ranges.",
+    reasoningEditor_defaultError: "Choose a default from the enabled levels.",
+    reasoningEditor_offError: "Check the Off value and the selected API protocol.",
     invalidModel: 'Add at least one language model and give every model a unique ID.', cancel: 'Cancel', save: 'Save', saving: 'Saving...',
   },
   zh: {
@@ -61,10 +102,49 @@ export const SPIRITX_PROVIDER_COPY = {
     customized: '高级设置', baseUrl: 'Base URL', models: '模型', fetch: '获取可用模型',
     fetching: '获取中...', empty: '尚未配置模型。', addModel: '添加模型', modelId: '模型 ID',
     modelName: '模型名称', advanced: '模型高级设置', contextWindow: '上下文窗口',
-    maxTokens: '最大输出 Token', inputTypes: '输入类型', removeModel: '删除模型',
-    reasoning: '思考等级', reasoningHelp: '勾选模型支持的档位，并填写对应的接口参数值。取消全部档位可关闭选择器。',
-    reasoningWire: '接口参数值', reasoningOff: '留空表示不发送思考参数。',
-    reasoningInvalid: '请至少选择一个开启思考的档位，并为已选档位填写有效的接口参数值。',
+    maxTokens: '最大输出 token 数', inputTypes: '输入类型', removeModel: '删除模型',
+    purpose: '模型用途', purposeAuto: '自动识别',
+    'purpose.conversation': '对话 / 多模态理解', 'purpose.decision': '专用决策',
+    'purpose.image-generation': '图像生成', 'purpose.video-generation': '视频生成',
+    'purpose.speech-generation': '语音合成', 'purpose.transcription': '语音转写',
+    'purpose.embedding': '向量嵌入', 'purpose.rerank': '重排序', 'purpose.safety-classifier': '审核分类',
+    'purpose.other': '其他专用模型', 'purpose.unknown': '未知用途',
+    inputText: '文本', inputImage: '图片',
+    reasoningEditor_title: "推理等级",
+    reasoningEditor_advanced: "高级参数",
+    reasoningEditor_path: "参数路径",
+    reasoningEditor_value: "数值",
+    reasoningEditor_min: "最小值",
+    reasoningEditor_max: "最大值",
+    reasoningEditor_step: "步长",
+
+    reasoningEditor_mapping: "参数映射",
+    reasoningEditor_effort: "等级值",
+    reasoningEditor_number: "数值 effort",
+    reasoningEditor_budget: "Token 预算",
+    reasoningEditor_toggle: "布尔开关",
+    reasoningEditor_parameters: "组合参数",
+    reasoningEditor_newLevel: "新等级 ID，例如 ultra",
+    reasoningEditor_addLevel: "添加等级",
+
+    reasoningEditor_mode: "配置方式",
+    reasoningEditor_auto: "自动识别",
+    reasoningEditor_custom: "自定义",
+    reasoningEditor_disabled: "禁用",
+    reasoningEditor_autoHelp: "使用识别到的模型能力，后续获取模型时可自动更新档位。",
+    reasoningEditor_customHelp: "配置模型支持的选项，以及对应的 API 等级值或参数。",
+    reasoningEditor_disabledHelp: "隐藏推理等级选择器，使用服务端默认行为。",
+    reasoningEditor_default: "默认等级",
+    reasoningEditor_providerDefault: "遵循服务端默认",
+    reasoningEditor_apiValue: "API 参数值",
+    reasoningEditor_offBehavior: "选择 Off 时",
+    reasoningEditor_omit: "省略推理参数（遵循服务端）",
+    reasoningEditor_explicit: "发送配置的 API 参数值",
+    reasoningEditor_qwen: "发送 Qwen enable_thinking: false（Chat Completions）",
+    reasoningEditor_deepseek: "发送 thinking.type: disabled（Chat Completions）",
+    reasoningEditor_invalid: "请检查选项 ID、API 参数值、参数路径及数值范围。",
+    reasoningEditor_defaultError: "请从已启用的档位中选择默认等级。",
+    reasoningEditor_offError: "请检查 Off 参数值及当前 API 协议。",
     invalidModel: '请至少添加一个大语言模型，并确保每个模型都有不重复的模型 ID。', cancel: '取消', save: '保存', saving: '保存中...',
   },
 } as const
@@ -114,11 +194,11 @@ li:has([data-dsh-spiritx-provider]) > div:not(.spiritxProviderEditor):not(:has(>
 .spiritxProviderModel { padding: 6px; border: .5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-lg); }
 .spiritxProviderModelRow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto; align-items: center; gap: 6px; }
 .spiritxProviderModelAdvanced { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px 4px 2px; }
-.spiritxProviderReasoning { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 8px; border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-md); }
-.spiritxProviderReasoningRow { display: grid; grid-template-columns: minmax(88px, .4fr) minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px 0; }
-.spiritxProviderReasoningLevel { display: flex; gap: 8px; align-items: center; min-height: 36px; color: var(--dsw-alias-label-primary); font-size: 13px; cursor: pointer; }
-.spiritxProviderReasoningLevel input:focus-visible { outline: 2px solid var(--dsh-color-accent); outline-offset: 2px; }
+.spiritxProviderReasoning { grid-column: 1 / -1; min-width: 0; }
 .spiritxProviderInputTypes { grid-column: 1 / -1; }
+.spiritxProviderModalities { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 16px; }
+.spiritxProviderModalities legend { margin-bottom: 6px; }
+.spiritxProviderModalities label { display: flex; align-items: center; gap: 8px; min-height: 32px; color: var(--dsw-alias-label-primary); font-size: 13px; }
 .spiritxProviderEmpty { margin: 0; padding: 12px; border: 1px dashed var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg); color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; text-align: center; }
 .spiritxProviderError { margin: 0; color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 18px; }
 .spiritxProviderActions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -126,10 +206,7 @@ li:has([data-dsh-spiritx-provider]) > div:not(.spiritxProviderEditor):not(:has(>
 .spiritxProviderButtonPrimary { border: none; background: var(--dsh-color-primary); color: var(--dsh-color-on-primary); }
 .spiritxProviderButtonPrimary:hover:not(:disabled) { background: var(--dsh-color-primary-hover); }
 .spiritxProviderButton:disabled, .spiritxProviderLink:disabled, .spiritxProviderIcon:disabled { opacity: .4; cursor: default; }
-@media (max-width: 520px) { .spiritxProviderModelRow { grid-template-columns: minmax(0, 1fr) auto auto; } .spiritxProviderModelRow > input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; } .spiritxProviderModelAdvanced { grid-template-columns: 1fr; } .spiritxProviderReasoning { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 8px; border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-md); }
-.spiritxProviderReasoningRow { display: grid; grid-template-columns: minmax(88px, .4fr) minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px 0; }
-.spiritxProviderReasoningLevel { display: flex; gap: 8px; align-items: center; min-height: 36px; color: var(--dsw-alias-label-primary); font-size: 13px; cursor: pointer; }
-.spiritxProviderReasoningLevel input:focus-visible { outline: 2px solid var(--dsh-color-accent); outline-offset: 2px; }
+@media (max-width: 520px) { .spiritxProviderModelRow { grid-template-columns: minmax(0, 1fr) auto auto; } .spiritxProviderModelRow > input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; } .spiritxProviderModelAdvanced { grid-template-columns: 1fr; } .spiritxProviderReasoning { grid-column: 1 / -1; min-width: 0; }
 .spiritxProviderInputTypes { grid-column: 1; } }
 `
 
@@ -143,12 +220,17 @@ interface SpiritXProviderInjected {
 
 type SpiritXProviderProps = PropsRuntime<'settings.models.provider-card'> & InjectFace<SpiritXProviderInjected>
 
-function discoveredDraft(model: LlmDiscoveredModel): SpiritXModelDraft {
+function discoveredDraft(model: LlmDiscoveredModel & Partial<SpiritXModelDraft>): SpiritXModelDraft {
   return {
     id: model.id,
     ...model.api === undefined ? {} : { api: model.api },
     ...model.supportsConversation === undefined ? {} : { supportsConversation: model.supportsConversation },
+    ...model.modelType === undefined ? {} : { modelType: model.modelType },
+    ...model.supportedEndpointPaths === undefined ? {} : { supportedEndpointPaths: [...model.supportedEndpointPaths] },
     ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
+    ...model.reasoningMappings === undefined ? {} : { reasoningMappings: model.reasoningMappings },
+    ...model.reasoningMode === undefined ? {} : { reasoningMode: model.reasoningMode },
+    ...model.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: model.defaultReasoningEffort },
     ...model.name === undefined ? {} : { name: model.name },
     ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
     ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
@@ -161,45 +243,56 @@ function modelsValid(models: readonly SpiritXModelDraft[]): boolean {
   return ids.length > 0
     && ids.every(id => id.length > 0)
     && new Set(ids).size === ids.length
-    && models.every(model => firstLanguageModel([model]) !== undefined)
-    && models.every(model => spiritXReasoningValid(model.reasoningEfforts))
+    && models.some(model => firstLanguageModel([model]) !== undefined)
+    && models.every(spiritXReasoningConfigValid)
 }
 
 function SpiritXReasoningEditor({ model, disabled, change, t }: {
   model: SpiritXModelDraft
   disabled: boolean
-  change: (efforts: NonNullable<SpiritXModelDraft['reasoningEfforts']>) => void
+  change: (model: SpiritXModelDraft) => void
   t: SpiritXProviderInjected['t']
 }): ReactNode {
-  const helpId = useId()
-  const errorId = useId()
-  const efforts = model.reasoningEfforts || {}
-  const valid = spiritXReasoningValid(model.reasoningEfforts)
-  return <fieldset className="spiritxProviderReasoning" disabled={disabled} aria-describedby={helpId}>
-    <legend className="spiritxProviderLabel">{t('reasoning')}</legend>
-    <p id={helpId} className="spiritxProviderHelp">{t('reasoningHelp')}</p>
-    {SPIRITX_REASONING_LEVELS.map(level => {
-      const enabled = efforts[level] !== undefined
-      return <div className="spiritxProviderReasoningRow" key={level}>
-        <label className="spiritxProviderReasoningLevel">
-          <input type="checkbox" checked={enabled} onChange={event => {
-            const next = { ...efforts }
-            if (event.target.checked) next[level] = level === 'off' ? null : level
-            else delete next[level]
-            change(Object.keys(next).length === 0 ? false : next)
-          }} />{level}
-        </label>
-        {enabled ? <label className="spiritxProviderField">
-          <span className="spiritxProviderLabel">{t('reasoningWire')} · {level}</span>
-          <input className="spiritxProviderInput" value={efforts[level] ?? ''}
-            aria-invalid={!valid} aria-describedby={!valid ? errorId : undefined}
-            onChange={event => { change({ ...efforts, [level]: level === 'off' && event.target.value === '' ? null : event.target.value }) }} />
-          {level === 'off' ? <span className="spiritxProviderHelp">{t('reasoningOff')}</span> : null}
-        </label> : null}
-      </div>
-    })}
-    {valid ? null : <p id={errorId} className="spiritxProviderError" role="alert">{t('reasoningInvalid')}</p>}
-  </fieldset>
+  return <div className="spiritxProviderReasoning">
+    <ReasoningEditor<SpiritXModelDraft> model={model} disabled={disabled}
+      labels={{
+        title: t("reasoningEditor_title"),
+        advanced: t("reasoningEditor_advanced"),
+        path: t("reasoningEditor_path"),
+        value: t("reasoningEditor_value"),
+        min: t("reasoningEditor_min"),
+        max: t("reasoningEditor_max"),
+        step: t("reasoningEditor_step"),
+
+        mapping: t("reasoningEditor_mapping"),
+        effort: t("reasoningEditor_effort"),
+        number: t("reasoningEditor_number"),
+        budget: t("reasoningEditor_budget"),
+        toggle: t("reasoningEditor_toggle"),
+        parameters: t("reasoningEditor_parameters"),
+        newLevel: t("reasoningEditor_newLevel"),
+        addLevel: t("reasoningEditor_addLevel"),
+
+        mode: t("reasoningEditor_mode"),
+        auto: t("reasoningEditor_auto"),
+        custom: t("reasoningEditor_custom"),
+        disabled: t("reasoningEditor_disabled"),
+        autoHelp: t("reasoningEditor_autoHelp"),
+        customHelp: t("reasoningEditor_customHelp"),
+        disabledHelp: t("reasoningEditor_disabledHelp"),
+        default: t("reasoningEditor_default"),
+        providerDefault: t("reasoningEditor_providerDefault"),
+        apiValue: t("reasoningEditor_apiValue"),
+        offBehavior: t("reasoningEditor_offBehavior"),
+        omit: t("reasoningEditor_omit"),
+        explicit: t("reasoningEditor_explicit"),
+        qwen: t("reasoningEditor_qwen"),
+        deepseek: t("reasoningEditor_deepseek"),
+        invalid: t("reasoningEditor_invalid"),
+        defaultError: t("reasoningEditor_defaultError"),
+        offError: t("reasoningEditor_offError"),
+      }} onChange={change} />
+  </div>
 }
 
 /** Enforce product-owned card chrome without depending on upstream hashed CSS classes. */
@@ -292,11 +385,36 @@ function SpiritXProviderEditor(props: SpiritXProviderProps): ReactNode {
     try {
       const result = await props.discover(key.trim().length === 0 ? undefined : key)
       if (!result.ok) { setFailure(result.error); return }
-      setModels(current => result.value.map(model => {
-        const draft = discoveredDraft(model)
-        const existing = current.find(item => item.id === model.id)
-        return existing?.reasoningEfforts === undefined ? draft : { ...draft, reasoningEfforts: existing.reasoningEfforts }
-      }))
+      const discovered = result.value.map(discoveredDraft)
+      const advertised = new Map(discovered.map(model => [model.id, model]))
+      setModels(current => {
+        const existingIds = new Set(current.map(model => model.id))
+        const refreshed = current.map(existing => {
+          const draft = advertised.get(existing.id)
+          if (draft === undefined) return existing
+          const mode = reasoningMode(existing)
+          const next: SpiritXModelDraft = { ...existing, ...draft, reasoningMode: mode }
+          for (const field of ['name', 'contextWindow', 'maxTokens', 'input', 'purpose'] as const) {
+            if (existing[field] !== undefined) Object.assign(next, { [field]: existing[field] })
+          }
+          if (mode !== 'auto') {
+            for (const field of ['reasoningEfforts', 'reasoningMappings', 'reasoningOff', 'defaultReasoningEffort'] as const) {
+              delete next[field]
+              if (existing[field] !== undefined) Object.assign(next, { [field]: existing[field] })
+            }
+            return next
+          }
+          if (draft.reasoningEfforts !== undefined) {
+            for (const field of ['reasoningMappings', 'reasoningOff'] as const) {
+              delete next[field]
+              if (draft[field] !== undefined) Object.assign(next, { [field]: draft[field] })
+            }
+          }
+          if (existing.defaultReasoningEffort !== undefined) next.defaultReasoningEffort = existing.defaultReasoningEffort
+          return inferAutomaticReasoning(next)
+        })
+        return [...refreshed, ...discovered.filter(model => !existingIds.has(model.id))]
+      })
       setExpanded(new Set())
     } catch (error) {
       setFailure(errorMessage(error))
@@ -380,17 +498,27 @@ function SpiritXProviderEditor(props: SpiritXProviderProps): ReactNode {
                   </button>
                 </div>
                 {!expanded.has(index) ? null : <div className="spiritxProviderModelAdvanced">
-                  <SpiritXReasoningEditor model={model} disabled={disabled} t={props.t}
-                    change={reasoningEfforts => { patchModel(index, { reasoningEfforts }) }} />
                   <label className="spiritxProviderField"><span className="spiritxProviderLabel">{props.t('contextWindow')}</span>
-                    <input className="spiritxProviderInput" type="number" min="1" value={model.contextWindow ?? ''} disabled={disabled}
+                    <input className="spiritxProviderInput" type="number" min="1" placeholder="256K" value={model.contextWindow ?? ''} disabled={disabled}
                       onChange={event => { patchModel(index, { contextWindow: event.target.value === '' ? undefined : Number(event.target.value) }) }} /></label>
                   <label className="spiritxProviderField"><span className="spiritxProviderLabel">{props.t('maxTokens')}</span>
-                    <input className="spiritxProviderInput" type="number" min="1" value={model.maxTokens ?? ''} disabled={disabled}
+                    <input className="spiritxProviderInput" type="number" min="1" placeholder="32K" value={model.maxTokens ?? ''} disabled={disabled}
                       onChange={event => { patchModel(index, { maxTokens: event.target.value === '' ? undefined : Number(event.target.value) }) }} /></label>
-                  <label className="spiritxProviderField spiritxProviderInputTypes"><span className="spiritxProviderLabel">{props.t('inputTypes')}</span>
-                    <input className="spiritxProviderInput" value={model.input?.join(', ') ?? ''} placeholder="text, image" disabled={disabled}
-                      onChange={event => { patchModel(index, { input: event.target.value.split(',').map(item => item.trim()).filter(Boolean) }) }} /></label>
+                  <fieldset className="spiritxProviderInputTypes spiritxProviderModalities" disabled={disabled}>
+                    <legend className="spiritxProviderLabel">{props.t('inputTypes')}</legend>
+                    <label><input type="checkbox" checked disabled />{props.t('inputText')}</label>
+                    <label><input type="checkbox" checked={model.input?.includes('image') ?? false}
+                      onChange={event => { patchModel(index, { input: event.target.checked ? ['text', 'image'] : ['text'] }) }} />{props.t('inputImage')}</label>
+                  </fieldset>
+                  <SpiritXReasoningEditor model={model} disabled={disabled} t={props.t}
+                    change={next => { setModels(current => current.map((model, at) => at === index ? next : model)); setFailure(undefined) }} />
+                  <label className="spiritxProviderField spiritxProviderInputTypes"><span className="spiritxProviderLabel">{props.t('purpose')}</span>
+                    <select className="spiritxProviderInput" aria-label={props.t('purpose')} value={model.purpose ?? ''} disabled={disabled}
+                      onChange={event => { patchModel(index, { purpose: event.target.value === '' ? undefined : event.target.value as SpiritXModelPurpose, supportsConversation: undefined }) }}>
+                      <option value="">{props.t('purposeAuto')}</option>
+                      {SPIRITX_MODEL_PURPOSES.map(purpose => <option key={purpose} value={purpose}>{props.t(`purpose.${purpose}`)}</option>)}
+                    </select>
+                  </label>
                 </div>}
               </div>)}
             </div>

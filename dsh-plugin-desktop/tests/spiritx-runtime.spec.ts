@@ -84,6 +84,22 @@ describe('SpiritX first-install runtime', () => {
 })
 
 
+function successfulStream(path: string): Response {
+  const message = { id: 'msg-test', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'OK', annotations: [] }] }
+  const events = path.endsWith('/chat/completions')
+    ? [{ id: 'chat-test', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', content: 'OK' }, finish_reason: null }] },
+      { id: 'chat-test', object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }]
+    : [{ type: 'response.created', response: { id: 'resp-test', output: [] } },
+      { type: 'response.output_item.added', output_index: 0, item: { ...message, content: [] } },
+      { type: 'response.content_part.added', output_index: 0, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } },
+      { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'OK' },
+      { type: 'response.output_item.done', output_index: 0, item: message },
+      { type: 'response.completed', response: { id: 'resp-test', status: 'completed', output: [message], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }]
+  return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n', {
+    headers: { 'content-type': 'text/event-stream' },
+  })
+}
+
 describe('SpiritX mixed model protocols', () => {
   it('keeps the discovered protocol through the real LLM service', async () => {
     const ctx = new Context()
@@ -120,8 +136,8 @@ describe('SpiritX mixed model protocols', () => {
       for (const [id, efforts] of Object.entries(expected)) {
         expect((await adapter.resolveModel('spiritx', id)).reasoning?.efforts.map(effort => effort.id), id).toEqual(efforts)
       }
-      expect(result.value.some(model => model.id === 'gpt-image-2')).toBe(false)
-      expect((await adapter.resolveModel('spiritx', 'Qwen3Guard-Gen-4B')).reasoning).toBeUndefined()
+      expect(result.value.find(model => model.id === 'gpt-image-2')?.supportsConversation).toBe(false)
+      await expect(adapter.resolveModel('spiritx', 'Qwen3Guard-Gen-4B')).rejects.toMatchObject({ code: 'UNKNOWN_MODEL' })
     } finally { vi.unstubAllGlobals() }
   })
 
@@ -149,6 +165,108 @@ describe('SpiritX mixed model protocols', () => {
     } finally { vi.unstubAllGlobals() }
   })
 
+  it('enforces explicit purpose in the runtime independently of stale capability flags', async () => {
+    const runtime = mount({ ...pending, setupPending: false, models: [
+      { id: 'specialized', purpose: 'safety-classifier', supportsConversation: true },
+      { id: 'manual-chat', purpose: 'conversation', supportsConversation: false },
+    ] })
+    const adapter = runtime.registerAdapter.mock.calls[0]![1]
+    expect((await adapter.listModels('spiritx')).map(model => model.id)).toEqual(['manual-chat'])
+    await expect(adapter.resolveModel('spiritx', 'specialized')).rejects.toMatchObject({ code: 'UNKNOWN_MODEL' })
+  })
+
+  it('discovers SpiritX context capacity and uses it after saving the model', async () => {
+    const runtime = mount(pending)
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ data: [
+      { id: 'capacity-test', max_model_len: 1048576 },
+      { id: 'explicit-capacity', context_window: 262144, max_model_len: 1048576 },
+      { id: 'invalid-capacity', max_model_len: 0 },
+    ] })))
+    try {
+      const discover = runtime.ctx.llm.registerModelDiscovery.mock.calls[0]![1]
+      const models = await discover({ provider: 'spiritx', baseURL: pending.baseURL, api: pending.api, apiKey: 'test-key' })
+      expect(models).toEqual([
+        { id: 'capacity-test', name: 'capacity-test', contextWindow: 1048576 },
+        { id: 'explicit-capacity', name: 'explicit-capacity', contextWindow: 262144 },
+        { id: 'invalid-capacity', name: 'invalid-capacity' },
+      ])
+      runtime.change({ ...pending, setupPending: false, models: [models[0]!] })
+      const adapter = runtime.registerAdapter.mock.calls[0]![1]
+      expect((await adapter.resolveModel('spiritx', 'capacity-test')).context?.contextWindow).toBe(1048576)
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it.each([
+    { api: 'openai-completions', defaultLevel: 'high', off: undefined, selected: undefined, wire: 'high' },
+    { api: 'openai-responses', defaultLevel: 'high', off: undefined, selected: undefined, wire: 'high' },
+    { api: 'openai-responses', defaultLevel: null, off: undefined, selected: undefined, wire: undefined },
+    { api: 'openai-completions', defaultLevel: null, off: 'omit', selected: 'off', wire: undefined },
+    { api: 'openai-completions', defaultLevel: null, off: undefined, selected: 'off', wire: undefined },
+    { api: 'openai-responses', defaultLevel: null, off: 'value', selected: 'off', wire: 'none' },
+    { api: 'openai-completions', defaultLevel: null, off: 'qwen-toggle', selected: 'off', wire: undefined },
+    { api: 'openai-completions', defaultLevel: null, off: 'deepseek-toggle', selected: 'off', wire: undefined },
+  ])('applies model defaults and explicit Off behavior on $api ($off)', async ({ api, defaultLevel, off, selected, wire }) => {
+    const runtime = mount({ ...pending, setupPending: false, reasoning: 'high', models: [{
+      id: 'configured-chat', api, reasoningMode: 'custom', defaultReasoningEffort: defaultLevel,
+      reasoningEfforts: { off: off === 'value' ? 'none' : null, high: 'high' },
+      ...off === undefined ? {} : { reasoningOff: off },
+    }] })
+    const bodies: Array<{ reasoning_effort?: unknown; reasoning?: { effort?: unknown }; chat_template_kwargs?: { enable_thinking?: unknown }; thinking?: { type?: unknown } }> = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return successfulStream(new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url).pathname)
+    }))
+    try {
+      const adapter = runtime.registerAdapter.mock.calls[0]![1]
+      const info = await adapter.resolveModel('spiritx', 'configured-chat')
+      expect(info.reasoning?.defaultEffort).toBe(defaultLevel ?? undefined)
+      const prepared = await adapter.prepareCall('spiritx', 'configured-chat')
+      const effort = selected === undefined ? undefined : info.reasoning!.efforts.find(effort => effort.id === selected)!.id
+      const chunks = []
+      for await (const chunk of prepared.stream({ provider: 'spiritx', model: 'configured-chat', messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply OK' }] }], ...effort === undefined ? {} : { reasoningEffort: effort } })) chunks.push(chunk)
+      expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
+      expect(api === 'openai-completions' ? bodies[0]?.reasoning_effort : bodies[0]?.reasoning?.effort).toBe(wire)
+      if (off === 'qwen-toggle') expect(bodies[0]?.chat_template_kwargs?.enable_thinking).toBe(false)
+      if (off === 'deepseek-toggle') expect(bodies[0]?.thinking?.type).toBe('disabled')
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it('ignores a retained session effort after reasoning has been disabled', async () => {
+    const route = { ...pending, setupPending: false, models: [{ id: 'chat', reasoningMode: 'custom', reasoningEfforts: { high: 'high' } }] }
+    const runtime = mount(route)
+    const adapter = runtime.registerAdapter.mock.calls[0]![1]
+    const retained = (await adapter.resolveModel('spiritx', 'chat')).reasoning!.efforts[0]!.id
+    runtime.change({ ...route, models: [{ id: 'chat', reasoningMode: 'disabled', reasoningEfforts: false, defaultReasoningEffort: null }] })
+    let sent: { reasoning?: { effort?: unknown } } | undefined
+    vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+      sent = JSON.parse(String(init?.body))
+      return successfulStream('/v1/responses')
+    }))
+    try {
+      const prepared = await adapter.prepareCall('spiritx', 'chat')
+      expect(prepared.model.reasoning).toBeUndefined()
+      const chunks = []
+      for await (const chunk of prepared.stream({ provider: 'spiritx', model: 'chat', reasoningEffort: retained, messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply OK' }] }] })) chunks.push(chunk)
+      expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
+      expect(sent?.reasoning?.effort).toBeUndefined()
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it('uses the shared Qwen default for a generic custom API provider', async () => {
+    const runtime = mount({ ...pending, setupPending: false, models: [{ id: 'Qwen3.8-27B' }] }, 'custom-api')
+    const adapter = runtime.registerAdapter.mock.calls[0]![1]
+    const model = await adapter.resolveModel('custom-api', 'Qwen3.8-27B')
+    expect(model.reasoning?.efforts.map(effort => effort.id)).toEqual(['low', 'medium', 'xhigh'])
+    expect(model.reasoning?.defaultEffort).toBe('xhigh')
+  })
+
+  it('rejects unsupported per-model defaults and protocol-incompatible toggles', () => {
+    const invalid = mount({ ...pending, setupPending: false, models: [{ id: 'chat', reasoningEfforts: { low: 'low' }, defaultReasoningEffort: 'high' }] })
+    expect(invalid.spiritx()?.error).toContain('default reasoning level')
+    const toggle = mount({ ...pending, setupPending: false, models: [{ id: 'chat', api: 'openai-responses', reasoningEfforts: { off: null, high: 'high' }, reasoningOff: 'qwen-toggle' }] })
+    expect(toggle.spiritx()?.error).toContain('thinking toggles require')
+  })
+
   it('selects protocols from advertised endpoints without guessing from model names', async () => {
     const runtime = mount(pending)
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ data: [
@@ -164,13 +282,13 @@ describe('SpiritX mixed model protocols', () => {
       const discover = runtime.ctx.llm.registerModelDiscovery.mock.calls[0]![1]
       await expect(discover({ provider: 'spiritx', baseURL: pending.baseURL, api: pending.api, apiKey: 'test-key' }))
         .resolves.toEqual([
-          { id: 'chat-only', name: 'chat-only', api: 'openai-completions', supportsConversation: true },
-          { id: 'both', name: 'both', api: 'openai-responses', supportsConversation: true },
-          { id: 'messages-only', name: 'messages-only', api: 'anthropic-messages', supportsConversation: true },
+          { id: 'chat-only', name: 'chat-only', api: 'openai-completions', supportsConversation: true, supportedEndpointPaths: ['/v1/chat/completions'] },
+          { id: 'both', name: 'both', api: 'openai-responses', supportsConversation: true, supportedEndpointPaths: ['/v1/chat/completions', '/v1/responses'] },
+          { id: 'messages-only', name: 'messages-only', api: 'anthropic-messages', supportsConversation: true, supportedEndpointPaths: ['/v1/messages'] },
           { id: 'unspecified', name: 'unspecified' },
-          { id: 'canvas-v99', name: 'canvas-v99', supportsConversation: false },
-          { id: 'audio-v99', name: 'audio-v99', supportsConversation: false },
-          { id: 'future-v99', name: 'future-v99' },
+          { id: 'canvas-v99', name: 'canvas-v99', supportsConversation: false, modelType: 'TextToImage', supportedEndpointPaths: ['/v1/images/generations'] },
+          { id: 'audio-v99', name: 'audio-v99', supportsConversation: false, modelType: 'TextToSpeech' },
+          { id: 'future-v99', name: 'future-v99', modelType: 'FutureModelType' },
         ])
     } finally { vi.unstubAllGlobals() }
   })
@@ -186,19 +304,7 @@ describe('SpiritX mixed model protocols', () => {
       bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
       const path = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url).pathname
       paths.push(path)
-      const message = { id: 'msg-test', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'OK', annotations: [] }] }
-      const events = path.endsWith('/chat/completions')
-        ? [{ id: 'chat-test', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', content: 'OK' }, finish_reason: null }] },
-          { id: 'chat-test', object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }]
-        : [{ type: 'response.created', response: { id: 'resp-test', output: [] } },
-          { type: 'response.output_item.added', output_index: 0, item: { ...message, content: [] } },
-          { type: 'response.content_part.added', output_index: 0, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } },
-          { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'OK' },
-          { type: 'response.output_item.done', output_index: 0, item: message },
-          { type: 'response.completed', response: { id: 'resp-test', status: 'completed', output: [message], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }]
-      return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n', {
-        headers: { 'content-type': 'text/event-stream' },
-      })
+      return successfulStream(path)
     }))
     try {
       const adapter = runtime.registerAdapter.mock.calls[0]![1]
@@ -304,4 +410,129 @@ describe('gateway context capacity correction', () => {
       expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'error' } })
     } finally { vi.unstubAllGlobals() }
   })
+})
+
+describe('model-specific reasoning parameters', () => {
+  it.each([
+    { name: 'literal ultra', efforts: { ultra: 'ultra' }, mappings: undefined, expected: { reasoning: { effort: 'ultra' } }, label: 'ultra' },
+    { name: 'model-specific API value', efforts: { ultra: 'max' }, mappings: undefined, expected: { reasoning: { effort: 'max' } }, label: 'ultra' },
+    { name: 'numeric effort', efforts: { ultra: 'ultra' }, mappings: { ultra: { kind: 'number', path: 'reasoning.effort', value: 75, min: 1, max: 100, step: 1 } }, expected: { reasoning: { effort: 75 } }, label: 'ultra' },
+    { name: 'token budget', efforts: { ultra: 'ultra' }, mappings: { ultra: { kind: 'budget', path: 'thinking.budget_tokens', value: 2048 } }, expected: { thinking: { budget_tokens: 2048 } }, label: 'ultra' },
+    { name: 'toggle', efforts: { ultra: 'ultra' }, mappings: { ultra: { kind: 'toggle', path: 'chat_template_kwargs.enable_thinking', value: true } }, expected: { chat_template_kwargs: { enable_thinking: true } }, label: 'ultra' },
+    { name: 'compound parameters', efforts: { ultra: 'ultra' }, mappings: { ultra: { kind: 'parameters', body: { reasoning: { effort: 'max' }, task_mode: 'delegate' } } }, expected: { reasoning: { effort: 'max' }, task_mode: 'delegate' }, label: 'ultra' },
+  ])('sends $name without SDK clamping', async ({ efforts, mappings, expected, label }) => {
+    const runtime = mount({ ...pending, setupPending: false, models: [{ id: 'chat', reasoningMode: 'custom', reasoningEfforts: efforts, reasoningMappings: mappings, defaultReasoningEffort: 'ultra' }] })
+    expect(runtime.spiritx()?.error).toBeUndefined()
+    const adapter = runtime.registerAdapter.mock.calls[0]![1]
+    const prepared = await adapter.prepareCall('spiritx', 'chat')
+    expect(prepared.model.reasoning?.defaultEffort).toBe('ultra')
+    expect(prepared.model.reasoning?.efforts[0]?.name).toBe(label)
+    let sent: unknown
+    vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+      sent = JSON.parse(String(init?.body))
+      return successfulStream('/v1/responses')
+    }))
+    try {
+      const chunks = []
+      for await (const chunk of prepared.stream({ provider: 'spiritx', model: 'chat', messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply OK' }] }] })) chunks.push(chunk)
+      expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
+      expect(sent).toMatchObject(expected)
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it('rejects invalid numeric values, unsupported mapping kinds and payload routing overrides', () => {
+    for (const mappings of [
+      { ultra: { kind: 'number', path: 'reasoning.effort', value: 101, min: 1, max: 100 } },
+      { ultra: { kind: 'fallback', target: 'missing' } },
+      { ultra: { kind: 'parameters', body: { model: 'wrong' } } },
+      { ultra: { kind: 'toggle', path: '__proto__.polluted', value: true } },
+    ]) {
+      const runtime = mount({ ...pending, setupPending: false, models: [{ id: 'chat', reasoningEfforts: { ultra: 'ultra', max: 'max' }, reasoningMappings: mappings }] })
+      expect(runtime.spiritx()?.error).toContain('invalid reasoning configuration')
+    }
+  })
+
+  it('preserves advertised dynamic reasoning metadata through discovery', async () => {
+    const runtime = mount(pending)
+    const callback = runtime.ctx.llm.registerModelDiscovery.mock.calls[0]![1]
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ data: [
+      { id: 'router-chat', reasoning: { supported_efforts: ['low', 'ultra'], default_effort: 'ultra' } },
+      { id: 'custom-chat', reasoningEfforts: { ultra: 'ultra' }, reasoningMappings: { ultra: { kind: 'number', path: 'reasoning.effort', value: 99, max: 100 } }, defaultReasoningEffort: 'ultra' },
+    ] })))
+    try {
+      const models = await callback({ provider: 'spiritx', baseURL: pending.baseURL, api: pending.api, apiKey: 'test-key' })
+      expect(models[0]).toMatchObject({ reasoningEfforts: { low: 'low', ultra: 'ultra' }, defaultReasoningEffort: 'ultra' })
+      expect(models[1]).toMatchObject({ reasoningMappings: { ultra: { kind: 'number', value: 99 } }, defaultReasoningEffort: 'ultra' })
+    } finally { vi.unstubAllGlobals() }
+  })
+})
+
+it.each([
+  { kind: 'parameters', body: { generationConfig: { thinkingConfig: { thinkingBudget: 2048, includeThoughts: true } } } },
+  { kind: 'budget', path: 'generationConfig.thinkingConfig.thinkingBudget', value: 2048 },
+])('sends Gemini reasoning parameters in its actual request body ($kind)', async mapping => {
+  const runtime = mount({ apiKeyEnv: 'TEST_KEY', models: [{ id: 'gemini-2.5-flash', reasoningMode: 'custom', reasoningEfforts: { deep: 'deep' }, defaultReasoningEffort: 'deep', reasoningMappings: { deep: mapping } }] }, 'google')
+  expect(runtime.spiritx()?.error).toBeUndefined()
+  const adapter = runtime.registerAdapter.mock.calls[0]![1]
+  const prepared = await adapter.prepareCall('google', 'gemini-2.5-flash')
+  let sent: unknown
+  vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+    sent = JSON.parse(String(init?.body))
+    return new Response(`data: ${JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: 'OK' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 } })}\n\n`, { headers: { 'content-type': 'text/event-stream' } })
+  }))
+  try {
+    const chunks = []
+    for await (const chunk of prepared.stream({ provider: 'google', model: 'gemini-2.5-flash', messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply OK' }] }] })) chunks.push(chunk)
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
+    expect(sent).toMatchObject({ generationConfig: { thinkingConfig: { thinkingBudget: 2048 } } })
+  } finally { vi.unstubAllGlobals() }
+})
+
+it('normalizes a discovered none default and retains an explicit provider-default choice', async () => {
+  const runtime = mount(pending)
+  const callback = runtime.ctx.llm.registerModelDiscovery.mock.calls[0]![1]
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ data: [
+    { id: 'router-off', reasoning: { supported_efforts: ['none', 'high'], default_effort: 'none' } },
+    { id: 'router-provider-default', defaultReasoningEffort: null, reasoning: { supported_efforts: ['none', 'high'], default_effort: 'high' } },
+  ] })))
+  try {
+    const models = await callback({ provider: 'spiritx', baseURL: pending.baseURL, api: pending.api, apiKey: 'test-key' })
+    expect(models[0]).toMatchObject({ reasoningEfforts: { off: 'none', high: 'high' }, defaultReasoningEffort: 'off' })
+    expect(models[1]).toMatchObject({ defaultReasoningEffort: null })
+  } finally { vi.unstubAllGlobals() }
+})
+
+it('automatically uses the DeepSeek Chat Completions thinking toggle for Off', async () => {
+  const runtime = mount({ ...pending, setupPending: false, models: [{ id: 'DeepSeek-V4-Flash', api: 'openai-completions', reasoningMode: 'auto' }] })
+  const adapter = runtime.registerAdapter.mock.calls[0]![1]
+  const prepared = await adapter.prepareCall('spiritx', 'DeepSeek-V4-Flash')
+  const off = prepared.model.reasoning!.efforts.find(option => option.id === 'off')!.id
+  let sent: unknown
+  vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+    sent = JSON.parse(String(init?.body))
+    return successfulStream('/v1/chat/completions')
+  }))
+  try {
+    for await (const _chunk of prepared.stream({ provider: 'spiritx', model: 'DeepSeek-V4-Flash', reasoningEffort: off, messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply OK' }] }] })) {}
+    expect(sent).toMatchObject({ thinking: { type: 'disabled' } })
+    expect(sent).not.toHaveProperty('reasoning_effort')
+  } finally { vi.unstubAllGlobals() }
+})
+
+it.each([
+  { id: 'GLM-5.3-Flash', encrypted: false },
+  { id: 'other-chat', encrypted: true },
+])('retains protocol-supported reasoning inclusion for $id', async ({ id, encrypted }) => {
+  const runtime = mount({ ...pending, setupPending: false, models: [{ id, reasoningEfforts: { low: 'low' } }] })
+  const prepared = await runtime.registerAdapter.mock.calls[0]![1].prepareCall('spiritx', id)
+  const low = prepared.model.reasoning!.efforts.find(option => option.id === 'low')!.id
+  let sent: { include?: string[] } | undefined
+  vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+    sent = JSON.parse(String(init?.body))
+    return successfulStream('/v1/responses')
+  }))
+  try {
+    for await (const _chunk of prepared.stream({ provider: 'spiritx', model: id, reasoningEffort: low, messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply OK' }] }] })) {}
+    expect(sent?.include?.includes('reasoning.encrypted_content') ?? false).toBe(encrypted)
+  } finally { vi.unstubAllGlobals() }
 })
