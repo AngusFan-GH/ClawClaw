@@ -347,6 +347,11 @@ export const BUNDLED_SKILL_PRESENTATION: Readonly<Record<string, readonly [strin
     "Word documents and templates",
     "制作通知、方案和制度文档，处理模板、目录、编号与修订。"
   ],
+  "ppt-master": [
+    "PPT Master 演示制作",
+    "PPT Master",
+    "制作可编辑PPTX，支持图片重建、演示美化、品牌模板、原生改稿及旁白动画。"
+  ],
   "office-ppt-workflow": [
     "PPT工作汇报与讲稿",
     "Presentations and speaker notes",

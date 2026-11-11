@@ -33,6 +33,9 @@ describe('Skill purpose classification', () => {
   })
 
   it('uses the primary deliverable for ambiguous built-in names', () => {
+    expect(skillCategory('ppt-master')).toBe('office')
+    expect(skillDisplayName('ppt-master', 'zh')).toBe('PPT Master 演示制作')
+    expect(skillDisplayName('ppt-master', 'en')).toBe('PPT Master')
     expect(skillCategory('design-token')).toBe('office')
     expect(skillCategory('html-review')).toBe('office')
     expect(skillCategory('component-instance')).toBe('design')

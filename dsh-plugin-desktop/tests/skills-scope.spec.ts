@@ -16,7 +16,9 @@ describe('Skill discovery scope', () => {
   it('keeps bundled Skill paths independent from legacy product names', async () => {
     const root = fileURLToPath(new URL('../assets/skills/', import.meta.url))
     const paths = await readdir(root, { recursive: true })
-    expect(paths.filter(path => /(?:work|code)buddy|(?:^|\/)wb(?:\/|$)/iu.test(path))).toEqual([])
+    // PPT Master's third-party Simple Icons catalog includes the CodeBuddy brand icon.
+    const productPaths = paths.filter(path => path !== 'ppt-master/templates/icons/simple-icons/codebuddy.svg')
+    expect(productPaths.filter(path => /(?:work|code)buddy|(?:^|\/)wb(?:\/|$)/iu.test(path))).toEqual([])
   })
 
   it.each([false, true])('keeps installation, discovery and recycle in the isolated active data directory (relocated: %s)', async relocated => {

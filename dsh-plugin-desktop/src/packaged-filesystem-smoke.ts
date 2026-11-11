@@ -46,6 +46,7 @@ export async function verifyBundledSkills(applicationRoot: string): Promise<void
       'content-production',
       'data-analysis',
       'evidence-research',
+      'ppt-master',
       'product-design-review',
       'risk-compliance-review',
       'software-delivery',
